@@ -1,0 +1,13 @@
+<RCC>
+  <qresource prefix="/">
+    <file>applets/Battery.qml</file>
+    <file>applets/Caffeine.qml</file>
+    <file>applets/Calendar.qml</file>
+    <file>applets/Clock.qml</file>
+    <file>applets/Sound.qml</file>
+    <file>applets/Title.qml</file>
+    <file>applets/Tray.qml</file>
+    <file>applets/Workspaces.qml</file>
+    <file>applets/XInput.qml</file>
+  </qresource>
+</RCC>

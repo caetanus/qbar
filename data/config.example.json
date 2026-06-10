@@ -1,0 +1,21 @@
+{
+  "height": 28,
+  "margin": 0,
+  "spacing": 0,
+  "background": "#af263039",
+  "foreground": "#eef2f7",
+  "accent": "#63b3ed",
+  "fontFamily": "Sans Serif",
+  "fontSize": 9,
+  "applets": [
+    "Workspaces",
+    "Title",
+    "Caffeine",
+    "XInput",
+    "Tray",
+    "Sound",
+    "Battery",
+    "Calendar",
+    "Clock"
+  ]
+}
