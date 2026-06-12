@@ -18,9 +18,11 @@
         "Workspaces",
         "CPU",
         "Memory",
+        "Network"
+    ],
+    "modules-center": [
         "Title"
     ],
-    "modules-center": [],
     "modules-right": [
         "Caffeine",
         "Brightness",

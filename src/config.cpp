@@ -87,6 +87,21 @@ void applyCommandLineOverrides(BarConfig *config)
     }
 }
 
+void readStringList(const QJsonObject &root, const QString &key, QStringList *target)
+{
+    const auto arr = root.value(key).toArray();
+    if (arr.isEmpty()) {
+        return;
+    }
+
+    target->clear();
+    for (const auto &value : arr) {
+        if (value.isString()) {
+            target->append(value.toString());
+        }
+    }
+}
+
 } // namespace
 
 BarConfig loadConfig()
@@ -129,30 +144,31 @@ BarConfig loadConfig()
         config.animationEasing = easingCurveFromName(root.value(QStringLiteral("animationEasing")).toString());
     }
 
-    const auto applets = root.value(QStringLiteral("applets")).toArray();
-    if (!applets.isEmpty()) {
-        config.applets.clear();
-        for (const auto &applet : applets) {
-            if (applet.isString()) {
-                config.applets.append(applet.toString());
+    const bool hasModuleSections = root.contains(QStringLiteral("modules-left"))
+        || root.contains(QStringLiteral("modules-center"))
+        || root.contains(QStringLiteral("modules-right"));
+
+    if (hasModuleSections) {
+        readStringList(root, QStringLiteral("modules-left"), &config.appletsLeft);
+        readStringList(root, QStringLiteral("modules-center"), &config.appletsCenter);
+        readStringList(root, QStringLiteral("modules-right"), &config.appletsRight);
+        config.applets = config.appletsLeft;
+        config.applets.append(config.appletsCenter);
+        config.applets.append(config.appletsRight);
+    } else {
+        const auto applets = root.value(QStringLiteral("applets")).toArray();
+        if (!applets.isEmpty()) {
+            config.applets.clear();
+            for (const auto &applet : applets) {
+                if (applet.isString()) {
+                    config.applets.append(applet.toString());
+                }
             }
         }
-    }
 
-    auto readModuleList = [&](const QString &key) {
-        const auto arr = root.value(key).toArray();
-        for (const auto &m : arr) {
-            if (m.isString()) {
-                config.applets.append(m.toString());
-            }
-        }
-    };
-
-    if (config.applets.isEmpty() || root.contains(QStringLiteral("modules-left"))) {
-        config.applets.clear();
-        readModuleList(QStringLiteral("modules-left"));
-        readModuleList(QStringLiteral("modules-center"));
-        readModuleList(QStringLiteral("modules-right"));
+        config.appletsLeft = config.applets;
+        config.appletsCenter.clear();
+        config.appletsRight.clear();
     }
 
     applyCommandLineOverrides(&config);

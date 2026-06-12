@@ -1,6 +1,6 @@
 #include "barwindow.h"
 
-#include "applethost.h"
+#include "qml/qbarpopupservice.h"
 #include "cpu/cpumodel.h"
 #include "temperature/temperaturemodel.h"
 #include "brightness/brightnessmodel.h"
@@ -13,23 +13,185 @@
 
 #include <QApplication>
 #include <QByteArray>
-#include <algorithm>
-#include <QCoreApplication>
-#include <QGuiApplication>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QScreen>
 #include <QCloseEvent>
+#include <QColor>
+#include <QCoreApplication>
 #include <QDebug>
+#include <QDir>
+#include <QDirIterator>
+#include <QFileInfo>
+#include <QGuiApplication>
 #include <QHideEvent>
+#include <QIcon>
+#include <QPainter>
 #include <QPoint>
+#include <QQuickImageProvider>
 #include <QQuickItem>
+#include <QQuickWidget>
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QPixmap>
+#include <QScreen>
 #include <QShowEvent>
+#include <QPointF>
+#include <QStringList>
 #include <QTimer>
+#include <QUrl>
+#include <QVariantMap>
+#include <QSizePolicy>
 #include <QVBoxLayout>
+#include <QWidget>
+#include <algorithm>
 #include <unistd.h>
 
 namespace {
+
+class ThemeIconProvider final : public QQuickImageProvider {
+public:
+    ThemeIconProvider()
+        : QQuickImageProvider(QQuickImageProvider::Pixmap)
+    {
+    }
+
+    QPixmap requestPixmap(const QString &id, QSize *size, const QSize &requestedSize) override
+    {
+        const int side = std::max(1, requestedSize.width() > 0 ? requestedSize.width() : 18);
+        const QStringList parts = id.split(QLatin1Char('|'));
+        const QString iconId = parts.value(0);
+        const QColor tintColor = parts.size() > 1 ? QColor(parts.value(1)) : QColor();
+        const QString iconThemePath = parts.size() > 2 ? parts.value(2) : QString();
+
+        QIcon icon;
+        if (QFileInfo::exists(iconId)) {
+            icon = QIcon(iconId);
+        } else {
+            icon = QIcon::fromTheme(iconId);
+            if (icon.isNull()) {
+                const QString fileName = findIconFile(iconId, iconThemePath);
+                if (!fileName.isEmpty()) {
+                    icon = QIcon(fileName);
+                }
+            }
+        }
+        if (icon.isNull()) {
+            icon = QIcon::fromTheme(QStringLiteral("application-x-executable"));
+        }
+
+        QPixmap pixmap = icon.pixmap(side, side);
+        const QSize actualSize = pixmap.size();
+        const int displaySide = std::min(side, std::max(actualSize.width(), actualSize.height()));
+        if (displaySide < side) {
+            pixmap = pixmap.scaled(displaySide, displaySide, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        }
+
+        if (tintColor.isValid() && tintColor.alpha() > 0) {
+            QPixmap tinted(displaySide, displaySide);
+            tinted.fill(Qt::transparent);
+            QPainter painter(&tinted);
+            painter.setRenderHint(QPainter::Antialiasing, true);
+            painter.drawPixmap(0, 0, pixmap);
+            painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+            painter.fillRect(tinted.rect(), tintColor);
+            painter.end();
+            pixmap = tinted;
+        }
+
+        if (size != nullptr) {
+            *size = pixmap.size();
+        }
+        return pixmap;
+    }
+
+private:
+    QString findIconFile(const QString &iconName, const QString &iconThemePath) const
+    {
+        QStringList iconNames;
+        if (iconName.endsWith(QStringLiteral("-symbolic"))) {
+            iconNames << iconName.left(iconName.size() - 9);
+        }
+        iconNames << iconName;
+
+        QStringList names;
+        for (const QString &name : iconNames) {
+            names << name + QStringLiteral(".png")
+                  << name + QStringLiteral(".svg")
+                  << name + QStringLiteral(".xpm");
+        }
+
+        const QStringList themeNames = {
+            QIcon::themeName(),
+            QIcon::fallbackThemeName(),
+            QStringLiteral("hicolor"),
+        };
+
+        auto pickLargest = [&](QDirIterator &it) -> QString {
+            QString best;
+            qint64 bestSize = 0;
+            while (it.hasNext()) {
+                const QString path = it.next();
+                const qint64 sz = QFileInfo(path).size();
+                if (sz > bestSize) {
+                    best = path;
+                    bestSize = sz;
+                }
+            }
+            return best;
+        };
+
+        auto findInBases = [&](const QStringList &bases) -> QString {
+            for (const QString &base : bases) {
+                QDirIterator looseIterator(base, names, QDir::Files, QDirIterator::Subdirectories);
+                const QString found = pickLargest(looseIterator);
+                if (!found.isEmpty()) {
+                    return found;
+                }
+            }
+            for (const QString &theme : themeNames) {
+                if (theme.isEmpty()) {
+                    continue;
+                }
+                for (const QString &base : bases) {
+                    const QString root = base + QLatin1Char('/') + theme;
+                    if (!QFileInfo::exists(root)) {
+                        continue;
+                    }
+                    QDirIterator iterator(root, names, QDir::Files, QDirIterator::Subdirectories);
+                    const QString found = pickLargest(iterator);
+                    if (!found.isEmpty()) {
+                        return found;
+                    }
+                }
+            }
+            return {};
+        };
+
+        QStringList homeBases;
+        QStringList systemBases;
+        if (!iconThemePath.isEmpty()) {
+            homeBases.prepend(iconThemePath);
+            systemBases.prepend(iconThemePath);
+        }
+        for (const QString &base : QIcon::themeSearchPaths()) {
+            if (base.startsWith(QDir::homePath())) {
+                homeBases.append(base);
+            } else {
+                systemBases.append(base);
+            }
+        }
+
+        const QString homeIcon = findInBases(homeBases);
+        if (!homeIcon.isEmpty()) {
+            return homeIcon;
+        }
+
+        const QString systemIcon = findInBases(systemBases);
+        if (!systemIcon.isEmpty()) {
+            return systemIcon;
+        }
+
+        return {};
+    }
+};
 
 int clampCoordinate(int value, int minValue, int maxValue)
 {
@@ -42,6 +204,32 @@ QPoint clampedPopupPosition(const QRect &screenArea, const QPoint &preferred, co
     const int maxY = screenArea.y() + screenArea.height() - popupSize.height();
     return QPoint(clampCoordinate(preferred.x(), screenArea.x(), maxX),
                   clampCoordinate(preferred.y(), screenArea.y(), maxY));
+}
+
+static QColor contrastColorFor(const QColor &background)
+{
+    const double luminance = (0.2126 * background.redF())
+        + (0.7152 * background.greenF())
+        + (0.0722 * background.blueF());
+    return luminance < 0.5 ? QColor(QStringLiteral("#ffffff")) : QColor(QStringLiteral("#1f2933"));
+}
+
+QVariantMap themeMap(const BarConfig &config)
+{
+    return {
+        {QStringLiteral("background"), config.background.name(QColor::HexArgb)},
+        {QStringLiteral("foreground"), config.foreground.name(QColor::HexArgb)},
+        {QStringLiteral("accent"), config.accent.name(QColor::HexArgb)},
+        {QStringLiteral("contrastIcon"), contrastColorFor(config.background).name(QColor::HexArgb)},
+        {QStringLiteral("fontFamily"), config.fontFamily},
+        {QStringLiteral("fontSize"), config.fontSize},
+        {QStringLiteral("trayItemPadding"), config.trayItemPadding},
+        {QStringLiteral("animationDuration"), config.animationDuration},
+        {QStringLiteral("animationEasing"), static_cast<int>(config.animationEasing.type())},
+        {QStringLiteral("height"), config.height},
+        {QStringLiteral("margin"), config.margin},
+        {QStringLiteral("spacing"), config.spacing},
+    };
 }
 
 } // namespace
@@ -84,7 +272,6 @@ void BarWindow::hideEvent(QHideEvent *event)
 void BarWindow::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
-    QTimer::singleShot(0, this, SLOT(updateTitleAnchor()));
 }
 
 void BarWindow::showEvent(QShowEvent *event)
@@ -115,13 +302,6 @@ void BarWindow::configureWindow()
     setAttribute(Qt::WA_TranslucentBackground, true);
     setAttribute(Qt::WA_NoSystemBackground, false);
     setStyleSheet(QStringLiteral(
-                      "QWidget#BarSurface {"
-                      "background: %1;"
-                      "border-radius: 0px;"
-                      "color: %2;"
-                      "font-family: \"%3\";"
-                      "font-size: %4pt;"
-                      "}"
                       "QFrame#CalendarPopup {"
                       "background: %1;"
                       "border: 1px solid rgba(255, 255, 255, 48);"
@@ -129,59 +309,54 @@ void BarWindow::configureWindow()
                       "}"
                       "QCalendarWidget { color: %2; }")
                       .arg(m_config.background.name(QColor::HexArgb),
-                           m_config.foreground.name(QColor::HexArgb),
-                           m_config.fontFamily)
-                      .arg(m_config.fontSize));
+                           m_config.foreground.name(QColor::HexArgb)));
 }
 
 void BarWindow::buildLayout()
 {
-    auto *surface = new QWidget(this);
-    surface->setObjectName(QStringLiteral("BarSurface"));
-    surface->setFixedHeight(m_config.height);
+    m_view = new QQuickWidget(this);
+    m_view->setObjectName(QStringLiteral("BarView"));
+    m_view->setResizeMode(QQuickWidget::SizeRootObjectToView);
+    m_view->setClearColor(Qt::transparent);
+    m_view->setAutoFillBackground(false);
+    m_view->setStyleSheet(QStringLiteral("background: transparent;"));
+    m_view->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_view->setFixedHeight(m_config.height);
+    m_view->setAttribute(Qt::WA_AlwaysStackOnTop, false);
+    m_view->setAttribute(Qt::WA_TranslucentBackground, true);
 
-    m_layout = new QHBoxLayout(surface);
-    m_layout->setContentsMargins(0, 0, 0, 0);
-    m_layout->setSpacing(m_config.spacing);
-
-    for (const auto &name : m_config.applets) {
-        if (name == QStringLiteral("Temperature") && (m_temperatureModel == nullptr || !m_temperatureModel->available())) {
-            qWarning() << "[bar] skipping applet" << name << "because no temperature sensors were found";
-            continue;
-        }
-        qWarning() << "[bar] creating applet" << name;
-        auto *host = new AppletHost(name,
-                                     m_config,
-                                     m_i3Ipc->workspaceModel(),
-                                     m_cpuModel,
-                                     m_temperatureModel,
-                                     m_networkModel,
-                                     m_networkManagerModel,
-                                     m_brightnessModel,
-                                     m_caffeineModel,
-                                     m_soundModel,
-                                     m_i3Ipc,
-                                     m_trayModel,
-                                     m_batteryModel,
-                                     surface);
-        connect(host, SIGNAL(activated(QString)), this, SLOT(handleAppletActivated(QString)));
-        connect(host, SIGNAL(workspaceActivated(QString)), m_i3Ipc, SLOT(activateWorkspace(QString)));
-        connect(host, SIGNAL(workspaceScrolled(int)), m_i3Ipc, SLOT(activateRelativeWorkspace(int)));
-        connect(host, SIGNAL(preferredWidthChanged()), this, SLOT(updateTitleAnchor()));
-        m_layout->addWidget(host);
-
-        if (name == QStringLiteral("Title")) {
-            m_titleHost = host;
-            m_layout->setStretch(m_layout->count() - 1, 1);
-        } else if (name == QStringLiteral("Clock")) {
-            m_clockHost = host;
-        }
+    const QVariantMap theme = themeMap(m_config);
+    if (m_view->engine()->imageProvider(QStringLiteral("themeicon")) == nullptr) {
+        m_view->engine()->addImageProvider(QStringLiteral("themeicon"), new ThemeIconProvider);
     }
+
+    m_popupService = new QBarPopupService(m_view->engine(), theme, m_i3Ipc->workspaceModel(), m_i3Ipc, m_trayModel, this);
+
+    m_view->rootContext()->setContextProperty(QStringLiteral("theme"), theme);
+    m_view->rootContext()->setContextProperty(QStringLiteral("qbarPopups"), m_popupService);
+    m_view->rootContext()->setContextProperty(QStringLiteral("workspaceModel"), m_i3Ipc->workspaceModel());
+    m_view->rootContext()->setContextProperty(QStringLiteral("cpuModel"), m_cpuModel);
+    m_view->rootContext()->setContextProperty(QStringLiteral("temperatureModel"), m_temperatureModel);
+    m_view->rootContext()->setContextProperty(QStringLiteral("networkModel"), m_networkModel);
+    m_view->rootContext()->setContextProperty(QStringLiteral("networkManagerModel"), m_networkManagerModel);
+    m_view->rootContext()->setContextProperty(QStringLiteral("brightnessModel"), m_brightnessModel);
+    m_view->rootContext()->setContextProperty(QStringLiteral("caffeineModel"), m_caffeineModel);
+    m_view->rootContext()->setContextProperty(QStringLiteral("soundModel"), m_soundModel);
+    m_view->rootContext()->setContextProperty(QStringLiteral("i3Ipc"), m_i3Ipc);
+    m_view->rootContext()->setContextProperty(QStringLiteral("trayModel"), m_trayModel);
+    m_view->rootContext()->setContextProperty(QStringLiteral("batteryModel"), m_batteryModel);
+    m_view->rootContext()->setContextProperty(QStringLiteral("appletNames"), m_config.applets);
+    m_view->rootContext()->setContextProperty(QStringLiteral("leftApplets"), m_config.appletsLeft);
+    m_view->rootContext()->setContextProperty(QStringLiteral("centerApplets"), m_config.appletsCenter);
+    m_view->rootContext()->setContextProperty(QStringLiteral("rightApplets"), m_config.appletsRight);
+    m_view->rootContext()->setContextProperty(QStringLiteral("barWindow"), this);
 
     auto *outer = new QVBoxLayout(this);
     outer->setContentsMargins(m_config.margin, 0, m_config.margin, 0);
     outer->setSpacing(0);
-    outer->addWidget(surface);
+    outer->addWidget(m_view);
+
+    m_view->setSource(QUrl(QStringLiteral("qrc:/Bar.qml")));
 
     m_calendarPopup = new QFrame(this, Qt::Popup | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
     m_calendarPopup->setObjectName(QStringLiteral("CalendarPopup"));
@@ -193,7 +368,6 @@ void BarWindow::buildLayout()
     popupLayout->setContentsMargins(10, 10, 10, 10);
     m_calendar = new QCalendarWidget(m_calendarPopup);
     popupLayout->addWidget(m_calendar);
-    QTimer::singleShot(0, this, SLOT(updateTitleAnchor()));
 }
 
 void BarWindow::positionAtTop()
@@ -298,17 +472,6 @@ void BarWindow::handleQbarNodeFound(qint64 nodeId)
     QTimer::singleShot(80, this, SLOT(moveTestWindow()));
 }
 
-void BarWindow::updateTitleAnchor()
-{
-    if (m_titleHost == nullptr || m_titleHost->rootObject() == nullptr) {
-        return;
-    }
-
-    const QPoint barCenter = mapToGlobal(QPoint(width() / 2, height() / 2));
-    const QPoint titleCenter = m_titleHost->mapFromGlobal(barCenter);
-    m_titleHost->rootObject()->setProperty("barCenterX", titleCenter.x());
-}
-
 void BarWindow::installTestWindowRule()
 {
     if (m_config.waylandLayerShell || m_i3Ipc == nullptr) {
@@ -343,37 +506,31 @@ void BarWindow::scheduleTestWindowRules()
     QTimer::singleShot(1800, this, SLOT(moveTestWindow()));
 }
 
-void BarWindow::handleAppletActivated(const QString &appletName)
-{
-    if (appletName == QStringLiteral("Clock")) {
-        toggleCalendar(qobject_cast<QWidget *>(sender()));
-    } else if (appletName == QStringLiteral("Caffeine")) {
-        m_caffeineModel->toggle();
-    } else if (appletName == QStringLiteral("XInput")) {
-        m_i3Ipc->cycleKeyboardLayout();
-    }
-}
-
-void BarWindow::toggleCalendar(QWidget *anchor)
+void BarWindow::openCalendar(QObject *anchorObject)
 {
     if (m_calendarPopup->isVisible()) {
         m_calendarPopup->hide();
         return;
     }
 
-    if (anchor == nullptr) {
-        anchor = m_clockHost != nullptr ? static_cast<QWidget *>(m_clockHost) : static_cast<QWidget *>(this);
-    }
-    if (m_clockHost != nullptr) {
-        anchor = m_clockHost;
-    }
-
     const int popupWidth = 340;
     const int popupHeight = 280;
     const QSize popupSize(popupWidth, popupHeight);
     const int gap = 0;
-    const QPoint anchorTopLeft = anchor->mapToGlobal(QPoint(0, 0));
-    const QPoint anchorBottomRight = anchor->mapToGlobal(QPoint(anchor->width(), anchor->height()));
+    auto *anchorItem = qobject_cast<QQuickItem *>(anchorObject);
+    QPoint anchorTopLeft = mapToGlobal(QPoint(0, 0));
+    QPoint anchorBottomRight = mapToGlobal(QPoint(width(), height()));
+
+    if (anchorItem != nullptr && m_view != nullptr) {
+        const QPointF itemTopLeft = anchorItem->mapToScene(QPointF(0.0, 0.0));
+        const QPointF itemBottomRight = anchorItem->mapToScene(QPointF(anchorItem->width(), anchorItem->height()));
+        anchorTopLeft = m_view->mapToGlobal(QPoint(qRound(itemTopLeft.x()), qRound(itemTopLeft.y())));
+        anchorBottomRight = m_view->mapToGlobal(QPoint(qRound(itemBottomRight.x()), qRound(itemBottomRight.y())));
+    } else if (m_view != nullptr) {
+        anchorTopLeft = m_view->mapToGlobal(QPoint(0, 0));
+        anchorBottomRight = m_view->mapToGlobal(QPoint(m_view->width(), m_view->height()));
+    }
+
     int x = anchorBottomRight.x() - popupWidth;
     int y = m_config.position == BarPosition::Bottom
         ? anchorTopLeft.y() - popupHeight - gap
@@ -388,10 +545,12 @@ void BarWindow::toggleCalendar(QWidget *anchor)
 
     const QPoint barTopLeft = mapToGlobal(QPoint(0, 0));
     const QPoint anchorRelativeTopLeft = anchorTopLeft - barTopLeft;
+    const int anchorWidth = anchorItem != nullptr ? qRound(anchorItem->width()) : m_view != nullptr ? m_view->width() : width();
+    const int anchorHeight = anchorItem != nullptr ? qRound(anchorItem->height()) : m_view != nullptr ? m_view->height() : height();
     qputenv("QBAR_LAYER_POPUP_ANCHOR_X", QByteArray::number(anchorRelativeTopLeft.x()));
     qputenv("QBAR_LAYER_POPUP_ANCHOR_Y", QByteArray::number(anchorRelativeTopLeft.y()));
-    qputenv("QBAR_LAYER_POPUP_ANCHOR_WIDTH", QByteArray::number(anchor->width()));
-    qputenv("QBAR_LAYER_POPUP_ANCHOR_HEIGHT", QByteArray::number(anchor->height()));
+    qputenv("QBAR_LAYER_POPUP_ANCHOR_WIDTH", QByteArray::number(anchorWidth));
+    qputenv("QBAR_LAYER_POPUP_ANCHOR_HEIGHT", QByteArray::number(anchorHeight));
     qputenv("QBAR_LAYER_POPUP_ANCHOR_TITLE", QByteArray("QBar Calendar Popup"));
 
     m_calendarPopup->resize(popupSize);
@@ -399,4 +558,18 @@ void BarWindow::toggleCalendar(QWidget *anchor)
     m_calendarPopup->show();
     m_calendarPopup->raise();
     m_calendarPopup->setFocus(Qt::PopupFocusReason);
+}
+
+void BarWindow::cycleKeyboardLayout()
+{
+    if (m_i3Ipc != nullptr) {
+        m_i3Ipc->cycleKeyboardLayout();
+    }
+}
+
+void BarWindow::toggleCaffeine()
+{
+    if (m_caffeineModel != nullptr) {
+        m_caffeineModel->toggle();
+    }
 }

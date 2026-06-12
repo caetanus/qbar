@@ -13,12 +13,16 @@
   "fontFamily": "Sans Serif",
   "fontSize": 9,
   "trayItemPadding": 2,
-  "applets": [
+  "modules-left": [
     "Workspaces",
     "CPU",
     "Memory",
-    "Network",
-    "Title",
+    "Network"
+  ],
+  "modules-center": [
+    "Title"
+  ],
+  "modules-right": [
     "Caffeine",
     "Brightness",
     "XInput",

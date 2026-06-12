@@ -16,14 +16,19 @@
 #include <QFrame>
 #include <QWidget>
 
-class QHBoxLayout;
-class AppletHost;
+class QQuickWidget;
+class QBarPopupService;
 
 class BarWindow final : public QWidget {
     Q_OBJECT
 
 public:
     explicit BarWindow(const BarConfig &config, QWidget *parent = nullptr);
+
+public slots:
+    void openCalendar(QObject *anchorObject);
+    void cycleKeyboardLayout();
+    void toggleCaffeine();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -32,11 +37,9 @@ protected:
     void showEvent(QShowEvent *event) override;
 
 private slots:
-    void handleAppletActivated(const QString &appletName);
     void applyTestWindowRules();
     void moveTestWindow();
     void handleQbarNodeFound(qint64 nodeId);
-    void updateTitleAnchor();
 
 private:
     void configureWindow();
@@ -46,14 +49,12 @@ private:
     QString testWindowCriteria() const;
     void installTestWindowRule();
     void scheduleTestWindowRules();
-    void toggleCalendar(QWidget *anchor);
 
     BarConfig m_config;
-    QHBoxLayout *m_layout = nullptr;
+    QQuickWidget *m_view = nullptr;
+    QBarPopupService *m_popupService = nullptr;
     QFrame *m_calendarPopup = nullptr;
     QCalendarWidget *m_calendar = nullptr;
-    AppletHost *m_clockHost = nullptr;
-    AppletHost *m_titleHost = nullptr;
     I3IpcClient *m_i3Ipc = nullptr;
     StatusNotifierModel *m_trayModel = nullptr;
     CpuModel *m_cpuModel = nullptr;

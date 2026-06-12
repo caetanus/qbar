@@ -1,5 +1,6 @@
 <RCC>
   <qresource prefix="/">
+    <file>Bar.qml</file>
     <file>applets/Battery.qml</file>
     <file>applets/Caffeine.qml</file>
     <file>applets/CPU.qml</file>

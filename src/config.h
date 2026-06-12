@@ -27,6 +27,26 @@ struct BarConfig {
     int trayItemPadding = 2;
     int animationDuration = 200;
     QEasingCurve animationEasing = QEasingCurve::InOutQuad;
+    QStringList appletsLeft = {
+        QStringLiteral("Workspaces"),
+        QStringLiteral("CPU"),
+        QStringLiteral("Memory"),
+        QStringLiteral("Network"),
+    };
+    QStringList appletsCenter = {
+        QStringLiteral("Title"),
+    };
+    QStringList appletsRight = {
+        QStringLiteral("Caffeine"),
+        QStringLiteral("Brightness"),
+        QStringLiteral("XInput"),
+        QStringLiteral("NetworkManager"),
+        QStringLiteral("Temperature"),
+        QStringLiteral("Sound"),
+        QStringLiteral("Battery"),
+        QStringLiteral("Clock"),
+        QStringLiteral("Tray"),
+    };
     QStringList applets = {
         QStringLiteral("Workspaces"),
         QStringLiteral("CPU"),
