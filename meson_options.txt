@@ -1,0 +1,2 @@
+option('x11', type: 'feature', value: 'auto', description: 'Build X11 dock/strut integration')
+option('wayland', type: 'feature', value: 'auto', description: 'Build wlroots wlr-layer-shell integration')

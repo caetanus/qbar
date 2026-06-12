@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="wlr_layer_shell_unstable_v1">
+  <copyright>
+    Copyright © 2017 Drew DeVault
+
+    Permission to use, copy, modify, distribute, and sell this
+    software and its documentation for any purpose is hereby granted
+    without fee, provided that the above copyright notice appear in all
+    copies and that both that copyright notice and this permission notice
+    appear in supporting documentation, and that the name of the copyright
+    holders not be used in advertising or publicity pertaining to
+    distribution of the software without specific, written prior
+    permission. The copyright holders make no representations about the
+    suitability of this software for any purpose. It is provided "as is"
+    without express or implied warranty.
+  </copyright>
+
+  <interface name="zwlr_layer_shell_v1" version="4">
+    <request name="get_layer_surface">
+      <arg name="id" type="new_id" interface="zwlr_layer_surface_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="output" type="object" interface="wl_output" allow-null="true"/>
+      <arg name="layer" type="uint" enum="layer"/>
+      <arg name="layer_namespace" type="string"/>
+    </request>
+
+    <request name="destroy" type="destructor"/>
+
+    <enum name="error">
+      <entry name="role" value="0"/>
+      <entry name="invalid_layer" value="1"/>
+      <entry name="already_constructed" value="2"/>
+    </enum>
+
+    <enum name="layer">
+      <entry name="background" value="0"/>
+      <entry name="bottom" value="1"/>
+      <entry name="top" value="2"/>
+      <entry name="overlay" value="3"/>
+    </enum>
+  </interface>
+
+  <interface name="zwlr_layer_surface_v1" version="4">
+    <request name="set_size">
+      <arg name="width" type="uint"/>
+      <arg name="height" type="uint"/>
+    </request>
+
+    <request name="set_anchor">
+      <arg name="anchor" type="uint" enum="anchor"/>
+    </request>
+
+    <request name="set_exclusive_zone">
+      <arg name="zone" type="int"/>
+    </request>
+
+    <request name="set_margin">
+      <arg name="top" type="int"/>
+      <arg name="right" type="int"/>
+      <arg name="bottom" type="int"/>
+      <arg name="left" type="int"/>
+    </request>
+
+    <request name="set_keyboard_interactivity">
+      <arg name="keyboard_interactivity" type="uint"/>
+    </request>
+
+    <request name="get_popup">
+      <arg name="popup" type="object" interface="xdg_popup"/>
+    </request>
+
+    <request name="ack_configure">
+      <arg name="serial" type="uint"/>
+    </request>
+
+    <request name="destroy" type="destructor"/>
+
+    <request name="set_layer">
+      <arg name="layer" type="uint" enum="zwlr_layer_shell_v1.layer"/>
+    </request>
+
+    <request name="set_exclusive_edge">
+      <arg name="edge" type="uint" enum="anchor"/>
+    </request>
+
+    <event name="configure">
+      <arg name="serial" type="uint"/>
+      <arg name="width" type="uint"/>
+      <arg name="height" type="uint"/>
+    </event>
+
+    <event name="closed"/>
+
+    <enum name="keyboard_interactivity">
+      <entry name="none" value="0"/>
+      <entry name="exclusive" value="1"/>
+      <entry name="on_demand" value="2"/>
+    </enum>
+
+    <enum name="error">
+      <entry name="invalid_surface_state" value="0"/>
+      <entry name="invalid_size" value="1"/>
+      <entry name="invalid_anchor" value="2"/>
+      <entry name="invalid_keyboard_interactivity" value="3"/>
+      <entry name="invalid_exclusive_edge" value="4"/>
+    </enum>
+
+    <enum name="anchor" bitfield="true">
+      <entry name="top" value="1"/>
+      <entry name="bottom" value="2"/>
+      <entry name="left" value="4"/>
+      <entry name="right" value="8"/>
+    </enum>
+  </interface>
+</protocol>

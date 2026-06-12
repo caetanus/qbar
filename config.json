@@ -1,0 +1,49 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 28,
+    "margin": 0,
+    "spacing": 0,
+    "exclusiveZone": true,
+    "waylandLayerShell": true,
+    "background": "#263039af",
+    "foreground": "#eef2f7",
+    "accent": "#63b3ed",
+    "fontFamily": "Sans Serif",
+    "fontSize": 9,
+    "trayItemPadding": 2,
+    "animationDuration": 200,
+    "animationEasing": "inoutquad",
+    "modules-left": [
+        "Workspaces",
+        "CPU",
+        "Memory",
+        "Title"
+    ],
+    "modules-center": [],
+    "modules-right": [
+        "Caffeine",
+        "Brightness",
+        "XInput",
+        "NetworkManager",
+        "Temperature",
+        "Sound",
+        "Battery",
+        "Clock",
+        "Tray"
+    ],
+    "applets": [
+        "Workspaces",
+        "CPU",
+        "Memory",
+        "Network",
+        "Title",
+        "Caffeine",
+        "Brightness",
+        "XInput",
+        "Clock",
+        "Tray",
+        "Sound",
+        "Battery"
+    ]
+}

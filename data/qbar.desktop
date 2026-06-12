@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=QBar
+Exec=qbar
+Icon=application-x-executable
+StartupNotify=false
+NoDisplay=true
+Categories=Utility;

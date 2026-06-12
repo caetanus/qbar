@@ -2,12 +2,26 @@
   <qresource prefix="/">
     <file>applets/Battery.qml</file>
     <file>applets/Caffeine.qml</file>
-    <file>applets/Calendar.qml</file>
+    <file>applets/CPU.qml</file>
     <file>applets/Clock.qml</file>
+    <file>applets/Brightness.qml</file>
+    <file>applets/Memory.qml</file>
+    <file>applets/Network.qml</file>
+    <file>applets/NetworkManager.qml</file>
+    <file>applets/Temperature.qml</file>
     <file>applets/Sound.qml</file>
     <file>applets/Title.qml</file>
     <file>applets/Tray.qml</file>
     <file>applets/Workspaces.qml</file>
     <file>applets/XInput.qml</file>
+    <file>qbar/MenuPopup.qml</file>
+    <file>qbar/Popup.qml</file>
+    <file>qbar/Tooltip.qml</file>
+    <file>icons/caffeine-cup-empty-white.svg</file>
+    <file>icons/caffeine-cup-full-black.svg</file>
+    <file>popups/BatteryPopup.qml</file>
+    <file>popups/CPUPopup.qml</file>
+    <file>popups/CPUTooltip.qml</file>
+    <file>popups/TooltipPopup.qml</file>
   </qresource>
 </RCC>
