@@ -102,13 +102,40 @@ void readStringList(const QJsonObject &root, const QString &key, QStringList *ta
     }
 }
 
+QVariantMap defaultCustomTools()
+{
+    QVariantMap tools;
+    const QString waybarScripts = QDir::homePath() + QStringLiteral("/.config/waybar/scripts/");
+
+    QVariantMap dollar;
+    dollar.insert(QStringLiteral("exec"), QStringLiteral("python -u ") + waybarScripts + QStringLiteral("dollar.py --waybar"));
+    dollar.insert(QStringLiteral("interval"), 10);
+    dollar.insert(QStringLiteral("return-type"), QStringLiteral("json"));
+    dollar.insert(QStringLiteral("show-empty"), false);
+    dollar.insert(QStringLiteral("tooltip"), false);
+    tools.insert(QStringLiteral("custom/dollar"), dollar);
+
+    QVariantMap btc;
+    btc.insert(QStringLiteral("exec"), QStringLiteral("python -u ") + waybarScripts + QStringLiteral("btc.py --waybar"));
+    btc.insert(QStringLiteral("interval"), 10);
+    btc.insert(QStringLiteral("return-type"), QStringLiteral("json"));
+    btc.insert(QStringLiteral("show-empty"), false);
+    btc.insert(QStringLiteral("tooltip"), false);
+    tools.insert(QStringLiteral("custom/btc"), btc);
+
+    return tools;
+}
+
 } // namespace
 
 BarConfig loadConfig()
 {
     BarConfig config;
 
-    QFile file(configPath());
+    const QString path = configPath();
+    config.configFilePath = path;
+
+    QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
         applyCommandLineOverrides(&config);
         return config;
@@ -135,6 +162,7 @@ BarConfig loadConfig()
     }
     config.fontFamily = root.value(QStringLiteral("fontFamily")).toString(config.fontFamily);
     config.fontSize = root.value(QStringLiteral("fontSize")).toInt(config.fontSize);
+    config.styleSheet = root.value(QStringLiteral("styleSheet")).toString(config.styleSheet);
     config.trayItemPadding = root.value(QStringLiteral("trayItemPadding")).toInt(config.trayItemPadding);
     config.background = readColor(root, QStringLiteral("background"), config.background);
     config.foreground = readColor(root, QStringLiteral("foreground"), config.foreground);
@@ -142,6 +170,17 @@ BarConfig loadConfig()
     config.animationDuration = root.value(QStringLiteral("animationDuration")).toInt(config.animationDuration);
     if (root.contains(QStringLiteral("animationEasing"))) {
         config.animationEasing = easingCurveFromName(root.value(QStringLiteral("animationEasing")).toString());
+    }
+    if (root.contains(QStringLiteral("windowManager")) && root.value(QStringLiteral("windowManager")).isObject()) {
+        const QJsonObject wm = root.value(QStringLiteral("windowManager")).toObject();
+        config.windowManagerBackend = wm.value(QStringLiteral("backend")).toString(config.windowManagerBackend);
+    }
+    config.customTools = defaultCustomTools();
+    if (root.contains(QStringLiteral("customTools")) && root.value(QStringLiteral("customTools")).isObject()) {
+        const QVariantMap customTools = root.value(QStringLiteral("customTools")).toObject().toVariantMap();
+        for (auto it = customTools.cbegin(); it != customTools.cend(); ++it) {
+            config.customTools.insert(it.key(), it.value());
+        }
     }
 
     const bool hasModuleSections = root.contains(QStringLiteral("modules-left"))

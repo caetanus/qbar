@@ -5,13 +5,16 @@ Item {
     height: theme.height
     width: 58
 
+    readonly property string cssId: "backlight"
+    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+
     property int brightnessValue: brightnessModel ? brightnessModel.percent : 0
     property bool available: brightnessModel ? brightnessModel.available : false
     property real illumination: root.available ? root.brightnessValue / 100.0 : 0.0
 
     Rectangle {
         anchors.fill: parent
-        color: "#4b5563"
+        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#4b5563"
     }
 
     Canvas {
@@ -25,7 +28,7 @@ Item {
 
         onPaint: {
             const ctx = getContext("2d")
-            const bg = "#4b5563"
+            const bg = cssStyle["background-color"] || "#4b5563"
             const cx = width / 2
             const cy = height / 2
             const radius = Math.min(width, height) / 2 - 1
@@ -34,7 +37,7 @@ Item {
             const cutRadius = radius * 0.98
 
             ctx.clearRect(0, 0, width, height)
-            ctx.fillStyle = "#ffffff"
+            ctx.fillStyle = cssStyle["color"] || "#ffffff"
             ctx.beginPath()
             ctx.arc(cx, cy, radius, 0, Math.PI * 2)
             ctx.fill()
@@ -54,14 +57,18 @@ Item {
             function onBrightnessChanged() { moonCanvas.requestPaint() }
             function onAvailabilityChanged() { moonCanvas.requestPaint() }
         }
+        Connections {
+            target: root
+            function onCssStyleChanged() { moonCanvas.requestPaint() }
+        }
     }
 
     Text {
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
         anchors.rightMargin: 7
-        color: "#ffffff"
-        font.family: theme.fontFamily
+        color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : "#ffffff"
+        font.family: cssStyle["font-family"] || theme.fontFamily
         font.pointSize: theme.fontSize
         font.bold: true
         text: root.available ? root.brightnessValue + "%" : "--"

@@ -6,9 +6,11 @@
 #include <QDBusObjectPath>
 #include <QDBusReply>
 #include <QDBusVariant>
+#include <QHostAddress>
 #include <QByteArray>
 #include <QDebug>
 #include <QVariantList>
+#include <QVariantMap>
 
 namespace {
 
@@ -109,6 +111,21 @@ QString NetworkManagerModel::interfaceName() const
 QString NetworkManagerModel::ssid() const
 {
     return m_ssid;
+}
+
+QString NetworkManagerModel::ipText() const
+{
+    return m_ipText;
+}
+
+QString NetworkManagerModel::ipv4Text() const
+{
+    return m_ipv4Text;
+}
+
+QString NetworkManagerModel::ipv6Text() const
+{
+    return m_ipv6Text;
 }
 
 int NetworkManagerModel::channel() const
@@ -278,6 +295,82 @@ QString NetworkManagerModel::readWirelessSsid(const QString &devicePath) const
     return ssid;
 }
 
+QString NetworkManagerModel::readAddressDataFirstIp(const QString &configPath, bool ipv6) const
+{
+    if (configPath.isEmpty() || configPath == QStringLiteral("/")) {
+        return {};
+    }
+
+    const QString interfaceName = ipv6
+        ? QStringLiteral("org.freedesktop.NetworkManager.IP6Config")
+        : QStringLiteral("org.freedesktop.NetworkManager.IP4Config");
+    const QVariant value = readProperty(nmService, configPath, interfaceName, QStringLiteral("AddressData"));
+    if (!value.isValid()) {
+        return {};
+    }
+
+    const auto normalize = [](const QString &address) -> QString {
+        const QString trimmed = address.trimmed();
+        if (trimmed.isEmpty()) {
+            return {};
+        }
+        const QHostAddress host(trimmed);
+        return host.isNull() ? trimmed : host.toString();
+    };
+
+    if (value.canConvert<QVariantList>()) {
+        const QVariantList list = value.toList();
+        for (const QVariant &entry : list) {
+            const QString address = normalize(entry.toMap().value(QStringLiteral("address")).toString());
+            if (!address.isEmpty()) {
+                return address;
+            }
+        }
+    }
+
+    if (value.canConvert<QVariantMap>()) {
+        const QString address = normalize(value.toMap().value(QStringLiteral("address")).toString());
+        if (!address.isEmpty()) {
+            return address;
+        }
+    }
+
+    if (value.canConvert<QDBusArgument>()) {
+        const QDBusArgument argument = qvariant_cast<QDBusArgument>(value);
+        argument.beginArray();
+        while (!argument.atEnd()) {
+            QVariantMap map;
+            argument >> map;
+            const QString address = normalize(map.value(QStringLiteral("address")).toString());
+            if (!address.isEmpty()) {
+                argument.endArray();
+                return address;
+            }
+        }
+        argument.endArray();
+    }
+
+    return {};
+}
+
+QString NetworkManagerModel::readIpText(const QString &devicePath) const
+{
+    const QString ip4ConfigPath = objectPathValue(readProperty(nmService,
+                                                              devicePath,
+                                                              nmDeviceInterface,
+                                                              QStringLiteral("Ip4Config")));
+    QString address = readAddressDataFirstIp(ip4ConfigPath, false);
+    if (!address.isEmpty()) {
+        return address;
+    }
+
+    const QString ip6ConfigPath = objectPathValue(readProperty(nmService,
+                                                              devicePath,
+                                                              nmDeviceInterface,
+                                                              QStringLiteral("Ip6Config")));
+    return readAddressDataFirstIp(ip6ConfigPath, true);
+}
+
 int NetworkManagerModel::channelFromFrequency(int frequency)
 {
     if (frequency <= 0) {
@@ -341,6 +434,9 @@ void NetworkManagerModel::setState(State state,
                                    int strength,
                                    const QString &interfaceName,
                                    const QString &ssid,
+                                   const QString &ipText,
+                                   const QString &ipv4Text,
+                                   const QString &ipv6Text,
                                    int channel,
                                    const QString &linkSpeedText)
 {
@@ -349,6 +445,9 @@ void NetworkManagerModel::setState(State state,
         && m_strength == strength
         && m_interfaceName == interfaceName
         && m_ssid == ssid
+        && m_ipText == ipText
+        && m_ipv4Text == ipv4Text
+        && m_ipv6Text == ipv6Text
         && m_channel == channel
         && m_linkSpeedText == linkSpeedText) {
         return;
@@ -358,6 +457,9 @@ void NetworkManagerModel::setState(State state,
     m_strength = strength;
     m_interfaceName = interfaceName;
     m_ssid = ssid;
+    m_ipText = ipText;
+    m_ipv4Text = ipv4Text;
+    m_ipv6Text = ipv6Text;
     m_channel = channel;
     m_linkSpeedText = linkSpeedText;
     emit statusChanged();
@@ -370,7 +472,7 @@ void NetworkManagerModel::refresh()
     const int rootState = readIntProperty(nmService, nmPath, nmRootInterface, QStringLiteral("State"));
 
     if (connectionPath.isEmpty() || connectionPath == QStringLiteral("/") || rootState < nmStateConnectedLocal) {
-        setState(State::Disconnected, 0, {}, {}, 0, {});
+        setState(State::Disconnected, 0, {}, {}, {}, {}, {}, 0, {});
         return;
     }
 
@@ -385,12 +487,23 @@ void NetworkManagerModel::refresh()
                          readWirelessStrength(device.path()),
                          readStringProperty(nmService, device.path(), nmDeviceInterface, QStringLiteral("Interface")),
                          readWirelessSsid(device.path()),
+                         readIpText(device.path()),
+                         readAddressDataFirstIp(objectPathValue(readProperty(nmService,
+                                                                            device.path(),
+                                                                            nmDeviceInterface,
+                                                                            QStringLiteral("Ip4Config"))),
+                                                false),
+                         readAddressDataFirstIp(objectPathValue(readProperty(nmService,
+                                                                            device.path(),
+                                                                            nmDeviceInterface,
+                                                                            QStringLiteral("Ip6Config"))),
+                                                true),
                          channelFromFrequency(frequency),
                          linkSpeedString(readWirelessBitrate(device.path()) / 1000.0));
                 return;
             }
         }
-        setState(State::Wireless, 0, {}, {}, 0, {});
+        setState(State::Wireless, 0, {}, {}, {}, {}, {}, 0, {});
         return;
     }
 
@@ -404,14 +517,25 @@ void NetworkManagerModel::refresh()
                          0,
                          readStringProperty(nmService, device.path(), nmDeviceInterface, QStringLiteral("Interface")),
                          {},
+                         readIpText(device.path()),
+                         readAddressDataFirstIp(objectPathValue(readProperty(nmService,
+                                                                            device.path(),
+                                                                            nmDeviceInterface,
+                                                                            QStringLiteral("Ip4Config"))),
+                                                false),
+                         readAddressDataFirstIp(objectPathValue(readProperty(nmService,
+                                                                            device.path(),
+                                                                            nmDeviceInterface,
+                                                                            QStringLiteral("Ip6Config"))),
+                                                true),
                          0,
                          linkSpeedString(readEthernetSpeed(device.path())));
                 return;
             }
         }
-        setState(State::Wired, 0, {}, {}, 0, {});
+        setState(State::Wired, 0, {}, {}, {}, {}, {}, 0, {});
         return;
     }
 
-    setState(State::Disconnected, 0, {}, {}, 0, {});
+    setState(State::Disconnected, 0, {}, {}, {}, {}, {}, 0, {});
 }

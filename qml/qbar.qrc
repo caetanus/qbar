@@ -6,6 +6,7 @@
     <file>applets/CPU.qml</file>
     <file>applets/Clock.qml</file>
     <file>applets/Brightness.qml</file>
+    <file>applets/CustomTool.qml</file>
     <file>applets/Memory.qml</file>
     <file>applets/Network.qml</file>
     <file>applets/NetworkManager.qml</file>
@@ -17,10 +18,14 @@
     <file>applets/XInput.qml</file>
     <file>qbar/MenuPopup.qml</file>
     <file>qbar/Popup.qml</file>
+    <file>qbar/DismissOverlay.qml</file>
+    <file>qbar/PopupShell.qml</file>
     <file>qbar/Tooltip.qml</file>
+    <file>qbar/Contrast.js</file>
     <file>icons/caffeine-cup-empty-white.svg</file>
     <file>icons/caffeine-cup-full-black.svg</file>
     <file>popups/BatteryPopup.qml</file>
+    <file>popups/CalendarPopup.qml</file>
     <file>popups/CPUPopup.qml</file>
     <file>popups/CPUTooltip.qml</file>
     <file>popups/TooltipPopup.qml</file>

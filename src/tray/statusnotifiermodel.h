@@ -25,6 +25,8 @@ public:
         IconSourceRole,
         IconThemePathRole,
         OverlayIconNameRole,
+        SymbolicIconSourceRole,
+        OverlaySymbolicIconSourceRole,
         DesktopEntryRole,
         StatusRole,
         ItemIsMenuRole,
@@ -83,6 +85,8 @@ private:
         QString attentionIconPixmapSource;
         QString overlayIconName;
         QString overlayIconPixmapSource;
+        QString symbolicIconSource;
+        QString overlaySymbolicIconSource;
         QString iconThemePath;
         QString desktopEntry;
         QString menuPath;

@@ -12,6 +12,9 @@ class NetworkManagerModel final : public QObject {
     Q_PROPERTY(QString label READ label NOTIFY statusChanged)
     Q_PROPERTY(QString interfaceName READ interfaceName NOTIFY statusChanged)
     Q_PROPERTY(QString ssid READ ssid NOTIFY statusChanged)
+    Q_PROPERTY(QString ipText READ ipText NOTIFY statusChanged)
+    Q_PROPERTY(QString ipv4Text READ ipv4Text NOTIFY statusChanged)
+    Q_PROPERTY(QString ipv6Text READ ipv6Text NOTIFY statusChanged)
     Q_PROPERTY(int channel READ channel NOTIFY statusChanged)
     Q_PROPERTY(QString linkSpeedText READ linkSpeedText NOTIFY statusChanged)
     Q_PROPERTY(QString tooltipText READ tooltipText NOTIFY statusChanged)
@@ -26,6 +29,9 @@ public:
     QString label() const;
     QString interfaceName() const;
     QString ssid() const;
+    QString ipText() const;
+    QString ipv4Text() const;
+    QString ipv6Text() const;
     int channel() const;
     QString linkSpeedText() const;
     QString tooltipText() const;
@@ -52,6 +58,8 @@ private:
     int readWirelessBitrate(const QString &devicePath) const;
     int readEthernetSpeed(const QString &devicePath) const;
     QString readWirelessSsid(const QString &devicePath) const;
+    QString readIpText(const QString &devicePath) const;
+    QString readAddressDataFirstIp(const QString &configPath, bool ipv6) const;
     static int channelFromFrequency(int frequency);
     static QString linkSpeedString(double mbps);
     void refresh();
@@ -59,6 +67,9 @@ private:
                   int strength,
                   const QString &interfaceName = QString(),
                   const QString &ssid = QString(),
+                  const QString &ipText = QString(),
+                  const QString &ipv4Text = QString(),
+                  const QString &ipv6Text = QString(),
                   int channel = 0,
                   const QString &linkSpeedText = QString());
 
@@ -69,6 +80,9 @@ private:
     int m_strength = 0;
     QString m_interfaceName;
     QString m_ssid;
+    QString m_ipText;
+    QString m_ipv4Text;
+    QString m_ipv6Text;
     int m_channel = 0;
     QString m_linkSpeedText;
     QTimer m_timer;

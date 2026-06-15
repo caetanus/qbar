@@ -1,20 +1,41 @@
 import QtQuick
 import "qrc:/qbar" as QBar
+import "qrc:/qbar/Contrast.js" as Contrast
 
 Item {
     id: root
     height: theme.height
     width: Math.max(1, preferredWidth)
 
+    readonly property string cssId: "network-io"
+    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+
+    readonly property color barBackground: Contrast.barBackground(cssTheme, theme.background)
+    readonly property color graphBackground: cssStyle["graph-background"]
+        ? cssTheme.parseColor(cssStyle["graph-background"])
+        : "transparent"
+    readonly property color effectiveGraphBackground: Contrast.effectiveBackground(graphBackground, cssTheme, theme.background)
+
     property double downloadRateBytesPerSecond: networkModel ? networkModel.downloadRateBytesPerSecond : 0
     property double uploadRateBytesPerSecond: networkModel ? networkModel.uploadRateBytesPerSecond : 0
     property double totalRateBytesPerSecond: networkModel ? networkModel.totalRateBytesPerSecond : 0
     property var downloadHistory: networkModel ? networkModel.downloadRateHistory : []
     property var uploadHistory: networkModel ? networkModel.uploadRateHistory : []
-    property int preferredWidth: Math.ceil(rateLabel.implicitWidth + 58)
+    property int configuredWidth: cssPixels(cssStyle["width"], 0)
+    property int graphWidth: cssPixels(cssStyle["graph-width"], 22)
+    property int arrowWidth: cssPixels(cssStyle["arrow-width"], 8)
+    property int labelPadding: cssPixels(cssStyle["label-padding"], 10)
+    property int preferredWidth: configuredWidth > 0
+        ? configuredWidth
+        : Math.ceil(rateLabel.implicitWidth + labelPadding + (arrowWidth * 2) + graphWidth)
     property bool tooltipHovered: false
 
     signal preferredWidthUpdated(int width)
+
+    function cssPixels(value, fallback) {
+        var parsed = parseInt(value)
+        return isNaN(parsed) ? fallback : parsed
+    }
 
     onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
     Component.onCompleted: preferredWidthUpdated(preferredWidth)
@@ -105,30 +126,32 @@ Item {
         spacing: 0
 
         Rectangle {
-            width: rateLabel.implicitWidth + 10
+            width: Math.max(1, root.preferredWidth - root.graphWidth - (root.arrowWidth * 2))
             height: theme.height
             radius: 0
-            color: "#3a3410"
+            color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#3a3410"
 
             Text {
                 id: rateLabel
                 anchors.centerIn: parent
-                color: theme.foreground
-                font.family: theme.fontFamily
+                color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
+                font.family: cssStyle["font-family"] || theme.fontFamily
                 font.pointSize: theme.fontSize
                 text: root.formatRate(root.totalRateBytesPerSecond)
             }
         }
 
         Rectangle {
-            width: 10
+            width: root.arrowWidth
             height: theme.height
             radius: 0
             color: "transparent"
 
             Text {
                 anchors.centerIn: parent
-                color: root.downloadRateBytesPerSecond >= root.uploadRateBytesPerSecond ? "#eab308" : "#5b5241"
+                color: root.downloadRateBytesPerSecond >= root.uploadRateBytesPerSecond
+                    ? (cssStyle["download-color"] || Contrast.contrastColor(root.barBackground))
+                    : (cssStyle["inactive-color"] || Contrast.contrastFill(root.barBackground, 0.4))
                 font.family: theme.fontFamily
                 font.pointSize: theme.fontSize
                 font.bold: true
@@ -137,14 +160,16 @@ Item {
         }
 
         Rectangle {
-            width: 10
+            width: root.arrowWidth
             height: theme.height
             radius: 0
             color: "transparent"
 
             Text {
                 anchors.centerIn: parent
-                color: root.uploadRateBytesPerSecond > root.downloadRateBytesPerSecond ? "#f59e0b" : "#5b5241"
+                color: root.uploadRateBytesPerSecond > root.downloadRateBytesPerSecond
+                    ? (cssStyle["upload-color"] || Contrast.contrastColor(root.barBackground))
+                    : (cssStyle["inactive-color"] || Contrast.contrastFill(root.barBackground, 0.4))
                 font.family: theme.fontFamily
                 font.pointSize: theme.fontSize
                 font.bold: true
@@ -153,10 +178,10 @@ Item {
         }
 
         Rectangle {
-            width: 46
+            width: root.graphWidth
             height: theme.height
             radius: 0
-            color: "#24303a"
+            color: root.graphBackground
 
             Canvas {
                 id: trafficGraph
@@ -166,14 +191,23 @@ Item {
                 onPaint: {
                     var ctx = getContext("2d")
                     ctx.clearRect(0, 0, width, height)
-                    root.drawSeries(ctx, root.downloadHistory, width, height, "rgba(234, 179, 8, 0.22)", "#eab308")
-                    root.drawSeries(ctx, root.uploadHistory, width, height, "rgba(161, 98, 7, 0.26)", "#a16207")
+                    root.drawSeries(ctx, root.downloadHistory, width, height,
+                        cssStyle["download-fill"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.22),
+                        cssStyle["download-color"] || Contrast.contrastColor(root.effectiveGraphBackground))
+                    root.drawSeries(ctx, root.uploadHistory, width, height,
+                        cssStyle["upload-fill"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.26),
+                        cssStyle["upload-color"] || Contrast.contrastColor(root.effectiveGraphBackground))
                 }
             }
 
             Connections {
                 target: networkModel
                 function onStatsChanged() { trafficGraph.requestPaint() }
+            }
+
+            Connections {
+                target: root
+                function onCssStyleChanged() { trafficGraph.requestPaint() }
             }
         }
     }

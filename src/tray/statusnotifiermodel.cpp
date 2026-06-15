@@ -393,6 +393,10 @@ QVariant StatusNotifierModel::data(const QModelIndex &index, int role) const
         return item.iconThemePath;
     case OverlayIconNameRole:
         return item.overlayIconName;
+    case SymbolicIconSourceRole:
+        return item.symbolicIconSource;
+    case OverlaySymbolicIconSourceRole:
+        return item.overlaySymbolicIconSource;
     case DesktopEntryRole:
         return item.desktopEntry;
     case StatusRole:
@@ -414,6 +418,8 @@ QHash<int, QByteArray> StatusNotifierModel::roleNames() const
         {IconSourceRole, "iconSource"},
         {IconThemePathRole, "iconThemePath"},
         {OverlayIconNameRole, "overlayIconName"},
+        {SymbolicIconSourceRole, "symbolicIconSource"},
+        {OverlaySymbolicIconSourceRole, "overlaySymbolicIconSource"},
         {DesktopEntryRole, "desktopEntry"},
         {StatusRole, "status"},
         {ItemIsMenuRole, "itemIsMenu"},
@@ -844,21 +850,29 @@ void StatusNotifierModel::refreshItem(int row)
         return QStringLiteral("image://themeicon/") + resolved;
     };
 
+    QString resolvedIconName;
+
     item.iconSource.clear();
     if (item.status == QStringLiteral("NeedsAttention")) {
         item.iconSource = iconUrl(item.attentionIconName);
-        if (item.iconSource.isEmpty() && !item.attentionIconPixmapSource.isEmpty()) {
+        if (!item.iconSource.isEmpty()) {
+            resolvedIconName = item.attentionIconName;
+        } else if (!item.attentionIconPixmapSource.isEmpty()) {
             item.iconSource = item.attentionIconPixmapSource;
         }
     }
     if (item.iconSource.isEmpty()) {
         if (!desktopIcon.isEmpty()) {
             item.iconSource = iconUrl(desktopIcon);
-            qDebug() << "[tray]   → using desktop icon:" << desktopIcon;
+            if (!item.iconSource.isEmpty()) {
+                resolvedIconName = desktopIcon;
+                qDebug() << "[tray]   → using desktop icon:" << desktopIcon;
+            }
         }
         if (item.iconSource.isEmpty()) {
             item.iconSource = iconUrl(item.iconName);
             if (!item.iconSource.isEmpty()) {
+                resolvedIconName = item.iconName;
                 qDebug() << "[tray]   → using SNI iconName:" << item.iconName;
             }
         }
@@ -870,6 +884,25 @@ void StatusNotifierModel::refreshItem(int row)
             qDebug() << "[tray]   → NO icon source found!";
         }
     }
+
+    // Some icon themes ship a "-symbolic" companion for an icon: a single-color
+    // template glyph that can be tinted to either a light or a dark variant
+    // depending on where it's placed. When one exists, prefer it (tinted to match
+    // the surrounding contrast) over recoloring the regular full-color icon, which
+    // would otherwise flatten brand logos that have no such adaptive form.
+    const auto symbolicUrl = [&](const QString &name) -> QString {
+        if (name.isEmpty() || name.endsWith(QStringLiteral("-symbolic"))) {
+            return {};
+        }
+        const QString symbolicName = name + QStringLiteral("-symbolic");
+        if (QIcon::fromTheme(symbolicName).isNull()) {
+            return {};
+        }
+        return QStringLiteral("image://themeicon/") + symbolicName;
+    };
+
+    item.symbolicIconSource = symbolicUrl(resolvedIconName);
+    item.overlaySymbolicIconSource = symbolicUrl(item.overlayIconName);
 
     if (item.title.isEmpty()) {
         item.title = item.service;
@@ -883,6 +916,8 @@ void StatusNotifierModel::refreshItem(int row)
                       IconSourceRole,
                       IconThemePathRole,
                       OverlayIconNameRole,
+                      SymbolicIconSourceRole,
+                      OverlaySymbolicIconSourceRole,
                       DesktopEntryRole,
                       StatusRole,
                       ItemIsMenuRole});

@@ -13,6 +13,9 @@ builddir/
 *.exe
 *.user
 *.user.*
+core.*
+__pycache__/
+*.pyc
 .qmake.stash
 moc_*.cpp
 qrc_*.cpp

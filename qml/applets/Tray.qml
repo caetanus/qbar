@@ -1,10 +1,15 @@
 import QtQuick
+import QtQuick.Effects
+import "qrc:/qbar/Contrast.js" as Contrast
 
 Row {
     id: root
     height: theme.height
     spacing: 0
     width: preferredWidth
+
+    readonly property string cssId: "tray"
+    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
 
     property int iconSize: Math.max(16, Math.round((theme.height - 6) * 0.85))
     property real itemPadding: Math.max(2, Math.round(theme.trayItemPadding * 2))
@@ -21,9 +26,34 @@ Row {
         model: trayModel ? trayModel : 0
 
         Rectangle {
+            id: trayItem
             width: root.itemWidth
             height: theme.height
-            color: status === "NeedsAttention" ? "#ccbd4b4b" : "#2f80b8"
+
+            readonly property bool hasIcon: iconSource && iconSource.length > 0
+            readonly property bool hasOverlay: hasIcon && overlayIconName && overlayIconName.length > 0
+            readonly property bool hasSymbolicIcon: symbolicIconSource && symbolicIconSource.length > 0
+            readonly property bool hasOverlaySymbolicIcon: overlaySymbolicIconSource && overlaySymbolicIconSource.length > 0
+
+            readonly property color itemBackground: status === "NeedsAttention"
+                ? (root.cssStyle["attention-background"] ? cssTheme.parseColor(root.cssStyle["attention-background"]) : "#ccbd4b4b")
+                : (root.cssStyle["background-color"] ? cssTheme.parseColor(root.cssStyle["background-color"]) : "#2f80b8")
+            readonly property color effectiveBackground: Contrast.effectiveBackground(itemBackground, cssTheme, theme.background)
+            readonly property color iconColor: root.cssStyle["color"]
+                ? cssTheme.parseColor(root.cssStyle["color"])
+                : Contrast.contrastColor(effectiveBackground)
+            // Icons are usually full-color brand logos, not symbolic glyphs, and most
+            // are drawn light-on-dark — they read fine on a dark background as-is.
+            // Only recolor when this background is light enough to need a dark
+            // contrast color, since native light icons would disappear there.
+            // (This only applies when no "-symbolic" variant is available — see
+            // hasSymbolicIcon below, which is preferred whenever the icon theme
+            // provides one.)
+            readonly property bool recolorIcon: root.cssStyle["color"]
+                ? true
+                : Contrast.needsDarkIcon(effectiveBackground)
+
+            color: itemBackground
 
             Image {
                 id: trayIcon
@@ -35,20 +65,29 @@ Row {
                 fillMode: Image.PreserveAspectFit
                 smooth: true
                 mipmap: true
-                visible: iconSource && iconSource.length > 0
-                source: visible ? iconSource : ""
+                visible: false
+                source: trayItem.hasSymbolicIcon ? symbolicIconSource : (trayItem.hasIcon ? iconSource : "")
+            }
+
+            MultiEffect {
+                anchors.fill: trayIcon
+                source: trayIcon
+                visible: trayItem.hasIcon
+                colorization: (trayItem.hasSymbolicIcon || trayItem.recolorIcon) ? 1.0 : 0.0
+                colorizationColor: trayItem.iconColor
             }
 
             Text {
                 anchors.centerIn: parent
-                visible: !trayIcon.visible
-                color: theme.foreground
+                visible: !trayItem.hasIcon
+                color: trayItem.iconColor
                 font.family: theme.fontFamily
                 font.pointSize: theme.fontSize
                 text: title.slice(0, 1).toUpperCase()
             }
 
             Image {
+                id: overlayIcon
                 anchors.right: trayIcon.right
                 anchors.bottom: trayIcon.bottom
                 width: Math.max(8, trayIcon.width / 2)
@@ -56,8 +95,16 @@ Row {
                 sourceSize.width: width
                 sourceSize.height: height
                 fillMode: Image.PreserveAspectFit
-                visible: trayIcon.visible && overlayIconName && overlayIconName.length > 0
-                source: visible ? "image://themeicon/" + overlayIconName : ""
+                visible: false
+                source: trayItem.hasOverlaySymbolicIcon ? overlaySymbolicIconSource : (trayItem.hasOverlay ? "image://themeicon/" + overlayIconName : "")
+            }
+
+            MultiEffect {
+                anchors.fill: overlayIcon
+                source: overlayIcon
+                visible: trayItem.hasOverlay
+                colorization: (trayItem.hasOverlaySymbolicIcon || trayItem.recolorIcon) ? 1.0 : 0.0
+                colorizationColor: trayItem.iconColor
             }
 
             MouseArea {

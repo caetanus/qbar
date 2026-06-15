@@ -1,2 +1,3 @@
 option('x11', type: 'feature', value: 'auto', description: 'Build X11 dock/strut integration')
 option('wayland', type: 'feature', value: 'auto', description: 'Build wlroots wlr-layer-shell integration')
+option('wm_backends', type: 'array', value: ['i3', 'hyprland'], choices: ['i3', 'hyprland', 'bspwm', 'qtile', 'ewmh'], description: 'Window manager backends to build')

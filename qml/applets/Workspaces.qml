@@ -41,11 +41,24 @@ Item {
                 height: theme.height
                 radius: 0
                 clip: true
-                color: urgent ? "#ff5555" : visible ? "#526171" : "#273847"
                 property real hoverReveal: 0.0
                 property real hoverOpacity: 0.0
-                property bool attention: urgent
+                property bool attention: false
                 property real activeProgress: focused ? 1.0 : 0.0
+
+                // #workspaces button[.focused/.visible/.urgent] from the CSS theme
+                readonly property var cssStyle: cssTheme && cssTheme.loaded
+                    ? cssTheme.resolveWith("workspaces", "button",
+                        urgent ? ["urgent"] : focused ? ["focused"] : visible ? ["visible"] : [])
+                    : ({})
+                readonly property color tileBg: cssStyle["background-color"]
+                    ? cssTheme.parseColor(cssStyle["background-color"])
+                    : (workspaceTile.attention ? "#ff5555" : visible ? "#526171" : "#273847")
+                readonly property color tileFg: cssStyle["color"]
+                    ? cssTheme.parseColor(cssStyle["color"])
+                    : (workspaceTile.attention ? "#ffffff" : "#eef2f7")
+
+                color: tileBg
 
                 Behavior on color {
                     ColorAnimation {
@@ -106,7 +119,7 @@ Item {
                 Text {
                     id: label
                     anchors.centerIn: parent
-                    color: workspaceTile.attention ? "#ffffff" : "#eef2f7"
+                    color: workspaceTile.tileFg
                     font.family: theme.fontFamily
                     font.pointSize: theme.fontSize
                     text: name
@@ -155,7 +168,7 @@ Item {
                     }
                 }
 
-                property bool attention: urgent
+                property bool attention: false
 
                 Timer {
                     id: fallbackHoverResetTimer

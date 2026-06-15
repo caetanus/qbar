@@ -1,18 +1,37 @@
 import QtQuick
 import "qrc:/qbar" as QBar
+import "qrc:/qbar/Contrast.js" as Contrast
 
 Item {
     id: root
     height: theme.height
     width: Math.max(1, preferredWidth)
 
+    readonly property string cssId: "memory"
+    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+
+    readonly property color graphBackground: cssStyle["graph-background"]
+        ? cssTheme.parseColor(cssStyle["graph-background"])
+        : "transparent"
+    readonly property color effectiveGraphBackground: Contrast.effectiveBackground(graphBackground, cssTheme, theme.background)
+
     property int usage: cpuModel ? cpuModel.memoryUsage : 0
     property var history: cpuModel ? cpuModel.memoryUsageHistory : []
     property var swapHistory: cpuModel ? cpuModel.swapUsageHistory : []
-    property int preferredWidth: Math.ceil(usageLabel.implicitWidth + 28)
+    property int configuredWidth: cssPixels(cssStyle["width"], 0)
+    property int graphWidth: cssPixels(cssStyle["graph-width"], 22)
+    property int labelPadding: cssPixels(cssStyle["label-padding"], 10)
+    property int preferredWidth: configuredWidth > 0
+        ? configuredWidth
+        : Math.ceil(usageLabel.implicitWidth + labelPadding + graphWidth)
     property bool tooltipHovered: false
 
     signal preferredWidthUpdated(int width)
+
+    function cssPixels(value, fallback) {
+        var parsed = parseInt(value)
+        return isNaN(parsed) ? fallback : parsed
+    }
 
     onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
     Component.onCompleted: preferredWidthUpdated(preferredWidth)
@@ -42,16 +61,16 @@ Item {
         spacing: 0
 
         Rectangle {
-            width: usageLabel.implicitWidth + 10
+            width: Math.max(1, root.preferredWidth - graphBlock.width)
             height: theme.height
             radius: 0
-            color: "#35502e"
+            color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#35502e"
 
             Text {
                 id: usageLabel
                 anchors.centerIn: parent
-                color: theme.foreground
-                font.family: theme.fontFamily
+                color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
+                font.family: cssStyle["font-family"] || theme.fontFamily
                 font.pointSize: theme.fontSize
                 text: root.usage + "%"
             }
@@ -59,79 +78,88 @@ Item {
 
         Rectangle {
             id: graphBlock
-            width: 22
+            width: root.graphWidth
             height: theme.height
             radius: 0
-            color: "#24303a"
+            color: root.graphBackground
 
-                    Canvas {
-                        id: graph
-                        anchors.fill: parent
-                        anchors.margins: 4
+            Canvas {
+                id: graph
+                anchors.fill: parent
+                anchors.margins: 4
 
-                        onPaint: {
-                            var ctx = getContext("2d")
-                            ctx.clearRect(0, 0, width, height)
+                onPaint: {
+                    var ctx = getContext("2d")
+                    ctx.clearRect(0, 0, width, height)
 
-                            var swapPoints = root.swapHistory
-                            var memPoints = root.history
-                            if ((!swapPoints || swapPoints.length === 0) && (!memPoints || memPoints.length === 0)) {
-                                return
-                            }
+                    var swapPoints = root.swapHistory
+                    var memPoints = root.history
+                    if ((!swapPoints || swapPoints.length === 0) && (!memPoints || memPoints.length === 0)) {
+                        return
+                    }
 
-                            function drawSeries(points, fillColor, strokeColor) {
-                                if (!points || points.length === 0) {
-                                    return
-                                }
-
-                                ctx.beginPath()
-                                ctx.moveTo(0, height)
-                                for (var i = 0; i < points.length; ++i) {
-                                    var sample = Number(points[i])
-                                    if (isNaN(sample)) {
-                                        sample = 0
-                                    }
-                                    var x = points.length === 1 ? width - 1 : (i * (width - 1)) / (points.length - 1)
-                                    var y = height - Math.max(1, (sample / 100.0) * (height - 2)) - 1
-                                    ctx.lineTo(x, y)
-                                }
-                                ctx.lineTo(width - 1, height)
-                                ctx.closePath()
-                                ctx.fillStyle = fillColor
-                                ctx.fill()
-
-                                ctx.beginPath()
-                                for (var j = 0; j < points.length; ++j) {
-                                    var value = Number(points[j])
-                                    if (isNaN(value)) {
-                                        value = 0
-                                    }
-                                    var px = points.length === 1 ? width - 1 : (j * (width - 1)) / (points.length - 1)
-                                    var py = height - Math.max(1, (value / 100.0) * (height - 2)) - 1
-                                    if (j === 0) {
-                                        ctx.moveTo(px, py)
-                                    } else {
-                                        ctx.lineTo(px, py)
-                                    }
-                                }
-                                ctx.strokeStyle = strokeColor
-                                ctx.lineWidth = 1.5
-                                ctx.lineJoin = "round"
-                                ctx.lineCap = "round"
-                                ctx.stroke()
-                            }
-
-                            drawSeries(swapPoints, "rgba(236, 72, 153, 0.22)", "#ec4899")
-                            drawSeries(memPoints, "rgba(132, 204, 22, 0.22)", "#84cc16")
+                    function drawSeries(points, fillColor, strokeColor) {
+                        if (!points || points.length === 0) {
+                            return
                         }
+
+                        ctx.beginPath()
+                        ctx.moveTo(0, height)
+                        for (var i = 0; i < points.length; ++i) {
+                            var sample = Number(points[i])
+                            if (isNaN(sample)) {
+                                sample = 0
+                            }
+                            var x = points.length === 1 ? width - 1 : (i * (width - 1)) / (points.length - 1)
+                            var y = height - Math.max(1, (sample / 100.0) * (height - 2)) - 1
+                            ctx.lineTo(x, y)
+                        }
+                        ctx.lineTo(width - 1, height)
+                        ctx.closePath()
+                        ctx.fillStyle = fillColor
+                        ctx.fill()
+
+                        ctx.beginPath()
+                        for (var j = 0; j < points.length; ++j) {
+                            var value = Number(points[j])
+                            if (isNaN(value)) {
+                                value = 0
+                            }
+                            var px = points.length === 1 ? width - 1 : (j * (width - 1)) / (points.length - 1)
+                            var py = height - Math.max(1, (value / 100.0) * (height - 2)) - 1
+                            if (j === 0) {
+                                ctx.moveTo(px, py)
+                            } else {
+                                ctx.lineTo(px, py)
+                            }
+                        }
+                        ctx.strokeStyle = strokeColor
+                        ctx.lineWidth = 1.5
+                        ctx.lineJoin = "round"
+                        ctx.lineCap = "round"
+                        ctx.stroke()
                     }
 
-                    Connections {
-                        target: cpuModel
-                        function onMemoryUsageChanged() { graph.requestPaint() }
-                        function onMemoryUsageHistoryChanged() { graph.requestPaint() }
-                        function onMemoryStatsChanged() { graph.requestPaint() }
-                    }
+                    drawSeries(swapPoints,
+                        cssStyle["swap-fill"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.22),
+                        cssStyle["swap-color"] || Contrast.contrastColor(root.effectiveGraphBackground))
+                    drawSeries(memPoints,
+                        cssStyle["graph-fill"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.22),
+                        cssStyle["graph-color"] || Contrast.contrastColor(root.effectiveGraphBackground))
+                }
+            }
+
+            Connections {
+                target: cpuModel
+                function onMemoryUsageChanged() { graph.requestPaint() }
+                function onMemoryUsageHistoryChanged() { graph.requestPaint() }
+                function onMemoryStatsChanged() { graph.requestPaint() }
+            }
+
+            Connections {
+                target: root
+                function onCssStyleChanged() { graph.requestPaint() }
+            }
 
             Component.onCompleted: graph.requestPaint()
         }

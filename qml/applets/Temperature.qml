@@ -6,6 +6,9 @@ Item {
     height: theme.height
     width: Math.max(1, preferredWidth)
 
+    readonly property string cssId: "temperature"
+    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+
     property string displayText: temperatureModel ? temperatureModel.displayText : "--/--"
     property string tooltipText: temperatureModel ? temperatureModel.tooltipText : "temperature unavailable"
     property bool available: temperatureModel ? temperatureModel.available : false
@@ -26,7 +29,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: "#f28d26"
+        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#f28d26"
     }
 
     Row {
@@ -46,8 +49,9 @@ Item {
                 onPaint: {
                     var ctx = getContext("2d")
                     ctx.clearRect(0, 0, width, height)
-                    ctx.strokeStyle = "#ffffff"
-                    ctx.fillStyle = "#ffffff"
+                    var iconColor = cssStyle["color"] || "#ffffff"
+                    ctx.strokeStyle = iconColor
+                    ctx.fillStyle = iconColor
                     ctx.lineWidth = 2.2
                     ctx.lineCap = "round"
                     ctx.lineJoin = "round"
@@ -61,14 +65,19 @@ Item {
                     ctx.arc(6, 14.2, 3.1, 0, Math.PI * 2)
                     ctx.fill()
                 }
+
+                Connections {
+                    target: root
+                    function onCssStyleChanged() { parent.requestPaint() }
+                }
             }
         }
 
         Text {
             id: valueLabel
             anchors.verticalCenter: parent.verticalCenter
-            color: "#ffffff"
-            font.family: theme.fontFamily
+            color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : "#ffffff"
+            font.family: cssStyle["font-family"] || theme.fontFamily
             font.pointSize: theme.fontSize
             text: root.displayText
         }

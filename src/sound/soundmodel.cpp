@@ -108,6 +108,16 @@ QString SoundModel::sourceDisplayText() const
     return QStringLiteral("%1%").arg(m_sourceVolume);
 }
 
+QString SoundModel::outputIconName() const
+{
+    return formFactorIconName(m_sinkFormFactor);
+}
+
+QString SoundModel::inputIconName() const
+{
+    return formFactorIconName(m_sourceFormFactor);
+}
+
 QString SoundModel::sourceTooltipText() const
 {
     if (!m_sourceAvailable) {
@@ -193,25 +203,8 @@ QString SoundModel::friendlySinkName(const QString &sinkName)
         return sinkName;
     }
 
-    const QStringList lines = output.split(QChar::LineFeed, Qt::SkipEmptyParts);
-    QString currentName;
-    QString currentDescription;
-    for (const QString &rawLine : lines) {
-        const QString line = rawLine.trimmed();
-        if (line.startsWith(QStringLiteral("Name:"))) {
-            currentName = line.mid(QStringLiteral("Name:").size()).trimmed();
-            currentDescription.clear();
-            continue;
-        }
-        if (line.startsWith(QStringLiteral("Description:"))) {
-            currentDescription = line.mid(QStringLiteral("Description:").size()).trimmed();
-        }
-        if (currentName == sinkName && !currentDescription.isEmpty()) {
-            return currentDescription;
-        }
-    }
-
-    return sinkName;
+    const QString description = deviceInfo(output, sinkName).description;
+    return description.isEmpty() ? sinkName : description;
 }
 
 QString SoundModel::friendlySourceName(const QString &sourceName)
@@ -226,25 +219,69 @@ QString SoundModel::friendlySourceName(const QString &sourceName)
         return sourceName;
     }
 
-    const QStringList lines = output.split(QChar::LineFeed, Qt::SkipEmptyParts);
+    const QString description = deviceInfo(output, sourceName).description;
+    return description.isEmpty() ? sourceName : description;
+}
+
+SoundModel::DeviceInfo SoundModel::deviceInfo(const QString &listOutput, const QString &deviceName)
+{
+    DeviceInfo info;
+    if (deviceName.isEmpty() || listOutput.isEmpty()) {
+        return info;
+    }
+
     QString currentName;
     QString currentDescription;
+    QString currentFormFactor;
+
+    const auto captureIfMatch = [&]() {
+        if (currentName == deviceName) {
+            info.description = currentDescription;
+            info.formFactor = currentFormFactor;
+        }
+    };
+
+    const QStringList lines = listOutput.split(QChar::LineFeed, Qt::SkipEmptyParts);
     for (const QString &rawLine : lines) {
         const QString line = rawLine.trimmed();
         if (line.startsWith(QStringLiteral("Name:"))) {
+            captureIfMatch();
             currentName = line.mid(QStringLiteral("Name:").size()).trimmed();
             currentDescription.clear();
+            currentFormFactor.clear();
             continue;
         }
         if (line.startsWith(QStringLiteral("Description:"))) {
             currentDescription = line.mid(QStringLiteral("Description:").size()).trimmed();
+            continue;
         }
-        if (currentName == sourceName && !currentDescription.isEmpty()) {
-            return currentDescription;
+        if (line.startsWith(QStringLiteral("device.form_factor"))) {
+            const int eq = line.indexOf(QChar('='));
+            if (eq >= 0) {
+                QString value = line.mid(eq + 1).trimmed();
+                value.remove(QChar('"'));
+                currentFormFactor = value;
+            }
         }
     }
+    captureIfMatch();
 
-    return sourceName;
+    return info;
+}
+
+// Maps a PipeWire/PulseAudio "device.form_factor" to a freedesktop symbolic
+// icon name for "personal audio" devices. Other form factors (internal
+// speakers, HDMI, etc.) return an empty string so callers fall back to the
+// built-in volume-level icon.
+QString SoundModel::formFactorIconName(const QString &formFactor)
+{
+    if (formFactor == QStringLiteral("headset") || formFactor == QStringLiteral("hands-free")) {
+        return QStringLiteral("audio-headset-symbolic");
+    }
+    if (formFactor == QStringLiteral("headphone") || formFactor == QStringLiteral("portable")) {
+        return QStringLiteral("audio-headphones-symbolic");
+    }
+    return {};
 }
 
 int SoundModel::parseVolumePercent(const QString &output)
@@ -294,6 +331,12 @@ void SoundModel::refresh()
             sinkState.volume = qBound(0, volume, 100);
             sinkState.muted = muted;
             sinkState.available = true;
+
+            bool sinksOk = false;
+            const QString sinksOutput = runPactl({QStringLiteral("list"), QStringLiteral("sinks")}, &sinksOk);
+            if (sinksOk) {
+                sinkState.formFactor = deviceInfo(sinksOutput, sink).formFactor;
+            }
         }
     }
 
@@ -310,6 +353,12 @@ void SoundModel::refresh()
             sourceState.volume = qBound(0, volume, 100);
             sourceState.muted = muted;
             sourceState.available = true;
+
+            bool sourcesOk = false;
+            const QString sourcesOutput = runPactl({QStringLiteral("list"), QStringLiteral("sources")}, &sourcesOk);
+            if (sourcesOk) {
+                sourceState.formFactor = deviceInfo(sourcesOutput, source).formFactor;
+            }
         }
     }
 
@@ -330,11 +379,13 @@ void SoundModel::setState(const State &state)
 {
     const bool availabilityChangedLocal = m_available != state.available;
     const bool dataChanged = m_sinkName != state.sinkName
+        || m_sinkFormFactor != state.formFactor
         || m_volume != state.volume
         || m_muted != state.muted
         || m_available != state.available;
 
     m_sinkName = state.sinkName;
+    m_sinkFormFactor = state.formFactor;
     m_volume = state.volume;
     m_muted = state.muted;
     m_available = state.available;
@@ -351,11 +402,13 @@ void SoundModel::setSourceState(const State &state)
 {
     const bool availabilityChangedLocal = m_sourceAvailable != state.available;
     const bool dataChanged = m_sourceName != state.sinkName
+        || m_sourceFormFactor != state.formFactor
         || m_sourceVolume != state.volume
         || m_sourceMuted != state.muted
         || m_sourceAvailable != state.available;
 
     m_sourceName = state.sinkName;
+    m_sourceFormFactor = state.formFactor;
     m_sourceVolume = state.volume;
     m_sourceMuted = state.muted;
     m_sourceAvailable = state.available;

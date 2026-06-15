@@ -1,10 +1,22 @@
 import QtQuick
 import "qrc:/qbar" as QBar
+import "qrc:/qbar/Contrast.js" as Contrast
 
 Item {
     id: root
     height: theme.height
     width: Math.max(1, preferredWidth)
+
+    // CSS id matches waybar's pulseaudio module
+    readonly property string cssId: "pulseaudio"
+    // Output section CSS (muted class when muted, unavailable when not available)
+    readonly property var outputCssStyle: cssTheme && cssTheme.loaded
+        ? cssTheme.resolve(cssId, outputAvailable ? (outputMuted ? ["muted"] : []) : ["unavailable"])
+        : ({})
+    // Input/source section CSS
+    readonly property var inputCssStyle: cssTheme && cssTheme.loaded
+        ? cssTheme.resolve(cssId, inputAvailable ? (inputMuted ? ["source-muted"] : ["source"]) : ["unavailable"])
+        : ({})
 
     property bool outputAvailable: soundModel ? soundModel.available : false
     property bool outputMuted: soundModel ? soundModel.muted : false
@@ -18,24 +30,56 @@ Item {
     property string inputTooltipText: soundModel ? soundModel.sourceTooltipText : "mic unavailable"
     property bool outputTooltipHovered: false
     property bool inputTooltipHovered: false
-    property color outputBackground: root.outputAvailable ? (root.outputMuted ? "#59616d" : "#f0c808") : "#2b2f33"
-    property color inputBackground: root.inputAvailable ? (root.inputMuted ? "#59616d" : "#e59b0f") : "#2b2f33"
+    property string outputIconName: soundModel ? soundModel.outputIconName : ""
+    property string inputIconName: soundModel ? soundModel.inputIconName : ""
+
+    property color outputBackground: {
+        if (outputCssStyle["background-color"]) return cssTheme.parseColor(outputCssStyle["background-color"])
+        return root.outputAvailable ? (root.outputMuted ? "#59616d" : "#f0c808") : "#2b2f33"
+    }
+    property color inputBackground: {
+        if (inputCssStyle["background-color"]) return cssTheme.parseColor(inputCssStyle["background-color"])
+        return root.inputAvailable ? (root.inputMuted ? "#59616d" : "#e59b0f") : "#2b2f33"
+    }
+
     property int preferredWidth: Math.ceil(contentRow.implicitWidth + 10)
 
     signal preferredWidthUpdated(int width)
 
     onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
-    Component.onCompleted: preferredWidthUpdated(preferredWidth)
 
     function contrastTextColor(background) {
-        var luminance = (0.2126 * background.r) + (0.7152 * background.g) + (0.0722 * background.b)
-        return luminance < 0.5 ? "#ffffff" : "#171717"
+        return Contrast.contrastColor(Contrast.effectiveBackground(background, cssTheme, theme.background))
     }
 
     function contrastIconColor(background) {
-        var luminance = (0.2126 * background.r) + (0.7152 * background.g) + (0.0722 * background.b)
-        return luminance < 0.5 ? "#ffffff" : "#111111"
+        return Contrast.contrastColor(Contrast.effectiveBackground(background, cssTheme, theme.background))
     }
+
+    readonly property color outputIconColor: outputCssStyle["color"]
+        ? cssTheme.parseColor(outputCssStyle["color"])
+        : root.contrastIconColor(root.outputBackground)
+    readonly property color inputIconColor: inputCssStyle["color"]
+        ? cssTheme.parseColor(inputCssStyle["color"])
+        : root.contrastIconColor(root.inputBackground)
+
+    function repaintIcons() {
+        outputIcon.requestPaint()
+        inputIcon.requestPaint()
+    }
+
+    onOutputBackgroundChanged: repaintIcons()
+    onInputBackgroundChanged: repaintIcons()
+    onOutputMutedChanged: repaintIcons()
+    onInputMutedChanged: repaintIcons()
+    onOutputVolumeChanged: repaintIcons()
+    onInputVolumeChanged: repaintIcons()
+    onOutputAvailableChanged: repaintIcons()
+    onInputAvailableChanged: repaintIcons()
+    onOutputCssStyleChanged: repaintIcons()
+    onInputCssStyleChanged: repaintIcons()
+
+    Component.onCompleted: preferredWidthUpdated(preferredWidth)
 
     Row {
         id: contentRow
@@ -62,49 +106,73 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
 
                     Image {
-                        id: outputIcon
+                        id: outputDeviceIcon
                         anchors.fill: parent
-                        source: root.outputMuted
-                            ? "image://themeicon/audio-volume-muted-symbolic|" + root.contrastIconColor(root.outputBackground)
-                            : (root.outputVolume < 34
-                                ? "image://themeicon/audio-volume-low-symbolic|" + root.contrastIconColor(root.outputBackground)
-                                : (root.outputVolume < 67
-                                    ? "image://themeicon/audio-volume-medium-symbolic|" + root.contrastIconColor(root.outputBackground)
-                                    : "image://themeicon/audio-volume-high-symbolic|" + root.contrastIconColor(root.outputBackground)))
-                        sourceSize.width: 18
-                        sourceSize.height: 18
+                        source: root.outputIconName
+                            ? "image://themeicon/" + root.outputIconName + "|" + Contrast.toHex(root.outputIconColor).slice(1)
+                            : ""
                         fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
                         visible: status === Image.Ready
                     }
 
                     Canvas {
+                        id: outputIcon
                         anchors.fill: parent
-                        visible: outputIcon.status !== Image.Ready
+                        visible: outputDeviceIcon.status !== Image.Ready
                         onPaint: {
                             var ctx = getContext("2d")
                             ctx.clearRect(0, 0, width, height)
-                            ctx.strokeStyle = root.contrastIconColor(root.outputBackground)
-                            ctx.fillStyle = root.contrastIconColor(root.outputBackground)
-                            ctx.lineWidth = 1.6
+                            var outputIconColor = root.outputIconColor
+                            ctx.strokeStyle = outputIconColor
+                            ctx.fillStyle = outputIconColor
+                            ctx.lineWidth = 1.5
                             ctx.lineCap = "round"
                             ctx.lineJoin = "round"
 
                             ctx.beginPath()
-                            ctx.moveTo(2.3, 6.6)
-                            ctx.lineTo(5.1, 6.6)
-                            ctx.lineTo(7.3, 4.7)
-                            ctx.lineTo(7.3, 11.3)
-                            ctx.lineTo(5.1, 9.4)
-                            ctx.lineTo(2.3, 9.4)
+                            ctx.moveTo(2.6, 7.0)
+                            ctx.lineTo(5.2, 7.0)
+                            ctx.lineTo(7.4, 4.8)
+                            ctx.lineTo(7.4, 13.2)
+                            ctx.lineTo(5.2, 11.0)
+                            ctx.lineTo(2.6, 11.0)
                             ctx.closePath()
                             ctx.fill()
+
+                            if (!root.outputMuted) {
+                                ctx.beginPath()
+                                if (root.outputVolume < 34) {
+                                    ctx.arc(8.6, 9.0, 2.0, -0.75, 0.75)
+                                } else if (root.outputVolume < 67) {
+                                    ctx.arc(8.6, 9.0, 2.0, -0.90, 0.90)
+                                    ctx.arc(10.1, 9.0, 3.3, -0.82, 0.82)
+                                } else {
+                                    ctx.arc(8.6, 9.0, 2.0, -0.95, 0.95)
+                                    ctx.arc(10.1, 9.0, 3.3, -0.88, 0.88)
+                                    ctx.arc(11.6, 9.0, 4.4, -0.82, 0.82)
+                                }
+                                ctx.stroke()
+                            } else {
+                                ctx.beginPath()
+                                ctx.moveTo(8.7, 6.5)
+                                ctx.lineTo(12.0, 11.5)
+                                ctx.moveTo(12.0, 6.5)
+                                ctx.lineTo(8.7, 11.5)
+                                ctx.stroke()
+                            }
                         }
+
+                        onVisibleChanged: if (visible) requestPaint()
                     }
                 }
 
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    color: root.contrastTextColor(root.outputBackground)
+                    color: outputCssStyle["color"]
+                        ? cssTheme.parseColor(outputCssStyle["color"])
+                        : root.contrastTextColor(root.outputBackground)
                     font.family: theme.fontFamily
                     font.pointSize: theme.fontSize
                     text: root.outputText
@@ -160,50 +228,68 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
 
                     Image {
-                        id: inputIcon
+                        id: inputDeviceIcon
                         anchors.fill: parent
-                        source: root.inputMuted
-                            ? "image://themeicon/audio-input-microphone-muted-symbolic|" + root.contrastIconColor(root.inputBackground)
-                            : (root.inputVolume < 34
-                                ? "image://themeicon/audio-input-microphone-low-symbolic|" + root.contrastIconColor(root.inputBackground)
-                                : (root.inputVolume < 67
-                                    ? "image://themeicon/audio-input-microphone-medium-symbolic|" + root.contrastIconColor(root.inputBackground)
-                                    : "image://themeicon/audio-input-microphone-high-symbolic|" + root.contrastIconColor(root.inputBackground)))
-                        sourceSize.width: 18
-                        sourceSize.height: 18
+                        source: root.inputIconName
+                            ? "image://themeicon/" + root.inputIconName + "|" + Contrast.toHex(root.inputIconColor).slice(1)
+                            : ""
                         fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
                         visible: status === Image.Ready
                     }
 
                     Canvas {
+                        id: inputIcon
                         anchors.fill: parent
-                        visible: inputIcon.status !== Image.Ready
+                        visible: inputDeviceIcon.status !== Image.Ready
                         onPaint: {
                             var ctx = getContext("2d")
                             ctx.clearRect(0, 0, width, height)
-                            ctx.strokeStyle = root.contrastIconColor(root.inputBackground)
-                            ctx.fillStyle = root.contrastIconColor(root.inputBackground)
+                            var inputIconColor = root.inputIconColor
+                            ctx.strokeStyle = inputIconColor
+                            ctx.fillStyle = inputIconColor
                             ctx.lineWidth = 1.5
                             ctx.lineCap = "round"
                             ctx.lineJoin = "round"
 
                             ctx.beginPath()
-                            ctx.moveTo(8.0, 3.0)
-                            ctx.bezierCurveTo(6.4, 3.0, 5.3, 4.1, 5.3, 5.7)
-                            ctx.lineTo(5.3, 8.0)
-                            ctx.bezierCurveTo(5.3, 9.7, 6.5, 10.9, 8.0, 10.9)
-                            ctx.bezierCurveTo(9.5, 10.9, 10.7, 9.7, 10.7, 8.0)
-                            ctx.lineTo(10.7, 5.7)
-                            ctx.bezierCurveTo(10.7, 4.1, 9.6, 3.0, 8.0, 3.0)
+                            ctx.moveTo(8.0, 3.1)
+                            ctx.bezierCurveTo(6.2, 3.1, 4.9, 4.4, 4.9, 6.1)
+                            ctx.lineTo(4.9, 8.0)
+                            ctx.bezierCurveTo(4.9, 9.8, 6.2, 11.1, 8.0, 11.1)
+                            ctx.bezierCurveTo(9.8, 11.1, 11.1, 9.8, 11.1, 8.0)
+                            ctx.lineTo(11.1, 6.1)
+                            ctx.bezierCurveTo(11.1, 4.4, 9.8, 3.1, 8.0, 3.1)
                             ctx.closePath()
                             ctx.fill()
+
+                            ctx.beginPath()
+                            ctx.moveTo(8.0, 11.0)
+                            ctx.lineTo(8.0, 13.3)
+                            ctx.moveTo(5.8, 13.3)
+                            ctx.lineTo(10.2, 13.3)
+                            ctx.stroke()
+
+                            if (root.inputMuted) {
+                                ctx.beginPath()
+                                ctx.moveTo(5.7, 4.9)
+                                ctx.lineTo(10.2, 10.6)
+                                ctx.moveTo(10.2, 4.9)
+                                ctx.lineTo(5.7, 10.6)
+                                ctx.stroke()
+                            }
                         }
+
+                        onVisibleChanged: if (visible) requestPaint()
                     }
                 }
 
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    color: root.contrastTextColor(root.inputBackground)
+                    color: inputCssStyle["color"]
+                        ? cssTheme.parseColor(inputCssStyle["color"])
+                        : root.contrastTextColor(root.inputBackground)
                     font.family: theme.fontFamily
                     font.pointSize: theme.fontSize
                     text: root.inputText

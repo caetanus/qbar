@@ -1,0 +1,22 @@
+{
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/build-wayland-only",
+    "--background-index",
+    "--clang-tidy",
+    "--completion-style=detailed",
+    "--header-insertion=iwyu"
+  ],
+  "qt-qml.qmlls.command": "${workspaceFolder}/tools/qmlls",
+  "qt-qml.qmlls.arguments": [
+    "--build-dir",
+    "${workspaceFolder}/build-wayland-only",
+    "-I",
+    "${workspaceFolder}/qml",
+    "-I",
+    "${workspaceFolder}/src"
+  ],
+  "files.associations": {
+    "*.qrc": "xml",
+    "*.qml": "qml"
+  }
+}

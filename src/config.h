@@ -4,6 +4,7 @@
 #include <QColor>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 
 enum class BarPosition {
     Top,
@@ -27,6 +28,14 @@ struct BarConfig {
     int trayItemPadding = 2;
     int animationDuration = 200;
     QEasingCurve animationEasing = QEasingCurve::InOutQuad;
+    QString windowManagerBackend = QStringLiteral("auto");
+    QVariantMap customTools;
+    QString styleSheet;
+    QString output;          // target monitor name (waybar: "output")
+    int marginTop    = -1;   // -1 = inherit from margin
+    int marginBottom = -1;
+    int marginLeft   = -1;
+    int marginRight  = -1;
     QStringList appletsLeft = {
         QStringLiteral("Workspaces"),
         QStringLiteral("CPU"),
@@ -44,9 +53,12 @@ struct BarConfig {
         QStringLiteral("Temperature"),
         QStringLiteral("Sound"),
         QStringLiteral("Battery"),
+        QStringLiteral("CustomTool:custom/dollar"),
+        QStringLiteral("CustomTool:custom/btc"),
         QStringLiteral("Clock"),
         QStringLiteral("Tray"),
     };
+    QString configFilePath;
     QStringList applets = {
         QStringLiteral("Workspaces"),
         QStringLiteral("CPU"),
@@ -58,10 +70,12 @@ struct BarConfig {
         QStringLiteral("XInput"),
         QStringLiteral("NetworkManager"),
         QStringLiteral("Temperature"),
-        QStringLiteral("Clock"),
-        QStringLiteral("Tray"),
         QStringLiteral("Sound"),
         QStringLiteral("Battery"),
+        QStringLiteral("CustomTool:custom/dollar"),
+        QStringLiteral("CustomTool:custom/btc"),
+        QStringLiteral("Clock"),
+        QStringLiteral("Tray"),
     };
 };
 

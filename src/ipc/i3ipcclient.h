@@ -1,77 +1,35 @@
 #pragma once
 
-#include <QAbstractListModel>
 #include <QByteArray>
-#include <QJsonArray>
 #include <QLocalSocket>
-#include <QObject>
 #include <QStringList>
 #include <QTimer>
 
-class WorkspaceModel final : public QAbstractListModel {
+#include "../wm/windowmanagerbackend.h"
+#include "../wm/workspacemodel.h"
+
+class I3IpcClient final : public WindowManagerBackend {
     Q_OBJECT
-    Q_PROPERTY(bool empty READ isEmpty NOTIFY emptyChanged)
-
-public:
-    enum Role {
-        NameRole = Qt::UserRole + 1,
-        NumberRole,
-        FocusedRole,
-        UrgentRole,
-        VisibleRole,
-        OutputRole,
-    };
-
-    explicit WorkspaceModel(QObject *parent = nullptr);
-
-    int rowCount(const QModelIndex &parent = QModelIndex()) const override;
-    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
-    QHash<int, QByteArray> roleNames() const override;
-
-    Q_INVOKABLE bool isEmpty() const;
-
-    void replaceFromJson(const QJsonArray &workspaces);
-
-signals:
-    void emptyChanged();
-
-private:
-    struct Workspace {
-        QString name;
-        QString output;
-        int number = -1;
-        bool focused = false;
-        bool urgent = false;
-        bool visible = false;
-    };
-
-    QList<Workspace> m_workspaces;
-};
-
-class I3IpcClient final : public QObject {
-    Q_OBJECT
-    Q_PROPERTY(QString currentWindowTitle READ currentWindowTitle NOTIFY currentWindowTitleChanged)
-    Q_PROPERTY(QString currentKeyboardLayout READ currentKeyboardLayout NOTIFY currentKeyboardLayoutChanged)
 
 public:
     explicit I3IpcClient(QObject *parent = nullptr);
 
-    WorkspaceModel *workspaceModel();
-    QString currentWindowTitle() const;
-    QString currentKeyboardLayout() const;
+    QString name() const override;
+    WorkspaceModel *workspaceModel() override;
+    QString currentWindowTitle() const override;
+    QString currentKeyboardLayout() const override;
+    qint64 focusedContainerId() const override;
 
 public slots:
-    void start();
-    void runCommand(const QString &command);
-    void activateWorkspace(const QString &workspaceName);
-    void activateRelativeWorkspace(int direction);
-    void cycleKeyboardLayout();
-    void requestTreeSnapshot();
+    void start() override;
+    void runCommand(const QString &command) override;
+    void activateWorkspace(const QString &workspaceName) override;
+    void activateRelativeWorkspace(int direction) override;
+    void cycleKeyboardLayout() override;
+    void requestTreeSnapshot() override;
 
 signals:
     void qbarNodeFound(qint64 nodeId);
-    void currentWindowTitleChanged();
-    void currentKeyboardLayoutChanged();
 
 private slots:
     void reconnect();
@@ -99,12 +57,14 @@ private:
     void handleMessage(quint32 type, const QByteArray &payload, bool eventStream);
     void setCurrentWindowTitle(const QString &title);
     void setCurrentKeyboardLayout(const QString &layout);
+    void setFocusedContainerId(qint64 containerId);
     bool supportsSwayInputs() const;
     QString socketPath() const;
 
     WorkspaceModel m_workspaceModel;
     QString m_currentWindowTitle;
     QString m_currentKeyboardLayout;
+    qint64 m_focusedContainerId = -1;
     QLocalSocket m_commandSocket;
     QLocalSocket m_eventSocket;
     QByteArray m_commandBuffer;

@@ -1,7 +1,8 @@
 #include "platformbarintegration.h"
 
 #include <QGuiApplication>
-#include <QWidget>
+#include <QSize>
+#include <QWindow>
 #include <qpa/qplatformnativeinterface.h>
 #include <algorithm>
 #include <cstring>
@@ -15,7 +16,7 @@ struct LayerShellState {
     wl_display *display = nullptr;
     zwlr_layer_shell_v1 *layerShell = nullptr;
     zwlr_layer_surface_v1 *layerSurface = nullptr;
-    QWidget *window = nullptr;
+    QWindow *window = nullptr;
 };
 
 LayerShellState state;
@@ -38,16 +39,25 @@ const wl_registry_listener registryListener = {
     registryGlobalRemove,
 };
 
-void layerSurfaceConfigure(void *, zwlr_layer_surface_v1 *surface, uint32_t serial, uint32_t, uint32_t)
+// The compositor tells us the actual negotiated surface size here.
+// Resize the Qt window to match so QML lays out at the right dimensions.
+void layerSurfaceConfigure(void *data, zwlr_layer_surface_v1 *surface, uint32_t serial, uint32_t width, uint32_t height)
 {
     zwlr_layer_surface_v1_ack_configure(surface, serial);
+    auto *s = static_cast<LayerShellState *>(data);
+    if (s && s->window && width > 0 && height > 0) {
+        const QSize sz(static_cast<int>(width), static_cast<int>(height));
+        s->window->setMinimumSize(sz);
+        s->window->setMaximumSize(sz);
+        s->window->resize(sz);
+    }
 }
 
-void layerSurfaceClosed(void *, zwlr_layer_surface_v1 *)
+void layerSurfaceClosed(void *data, zwlr_layer_surface_v1 *)
 {
-    if (state.window != nullptr) {
-        state.window->close();
-    }
+    auto *s = static_cast<LayerShellState *>(data);
+    if (s && s->window)
+        s->window->close();
 }
 
 const zwlr_layer_surface_v1_listener layerSurfaceListener = {
@@ -55,19 +65,19 @@ const zwlr_layer_surface_v1_listener layerSurfaceListener = {
     layerSurfaceClosed,
 };
 
-wl_surface *surfaceFor(QWidget *window)
+wl_surface *surfaceFor(QWindow *window)
 {
     auto *native = QGuiApplication::platformNativeInterface();
-    if (native == nullptr || window->windowHandle() == nullptr) {
+    if (native == nullptr || window == nullptr) {
         return nullptr;
     }
 
-    return static_cast<wl_surface *>(native->nativeResourceForWindow(QByteArrayLiteral("surface"), window->windowHandle()));
+    return static_cast<wl_surface *>(native->nativeResourceForWindow(QByteArrayLiteral("surface"), window));
 }
 
 } // namespace
 
-bool applyWaylandLayerShellIntegration(QWidget *window, const BarConfig &config)
+bool applyWaylandLayerShellIntegration(QWindow *window, const BarConfig &config)
 {
     if (!config.waylandLayerShell) {
         return false;
@@ -109,7 +119,9 @@ bool applyWaylandLayerShellIntegration(QWidget *window, const BarConfig &config)
         ZWLR_LAYER_SHELL_V1_LAYER_TOP,
         "qbar");
 
-    zwlr_layer_surface_v1_add_listener(state.layerSurface, &layerSurfaceListener, nullptr);
+    // Pass &state so both callbacks can reach the window pointer
+    zwlr_layer_surface_v1_add_listener(state.layerSurface, &layerSurfaceListener, &state);
+
     const bool bottom = config.position == BarPosition::Bottom;
     const uint32_t verticalAnchor = bottom
         ? ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
@@ -119,9 +131,31 @@ bool applyWaylandLayerShellIntegration(QWidget *window, const BarConfig &config)
         verticalAnchor
             | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
             | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+
+    // Width = 0 lets the compositor decide (honoring margins below)
     zwlr_layer_surface_v1_set_size(state.layerSurface, 0, static_cast<uint32_t>(config.height));
-    zwlr_layer_surface_v1_set_exclusive_zone(state.layerSurface, config.exclusiveZone ? config.height : 0);
-    zwlr_layer_surface_v1_set_margin(state.layerSurface, 0, 0, 0, 0);
+
+    // Per-side margins: use explicit margin-top/bottom/left/right if set, else fall back to margin
+    auto effectiveMargin = [&](int perSide) -> uint32_t {
+        return static_cast<uint32_t>(std::max(0, perSide >= 0 ? perSide : config.margin));
+    };
+    const uint32_t mTop    = effectiveMargin(bottom ? config.marginBottom : config.marginTop);
+    const uint32_t mBottom = effectiveMargin(bottom ? config.marginTop    : config.marginBottom);
+    const uint32_t mLeft   = effectiveMargin(config.marginLeft);
+    const uint32_t mRight  = effectiveMargin(config.marginRight);
+
+    zwlr_layer_surface_v1_set_margin(state.layerSurface,
+        bottom ? 0    : mTop,
+        mRight,
+        bottom ? mTop : 0,
+        mLeft);
+
+    // Reserve space: bar height + the edge-facing margin so windows don't overlap the gap
+    const uint32_t edgeMargin = bottom ? mBottom : mTop;
+    zwlr_layer_surface_v1_set_exclusive_zone(
+        state.layerSurface,
+        config.exclusiveZone ? config.height + static_cast<int>(edgeMargin) : 0);
+
     zwlr_layer_surface_v1_set_keyboard_interactivity(
         state.layerSurface,
         ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);

@@ -1,0 +1,18 @@
+#!/bin/sh
+
+# Prefer the unversioned command when the system provides it, but Qt 6 packages
+# commonly install only qmlls6 or /usr/lib/qt6/bin/qmlls.
+if command -v qmlls >/dev/null 2>&1; then
+    exec qmlls "$@"
+fi
+
+if command -v qmlls6 >/dev/null 2>&1; then
+    exec qmlls6 "$@"
+fi
+
+if [ -x /usr/lib/qt6/bin/qmlls ]; then
+    exec /usr/lib/qt6/bin/qmlls "$@"
+fi
+
+echo "qbar: Qt QML language server was not found. Install Qt 6 qmlls/qmlls6." >&2
+exit 127

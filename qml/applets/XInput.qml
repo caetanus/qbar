@@ -5,6 +5,9 @@ Item {
     width: 36
     height: theme.height
 
+    readonly property string cssId: "keyboard"
+    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+
     signal activated()
 
     property string layoutName: i3Ipc ? i3Ipc.currentKeyboardLayout : ""
@@ -24,13 +27,13 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: "#16c79a"
+        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#16c79a"
     }
 
     Text {
         anchors.centerIn: parent
-        color: "#101418"
-        font.family: theme.fontFamily
+        color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : "#101418"
+        font.family: cssStyle["font-family"] || theme.fontFamily
         font.pointSize: theme.fontSize
         text: root.shortLayout
     }

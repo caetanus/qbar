@@ -93,7 +93,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: theme.background
+        color: Qt.rgba(theme.background.r, theme.background.g, theme.background.b, 0.92)
         border.color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.15)
         border.width: 1
         radius: 4

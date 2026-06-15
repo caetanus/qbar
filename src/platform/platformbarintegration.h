@@ -2,6 +2,6 @@
 
 #include "../config.h"
 
-class QWidget;
+class QWindow;
 
-void applyPlatformBarIntegration(QWidget *window, const BarConfig &config);
+void applyPlatformBarIntegration(QWindow *window, const BarConfig &config);

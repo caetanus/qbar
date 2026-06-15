@@ -12,6 +12,12 @@ Item {
     property int coreColumns: 2
     property int coreTileHeight: 96
     property int coreSpacing: 8
+    readonly property color panelBackground: Qt.rgba(1, 1, 1, 0.05)
+    readonly property color panelBackgroundAlt: Qt.rgba(1, 1, 1, 0.08)
+    readonly property color panelBorder: Qt.rgba(1, 1, 1, 0.10)
+    readonly property color panelGraphBackground: Qt.rgba(1, 1, 1, 0.03)
+    readonly property color panelText: theme.foreground
+    readonly property color panelTextSoft: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.82)
 
     function formatPercent(value) {
         if (value === undefined || value === null) {
@@ -119,8 +125,8 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: theme.background
-        border.color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.15)
+        color: "transparent"
+        border.color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.14)
         border.width: 1
         radius: 4
     }
@@ -137,7 +143,9 @@ Item {
             width: contentColumn.width
             height: 82
             radius: 3
-            color: "#24303a"
+            color: root.panelBackground
+            border.color: root.panelBorder
+            border.width: 1
 
             Column {
                 anchors.fill: parent
@@ -149,7 +157,7 @@ Item {
 
                     Text {
                         text: root.formatPercent(cpu ? cpu.usage : 0) + " cpu usage"
-                        color: "#ffffff"
+                        color: root.panelText
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize + 1
                         font.bold: true
@@ -157,7 +165,7 @@ Item {
 
                     Text {
                         text: "load avg " + root.formatLoad(cpu ? cpu.loadAverage1 : 0) + " " + root.formatLoad(cpu ? cpu.loadAverage5 : 0) + " " + root.formatLoad(cpu ? cpu.loadAverage15 : 0)
-                        color: "#d1d5db"
+                        color: root.panelTextSoft
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize
                     }
@@ -169,7 +177,7 @@ Item {
 
                     Text {
                         text: (cpu ? cpu.processCount : 0) + " processes"
-                        color: "#ffffff"
+                        color: root.panelText
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize
                     }
@@ -177,7 +185,7 @@ Item {
                     Text {
                         width: parent.width - implicitWidth
                         text: (root.popupMode === "memory" ? "top memory: " : "top: ") + root.formatTopProcesses(cpu ? (root.popupMode === "memory" ? cpu.topMemoryProcesses : cpu.topProcesses) : [], root.popupMode)
-                        color: "#d1d5db"
+                        color: root.panelTextSoft
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize
                         elide: Text.ElideRight
@@ -188,7 +196,9 @@ Item {
                     width: Math.max(1, Math.floor(parent.width * 0.7))
                     height: 29
                     radius: 2
-                    color: "transparent"
+                    color: root.panelGraphBackground
+                    border.color: Qt.rgba(1, 1, 1, 0.06)
+                    border.width: 1
                     anchors.horizontalCenter: parent.horizontalCenter
 
                     Canvas {
@@ -233,7 +243,9 @@ Item {
                     width: Math.floor((coreGrid.width - root.coreSpacing * (root.coreColumns - 1)) / root.coreColumns)
                     height: root.coreTileHeight
                     radius: 3
-                    color: index % 2 === 0 ? "#2a363f" : "#24303a"
+                    color: index % 2 === 0 ? root.panelBackgroundAlt : root.panelBackground
+                    border.color: Qt.rgba(1, 1, 1, 0.06)
+                    border.width: 1
 
                     property int usageValue: cpu ? cpu.coreUsage(index) : 0
                     property string coreName: cpu ? cpu.coreName(index) : String(index)
@@ -265,7 +277,7 @@ Item {
 
                             Text {
                                 width: 34
-                                color: "#ffffff"
+                                color: root.panelText
                                 font.family: theme.fontFamily
                                 font.pointSize: theme.fontSize
                                 text: tile.coreName
@@ -273,7 +285,7 @@ Item {
 
                             Text {
                                 width: 44
-                                color: "#d1d5db"
+                                color: root.panelTextSoft
                                 font.family: theme.fontFamily
                                 font.pointSize: theme.fontSize
                                 font.bold: true
@@ -285,7 +297,9 @@ Item {
                             width: parent.width
                             height: 34
                             radius: 2
-                            color: "transparent"
+                            color: root.panelGraphBackground
+                            border.color: Qt.rgba(1, 1, 1, 0.05)
+                            border.width: 1
 
                             Canvas {
                                 id: coreChart

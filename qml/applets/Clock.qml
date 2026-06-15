@@ -1,9 +1,13 @@
 import QtQuick
+import Qt.labs.settings
 
 Item {
     id: root
-    width: clockText.implicitWidth + 20
+    width: preferredWidth > 0 ? preferredWidth : (clockText.implicitWidth + 20)
     height: theme.height
+
+    readonly property string cssId: "clock"
+    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
 
     Behavior on width {
         NumberAnimation { duration: 200; easing.type: Easing.InOutQuad }
@@ -12,7 +16,13 @@ Item {
     signal activated()
     signal preferredWidthUpdated(int width)
 
-    property int preferredWidth: width
+    property int preferredWidth: 0
+
+    Settings {
+        id: clockSettings
+        category: "Clock"
+        property int formatIndex: 0
+    }
 
     property int formatIndex: 0
     property var formats: [
@@ -26,19 +36,44 @@ Item {
         return formats[formatIndex]
     }
 
+    function syncPreferredWidth() {
+        preferredWidth = clockText.implicitWidth + 20
+        preferredWidthUpdated(preferredWidth)
+    }
+
+    function setFormatIndex(index) {
+        var normalized = (index + formats.length) % formats.length
+        if (formatIndex === normalized) {
+            return
+        }
+        formatIndex = normalized
+        clockText.text = Qt.formatDateTime(new Date(), root.currentFormat())
+        syncPreferredWidth()
+    }
+
+    Component.onCompleted: {
+        formatIndex = clockSettings.formatIndex
+        clockText.text = Qt.formatDateTime(new Date(), root.currentFormat())
+        syncPreferredWidth()
+    }
+
+    onFormatIndexChanged: {
+        clockSettings.formatIndex = formatIndex
+    }
+
     Rectangle {
         anchors.fill: parent
-        color: "#805f7182"
+        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#805f7182"
     }
 
     Text {
         id: clockText
         anchors.centerIn: parent
-        color: theme.foreground
-        font.family: theme.fontFamily
+        color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
+        font.family: cssStyle["font-family"] || theme.fontFamily
         font.pointSize: theme.fontSize
         text: Qt.formatDateTime(new Date(), root.currentFormat())
-        onImplicitWidthChanged: root.preferredWidthUpdated(implicitWidth + 20)
+        onImplicitWidthChanged: root.syncPreferredWidth()
     }
 
     Timer {
@@ -56,8 +91,7 @@ Item {
         onClicked: root.activated()
         onWheel: function(wheel) {
             var delta = wheel.angleDelta.y > 0 ? 1 : -1
-            formatIndex = (formatIndex + delta + formats.length) % formats.length
-            clockText.text = Qt.formatDateTime(new Date(), root.currentFormat())
+            root.setFormatIndex(formatIndex + delta)
         }
     }
 }

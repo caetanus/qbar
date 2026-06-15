@@ -2,12 +2,13 @@
 
 #include <QGuiApplication>
 #include <QString>
+#include <QWindow>
 #include <cstdlib>
 
-bool applyX11BarIntegration(QWidget *window, const BarConfig &config);
-bool applyWaylandLayerShellIntegration(QWidget *window, const BarConfig &config);
+bool applyX11BarIntegration(QWindow *window, const BarConfig &config);
+bool applyWaylandLayerShellIntegration(QWindow *window, const BarConfig &config);
 
-void applyPlatformBarIntegration(QWidget *window, const BarConfig &config)
+void applyPlatformBarIntegration(QWindow *window, const BarConfig &config)
 {
     const QString platform = QGuiApplication::platformName().toLower();
 

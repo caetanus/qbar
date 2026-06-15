@@ -2,7 +2,6 @@
 
 #include <QGuiApplication>
 #include <QScreen>
-#include <QWidget>
 #include <QWindow>
 #include <qpa/qplatformnativeinterface.h>
 #include <cstdlib>
@@ -50,7 +49,7 @@ void replaceAtom(xcb_connection_t *connection, xcb_window_t window, xcb_atom_t p
 
 } // namespace
 
-bool applyX11BarIntegration(QWidget *window, const BarConfig &config)
+bool applyX11BarIntegration(QWindow *window, const BarConfig &config)
 {
     auto *native = QGuiApplication::platformNativeInterface();
     auto *connection = native != nullptr
@@ -60,8 +59,8 @@ bool applyX11BarIntegration(QWidget *window, const BarConfig &config)
         return false;
     }
 
-    window->winId();
-    const auto xid = static_cast<xcb_window_t>(window->windowHandle()->winId());
+    window->create();
+    const auto xid = static_cast<xcb_window_t>(window->winId());
 
     const xcb_atom_t netWindowType = internAtom(connection, "_NET_WM_WINDOW_TYPE");
     const xcb_atom_t netWindowTypeDock = internAtom(connection, "_NET_WM_WINDOW_TYPE_DOCK");

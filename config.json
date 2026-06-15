@@ -14,6 +14,9 @@
     "trayItemPadding": 2,
     "animationDuration": 200,
     "animationEasing": "inoutquad",
+    "windowManager": {
+        "backend": "auto"
+    },
     "modules-left": [
         "Workspaces",
         "CPU",
@@ -31,9 +34,39 @@
         "Temperature",
         "Sound",
         "Battery",
+        "CustomTool:custom/dollar",
+        "CustomTool:custom/btc",
         "Clock",
         "Tray"
     ],
+    "customTools": {
+        "custom/dollar": {
+            "exec": "python -u /home/caetano/.config/waybar/scripts/dollar.py --waybar",
+            "return-type": "json",
+            "interval": 10,
+            "show-empty": false,
+            "format": "{} ({percentage}%)",
+            "format-icons": {
+                "up": "▲",
+                "down": "▼"
+            },
+            "exec-if": ":",
+            "tooltip": false
+        },
+        "custom/btc": {
+            "exec": "python -u /home/caetano/.config/waybar/scripts/btc.py --waybar",
+            "return-type": "json",
+            "interval": 10,
+            "show-empty": false,
+            "format": "{} ({percentage}%)",
+            "format-icons": {
+                "up": "▲",
+                "down": "▼"
+            },
+            "exec-if": ":",
+            "tooltip": false
+        }
+    },
     "applets": [
         "Workspaces",
         "CPU",
@@ -43,9 +76,13 @@
         "Caffeine",
         "Brightness",
         "XInput",
-        "Clock",
-        "Tray",
+        "NetworkManager",
+        "Temperature",
         "Sound",
-        "Battery"
+        "Battery",
+        "CustomTool:custom/dollar",
+        "CustomTool:custom/btc",
+        "Clock",
+        "Tray"
     ]
 }

@@ -71,6 +71,17 @@ bool isWindowNode(const QJsonObject &node)
         || node.value(QStringLiteral("pid")).toInteger(-1) > 0;
 }
 
+bool isQbarWindowNode(const QJsonObject &node)
+{
+    const QJsonObject properties = node.value(QStringLiteral("window_properties")).toObject();
+    const QString appId = node.value(QStringLiteral("app_id")).toString();
+    const QString name = node.value(QStringLiteral("name")).toString();
+    const QString title = properties.value(QStringLiteral("title")).toString();
+    return appId == QStringLiteral("qbar")
+        || name == QStringLiteral("QBar")
+        || title == QStringLiteral("QBar");
+}
+
 QString nodeTitle(const QJsonObject &node)
 {
     const QString name = node.value(QStringLiteral("name")).toString();
@@ -111,6 +122,40 @@ QString focusedWindowTitle(const QJsonObject &node)
     }
 
     return title;
+}
+
+qint64 focusedContainerNodeId(const QJsonObject &node)
+{
+    const auto nodes = node.value(QStringLiteral("nodes")).toArray();
+    for (const auto &child : nodes) {
+        const qint64 id = focusedContainerNodeId(child.toObject());
+        if (id >= 0) {
+            return id;
+        }
+    }
+
+    const auto floatingNodes = node.value(QStringLiteral("floating_nodes")).toArray();
+    for (const auto &child : floatingNodes) {
+        const qint64 id = focusedContainerNodeId(child.toObject());
+        if (id >= 0) {
+            return id;
+        }
+    }
+
+    if (!node.value(QStringLiteral("focused")).toBool(false) || !isWindowNode(node) || isQbarWindowNode(node)) {
+        return -1;
+    }
+
+    return node.value(QStringLiteral("id")).toInteger(-1);
+}
+
+qint64 containerId(const QJsonObject &node)
+{
+    if (!isWindowNode(node) || isQbarWindowNode(node)) {
+        return -1;
+    }
+
+    return node.value(QStringLiteral("id")).toInteger(-1);
 }
 
 QString normalizedLayoutCode(const QString &layout)
@@ -206,136 +251,8 @@ QString activeKeyboardLayout(const QJsonArray &inputs)
 
 } // namespace
 
-WorkspaceModel::WorkspaceModel(QObject *parent)
-    : QAbstractListModel(parent)
-{
-}
-
-int WorkspaceModel::rowCount(const QModelIndex &parent) const
-{
-    return parent.isValid() ? 0 : m_workspaces.size();
-}
-
-QVariant WorkspaceModel::data(const QModelIndex &index, int role) const
-{
-    if (!index.isValid() || index.row() < 0 || index.row() >= m_workspaces.size()) {
-        return {};
-    }
-
-    const auto &workspace = m_workspaces.at(index.row());
-    switch (role) {
-    case NameRole:
-        return workspace.name;
-    case NumberRole:
-        return workspace.number;
-    case FocusedRole:
-        return workspace.focused;
-    case UrgentRole:
-        return workspace.urgent;
-    case VisibleRole:
-        return workspace.visible;
-    case OutputRole:
-        return workspace.output;
-    default:
-        return {};
-    }
-}
-
-QHash<int, QByteArray> WorkspaceModel::roleNames() const
-{
-    return {
-        {NameRole, "name"},
-        {NumberRole, "number"},
-        {FocusedRole, "focused"},
-        {UrgentRole, "urgent"},
-        {VisibleRole, "visible"},
-        {OutputRole, "output"},
-    };
-}
-
-bool WorkspaceModel::isEmpty() const
-{
-    return m_workspaces.isEmpty();
-}
-
-void WorkspaceModel::replaceFromJson(const QJsonArray &workspaces)
-{
-    const bool wasEmpty = m_workspaces.isEmpty();
-    QList<Workspace> next;
-    next.reserve(static_cast<int>(workspaces.size()));
-
-    for (const auto &value : workspaces) {
-        const auto object = value.toObject();
-        Workspace workspace;
-        workspace.name = object.value(QStringLiteral("name")).toString();
-        workspace.output = object.value(QStringLiteral("output")).toString();
-        workspace.number = object.value(QStringLiteral("num")).toInt(-1);
-        workspace.focused = object.value(QStringLiteral("focused")).toBool(false);
-        workspace.urgent = object.value(QStringLiteral("urgent")).toBool(false);
-        workspace.visible = object.value(QStringLiteral("visible")).toBool(false);
-        next.append(workspace);
-    }
-
-    const bool sameShape = m_workspaces.size() == next.size();
-    if (sameShape) {
-        bool identitiesMatch = true;
-        for (int i = 0; i < next.size(); ++i) {
-            const Workspace &current = m_workspaces.at(i);
-            const Workspace &incoming = next.at(i);
-            if (current.name != incoming.name || current.number != incoming.number) {
-                identitiesMatch = false;
-                break;
-            }
-        }
-
-        if (identitiesMatch) {
-            for (int i = 0; i < next.size(); ++i) {
-                const Workspace &current = m_workspaces.at(i);
-                const Workspace &incoming = next.at(i);
-                QList<int> roles;
-                if (current.name != incoming.name) {
-                    roles.append(NameRole);
-                }
-                if (current.output != incoming.output) {
-                    roles.append(OutputRole);
-                }
-                if (current.number != incoming.number) {
-                    roles.append(NumberRole);
-                }
-                if (current.focused != incoming.focused) {
-                    roles.append(FocusedRole);
-                }
-                if (current.urgent != incoming.urgent) {
-                    roles.append(UrgentRole);
-                }
-                if (current.visible != incoming.visible) {
-                    roles.append(VisibleRole);
-                }
-                if (!roles.isEmpty()) {
-                    m_workspaces[i] = incoming;
-                    const QModelIndex idx = index(i, 0);
-                    emit dataChanged(idx, idx, roles);
-                }
-            }
-
-            if (wasEmpty != m_workspaces.isEmpty()) {
-                emit emptyChanged();
-            }
-            return;
-        }
-    }
-
-    beginResetModel();
-    m_workspaces = next;
-    endResetModel();
-
-    if (wasEmpty != m_workspaces.isEmpty()) {
-        emit emptyChanged();
-    }
-}
-
 I3IpcClient::I3IpcClient(QObject *parent)
-    : QObject(parent)
+    : WindowManagerBackend(parent)
 {
     m_reconnectTimer.setInterval(2000);
     m_reconnectTimer.setSingleShot(true);
@@ -348,6 +265,11 @@ I3IpcClient::I3IpcClient(QObject *parent)
     connect(&m_commandSocket, SIGNAL(connected()), this, SLOT(requestWorkspaces()));
     connect(&m_commandSocket, SIGNAL(connected()), this, SLOT(flushPendingCommands()));
     connect(&m_eventSocket, SIGNAL(connected()), this, SLOT(subscribeWorkspaceEvents()));
+}
+
+QString I3IpcClient::name() const
+{
+    return supportsSwayInputs() ? QStringLiteral("sway") : QStringLiteral("i3");
 }
 
 WorkspaceModel *I3IpcClient::workspaceModel()
@@ -363,6 +285,11 @@ QString I3IpcClient::currentWindowTitle() const
 QString I3IpcClient::currentKeyboardLayout() const
 {
     return m_currentKeyboardLayout;
+}
+
+qint64 I3IpcClient::focusedContainerId() const
+{
+    return m_focusedContainerId;
 }
 
 void I3IpcClient::start()
@@ -544,12 +471,26 @@ void I3IpcClient::consumeMessages(QLocalSocket *socket, QByteArray *buffer, bool
 void I3IpcClient::handleMessage(quint32 type, const QByteArray &payload, bool eventStream)
 {
     if (eventStream) {
+        const auto document = QJsonDocument::fromJson(payload);
+        const QJsonObject event = document.object();
+        const QString change = event.value(QStringLiteral("change")).toString();
+
         if (type == workspaceEvent) {
+            if (change == QStringLiteral("focus")) {
+                emit workspaceFocusEvent();
+            }
             requestWorkspaces();
             requestTreeSnapshot();
         } else if (type == windowEvent) {
-            const auto document = QJsonDocument::fromJson(payload);
-            const auto container = document.object().value(QStringLiteral("container")).toObject();
+            const auto container = event.value(QStringLiteral("container")).toObject();
+            if (change == QStringLiteral("focus")) {
+                const qint64 id = containerId(container);
+                if (id >= 0) {
+                    emit containerFocusEvent(id);
+                    setFocusedContainerId(id);
+                }
+            }
+
             const QString title = nodeTitle(container);
             if (!title.isEmpty()) {
                 setCurrentWindowTitle(title);
@@ -565,8 +506,10 @@ void I3IpcClient::handleMessage(quint32 type, const QByteArray &payload, bool ev
     if (type == GetTree) {
         const auto document = QJsonDocument::fromJson(payload);
         if (document.isObject()) {
-            setCurrentWindowTitle(focusedWindowTitle(document.object()));
-            const qint64 id = findQbarNode(document.object(), QCoreApplication::applicationPid());
+            const QJsonObject tree = document.object();
+            setCurrentWindowTitle(focusedWindowTitle(tree));
+            setFocusedContainerId(focusedContainerNodeId(tree));
+            const qint64 id = findQbarNode(tree, QCoreApplication::applicationPid());
             if (id >= 0) {
                 qWarning() << "QBar sway node id:" << id;
                 emit qbarNodeFound(id);
@@ -603,7 +546,7 @@ void I3IpcClient::handleMessage(quint32 type, const QByteArray &payload, bool ev
 
     const auto document = QJsonDocument::fromJson(payload);
     if (document.isArray()) {
-        m_workspaceModel.replaceFromJson(document.array());
+        m_workspaceModel.replaceFromI3Json(document.array());
     }
 }
 
@@ -625,6 +568,16 @@ void I3IpcClient::setCurrentKeyboardLayout(const QString &layout)
 
     m_currentKeyboardLayout = layout;
     emit currentKeyboardLayoutChanged();
+}
+
+void I3IpcClient::setFocusedContainerId(qint64 containerId)
+{
+    if (containerId < 0 || m_focusedContainerId == containerId) {
+        return;
+    }
+
+    m_focusedContainerId = containerId;
+    emit focusedContainerChanged(containerId);
 }
 
 bool I3IpcClient::supportsSwayInputs() const

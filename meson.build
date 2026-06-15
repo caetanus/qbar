@@ -21,10 +21,35 @@ qt_deps = [
   dependency('Qt6Network'),
   dependency('Qt6Qml'),
   dependency('Qt6Quick'),
-  dependency('Qt6QuickWidgets'),
   dependency('Qt6DBus'),
+  dependency('sqlite3'),
   dependency('xkbregistry'),
+  dependency('libedataserver-1.2'),
+  dependency('libecal-2.0'),
 ]
+
+qsb_program = find_program('/usr/lib/qt6/bin/qsb', required: false)
+python3 = find_program('python3', required: true)
+popup_emboss_shader_enabled = qsb_program.found()
+popup_emboss_shader_qrc = []
+if popup_emboss_shader_enabled
+  popup_emboss_shader_source = files('qml/shaders/PopupEmboss.frag')
+  popup_emboss_shader_qsb = custom_target(
+    'popup-emboss-frag-qsb',
+    input: popup_emboss_shader_source,
+    output: 'PopupEmboss.frag.qsb',
+    command: [qsb_program, '--qt6', '-o', '@OUTPUT@', '@INPUT@'],
+    build_by_default: true,
+  )
+  popup_emboss_shader_qsb_path = join_paths(meson.project_build_root(), 'PopupEmboss.frag.qsb')
+  popup_emboss_shader_conf = configuration_data()
+  popup_emboss_shader_conf.set('POPUP_EMBOSS_QSB', popup_emboss_shader_qsb_path)
+  popup_emboss_shader_qrc = configure_file(
+    input: 'qml/qbar-shaders.qrc.in',
+    output: 'qbar-shaders.qrc',
+    configuration: popup_emboss_shader_conf,
+  )
+endif
 
 platform_deps = []
 platform_sources = []
@@ -32,6 +57,11 @@ platform_generated = []
 platform_args = []
 platform_includes = []
 wayland_shell_plugin = []
+
+if popup_emboss_shader_enabled
+  platform_args += ['-DQBAR_HAVE_POPUP_EMBOSS_SHADER=1']
+  platform_generated += [popup_emboss_shader_qsb]
+endif
 
 qtgui_version = dependency('Qt6Gui').version()
 qtgui_private_include = include_directories(
@@ -78,10 +108,23 @@ if wayland_dep.found() and wlroots_dep.found() and wayland_scanner.found()
     output: 'xdg-shell-protocol.c',
     command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
   )
+  idle_inhibit_protocol = files('/usr/share/wayland-protocols/unstable/idle-inhibit/idle-inhibit-unstable-v1.xml')
+  idle_inhibit_header = custom_target(
+    'idle-inhibit-client-header',
+    input: idle_inhibit_protocol,
+    output: 'idle-inhibit-unstable-v1-client-protocol.h',
+    command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
+  )
+  idle_inhibit_code = custom_target(
+    'idle-inhibit-client-code',
+    input: idle_inhibit_protocol,
+    output: 'idle-inhibit-unstable-v1-protocol.c',
+    command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
+  )
 
   platform_deps += [wayland_dep]
   platform_sources += files('src/platform/waylandlayershellintegration.cpp')
-  platform_generated += [layer_shell_header, layer_shell_code, xdg_shell_header, xdg_shell_code]
+  platform_generated += [layer_shell_header, layer_shell_code, xdg_shell_header, xdg_shell_code, idle_inhibit_header, idle_inhibit_code]
   platform_includes += qtgui_private_include
   platform_args += ['-DQBAR_HAVE_WAYLAND=1']
 
@@ -126,12 +169,13 @@ endif
 sources = files(
   'src/main.cpp',
   'src/barwindow.cpp',
-  'src/applethost.cpp',
   'src/config.cpp',
   'src/brightness/brightnessmodel.cpp',
   'src/caffeine/caffeinemodel.cpp',
+  'src/customtool/customtoolmodel.cpp',
   'src/ipc/i3ipcclient.cpp',
   'src/platform/platformbarintegration.cpp',
+  'src/css/csstheme.cpp',
   'src/qml/qbarpopupservice.cpp',
   'src/tray/statusnotifiermodel.cpp',
   'src/cpu/cpumodel.cpp',
@@ -140,16 +184,25 @@ sources = files(
   'src/network/networkmodel.cpp',
   'src/networkmanager/networkmanagermodel.cpp',
   'src/battery/batterymodel.cpp',
+  'src/calendar/calendarmodel.cpp',
+  'src/wm/windowmanagerbackend.cpp',
+  'src/wm/workspacemodel.cpp',
+  'src/wm/nullbackend.cpp',
+  'src/wm/hyprlandbackend.cpp',
+  'src/wm/bspwmbackend.cpp',
+  'src/wm/ewmhbackend.cpp',
+  'src/wm/wmbackendfactory.cpp',
 )
 
 headers = files(
   'src/barwindow.h',
-  'src/applethost.h',
   'src/ipc/i3ipcclient.h',
   'src/platform/platformbarintegration.h',
+  'src/css/csstheme.h',
   'src/qml/qbarpopupservice.h',
   'src/brightness/brightnessmodel.h',
   'src/caffeine/caffeinemodel.h',
+  'src/customtool/customtoolmodel.h',
   'src/tray/statusnotifiermodel.h',
   'src/cpu/cpumodel.h',
   'src/temperature/temperaturemodel.h',
@@ -157,11 +210,23 @@ headers = files(
   'src/network/networkmodel.h',
   'src/networkmanager/networkmanagermodel.h',
   'src/battery/batterymodel.h',
+  'src/calendar/calendarmodel.h',
+  'src/wm/windowmanagerbackend.h',
+  'src/wm/workspacemodel.h',
+  'src/wm/nullbackend.h',
+  'src/wm/hyprlandbackend.h',
+  'src/wm/bspwmbackend.h',
+  'src/wm/ewmhbackend.h',
 )
+
+qresources = [files('qml/qbar.qrc')]
+if popup_emboss_shader_enabled
+  qresources += [popup_emboss_shader_qrc]
+endif
 
 qt_sources = qt6.preprocess(
   moc_headers: headers,
-  qresources: files('qml/qbar.qrc'),
+  qresources: qresources,
 )
 
 executable(
@@ -180,4 +245,92 @@ executable(
 install_data(
   'data/qbar.desktop',
   install_dir: get_option('datadir') / 'applications',
+)
+
+qt_test_dep = dependency('Qt6Test')
+qt_quick_test_dep = dependency('Qt6QuickTest')
+
+wm_test_headers = files('tests/test_wm.h')
+wm_test_moc = qt6.preprocess(
+  moc_headers: wm_test_headers,
+)
+
+wm_test_exe = executable(
+  'test-wm',
+  files(
+    'tests/test_wm.cpp',
+    'src/wm/windowmanagerbackend.cpp',
+    'src/wm/workspacemodel.cpp',
+    'src/wm/nullbackend.cpp',
+    'src/wm/hyprlandbackend.cpp',
+    'src/wm/bspwmbackend.cpp',
+    'src/wm/ewmhbackend.cpp',
+    'src/wm/wmbackendfactory.cpp',
+    'src/ipc/i3ipcclient.cpp',
+  ),
+  wm_test_moc,
+  qt6.preprocess(moc_headers: files(
+    'src/wm/windowmanagerbackend.h',
+    'src/wm/workspacemodel.h',
+    'src/wm/nullbackend.h',
+    'src/wm/hyprlandbackend.h',
+    'src/wm/bspwmbackend.h',
+    'src/wm/ewmhbackend.h',
+    'src/ipc/i3ipcclient.h',
+  )),
+  dependencies: qt_deps + [qt_test_dep],
+)
+
+test('wm-backends', wm_test_exe)
+
+css_test_moc = qt6.preprocess(
+  moc_headers: files('tests/test_css.h'),
+)
+
+css_test_exe = executable(
+  'test-css',
+  files(
+    'tests/test_css.cpp',
+    'src/css/csstheme.cpp',
+  ),
+  css_test_moc,
+  qt6.preprocess(moc_headers: files('src/css/csstheme.h')),
+  dependencies: [
+    dependency('Qt6Core'),
+    dependency('Qt6Gui'),
+    qt_test_dep,
+  ],
+)
+
+test('css-theme', css_test_exe)
+
+qml_test_moc = qt6.preprocess(
+  moc_headers: files(
+    'tests/qmltests.h',
+    'src/customtool/customtoolmodel.h',
+  ),
+  qresources: files('tests/qml/qbar-test.qrc'),
+)
+
+qml_test_exe = executable(
+  'test-qml',
+  files(
+    'tests/qmltests.cpp',
+    'src/customtool/customtoolmodel.cpp',
+  ),
+  qml_test_moc,
+  dependencies: [
+    dependency('Qt6Core'),
+    dependency('Qt6Gui'),
+    dependency('Qt6Qml'),
+    dependency('Qt6Quick'),
+    qt_quick_test_dep,
+  ],
+)
+
+test(
+  'qml-applets',
+  qml_test_exe,
+  args: ['-input', meson.project_source_root() / 'tests/qml'],
+  env: ['QT_QPA_PLATFORM=offscreen'],
 )

@@ -1,11 +1,26 @@
 import QtQuick
+import QtQuick.Effects
 import "qrc:/qbar" as QBar
+import "qrc:/qbar/Contrast.js" as Contrast
 
 Item {
     id: root
     width: 32
     height: theme.height
+
+    readonly property string cssId: "caffeine"
+    readonly property var cssClasses: root.active ? ["active"] : []
+    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId, cssClasses) : ({})
+
     property bool active: caffeineModel ? caffeineModel.active : false
+
+    readonly property color backgroundColor: cssStyle["background-color"]
+        ? cssTheme.parseColor(cssStyle["background-color"])
+        : (root.active ? "#ffffff" : "#000000")
+
+    readonly property color iconColor: cssStyle["color"]
+        ? cssTheme.parseColor(cssStyle["color"])
+        : Contrast.contrastColor(Contrast.effectiveBackground(root.backgroundColor, cssTheme, theme.background))
 
     QBar.Tooltip {
         anchorItem: root
@@ -16,7 +31,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: root.active ? "#ffffff" : "#000000"
+        color: root.backgroundColor
     }
 
     Image {
@@ -30,6 +45,14 @@ Item {
         fillMode: Image.PreserveAspectFit
         smooth: true
         mipmap: true
+        visible: false
+    }
+
+    MultiEffect {
+        anchors.fill: cupIcon
+        source: cupIcon
+        colorization: 1.0
+        colorizationColor: root.iconColor
     }
 
     MouseArea {

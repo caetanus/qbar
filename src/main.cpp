@@ -1,5 +1,6 @@
 #include "barwindow.h"
 #include "config.h"
+#include "customtool/customtoolmodel.h"
 
 #include <QApplication>
 #include <QCalendarWidget>
@@ -12,14 +13,21 @@
 #include <QIcon>
 #include <QKeyEvent>
 #include <QProcess>
+#include <QQuickWindow>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QtQml/qqml.h>
 #include <algorithm>
+#include <cerrno>
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
+#ifdef Q_OS_LINUX
+#include <sys/prctl.h>
+#include <sys/resource.h>
+#endif
 
 namespace {
 
@@ -180,16 +188,51 @@ void configureIconTheme()
     }
 }
 
+void configureCoreDumps()
+{
+#ifdef Q_OS_LINUX
+    if (prctl(PR_SET_DUMPABLE, 1) != 0) {
+        qWarning() << "QBar failed to mark process dumpable:" << std::strerror(errno);
+    }
+
+    rlimit limit {};
+    if (getrlimit(RLIMIT_CORE, &limit) != 0) {
+        qWarning() << "QBar failed to read core dump limit:" << std::strerror(errno);
+        return;
+    }
+
+    if (limit.rlim_max == 0) {
+        qWarning() << "QBar core dumps are disabled by the parent process hard limit";
+        return;
+    }
+
+    const rlim_t target = limit.rlim_max == RLIM_INFINITY ? RLIM_INFINITY : limit.rlim_max;
+    if (limit.rlim_cur != target) {
+        limit.rlim_cur = target;
+        if (setrlimit(RLIMIT_CORE, &limit) != 0) {
+            qWarning() << "QBar failed to enable core dumps:" << std::strerror(errno);
+            return;
+        }
+    }
+
+    qWarning() << "QBar core dump limit:"
+               << (limit.rlim_cur == RLIM_INFINITY ? QStringLiteral("unlimited") : QString::number(limit.rlim_cur));
+#endif
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
 {
+    configureCoreDumps();
     configureWaylandLayerShellEnvironment(argc, argv);
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGLRhi);
 
     QApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("qbar"));
     QCoreApplication::setOrganizationName(QStringLiteral("qbar"));
     QGuiApplication::setDesktopFileName(QStringLiteral("qbar"));
+    qmlRegisterType<CustomToolModel>("QBar", 1, 0, "CustomToolModel");
     configureIconTheme();
 
     if (hasArg(argc, argv, "--calendar-popup")) {

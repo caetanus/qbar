@@ -6,6 +6,10 @@ Item {
     width: 58
     height: theme.height
 
+    readonly property string cssId: "battery"
+    readonly property var cssClasses: charging ? ["charging"] : full ? ["full"] : lowBattery ? ["critical"] : []
+    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId, cssClasses) : ({})
+
     property int level: batteryModel ? batteryModel.capacity : 0
     property bool charging: batteryModel ? batteryModel.charging : false
     property bool full: batteryModel ? batteryModel.full : false
@@ -24,29 +28,24 @@ Item {
     }
 
     function backgroundColor() {
-        if (charging) {
-            return "#218f4f"
-        }
-        if (full) {
-            return "#ffffff"
-        }
         if (lowBattery) {
-            return mixColor(Qt.rgba(0.17, 0.19, 0.20, 1.0), Qt.rgba(0.90, 0.16, 0.16, 1.0), alertPulse)
+            var darkEnd = cssStyle["background-color"]
+                ? cssTheme.parseColor(cssStyle["background-color"])
+                : Qt.rgba(0.17, 0.19, 0.20, 1.0)
+            return mixColor(darkEnd, Qt.rgba(0.90, 0.16, 0.16, 1.0), alertPulse)
         }
-        return "#2b2f33"
+        return cssStyle["background-color"]
+            ? cssTheme.parseColor(cssStyle["background-color"])
+            : (charging ? "#218f4f" : full ? "#ffffff" : "#2b2f33")
     }
 
     function contentColor() {
-        if (charging) {
-            return "#ffffff"
-        }
-        if (full) {
-            return "#000000"
-        }
         if (lowBattery) {
             return mixColor(Qt.rgba(0.90, 0.16, 0.16, 1.0), Qt.rgba(1.0, 1.0, 1.0, 1.0), alertPulse)
         }
-        return "#ffffff"
+        return cssStyle["color"]
+            ? cssTheme.parseColor(cssStyle["color"])
+            : (full ? "#000000" : "#ffffff")
     }
 
     NumberAnimation on alertPulse {

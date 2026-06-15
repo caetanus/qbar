@@ -1,14 +1,28 @@
 import QtQuick
 import "qrc:/qbar" as QBar
+import "qrc:/qbar/Contrast.js" as Contrast
 
 Item {
     id: root
     height: theme.height
     width: Math.max(1, preferredWidth)
 
+    readonly property string cssId: "cpu"
+    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+
+    readonly property color graphBackground: cssStyle["graph-background"]
+        ? cssTheme.parseColor(cssStyle["graph-background"])
+        : "transparent"
+    readonly property color effectiveGraphBackground: Contrast.effectiveBackground(graphBackground, cssTheme, theme.background)
+
     property int usage: cpuModel ? cpuModel.usage : 0
     property var history: cpuModel ? cpuModel.usageHistory : []
-    property int preferredWidth: Math.ceil(usageLabel.implicitWidth + 28)
+    property int configuredWidth: cssPixels(cssStyle["width"], 0)
+    property int graphWidth: cssPixels(cssStyle["graph-width"], 22)
+    property int labelPadding: cssPixels(cssStyle["label-padding"], 10)
+    property int preferredWidth: configuredWidth > 0
+        ? configuredWidth
+        : Math.ceil(usageLabel.implicitWidth + labelPadding + graphWidth)
     property bool tooltipHovered: false
     property int popupColumns: cpuModel ? (cpuModel.coreCount > 32 ? 6 : (cpuModel.coreCount > 16 ? 4 : (cpuModel.coreCount > 8 ? 3 : 2))) : 2
     property int popupHeaderHeight: 82
@@ -29,6 +43,11 @@ Item {
         + (popupGridRows * popupTileHeight + Math.max(0, popupGridRows - 1) * popupTileSpacing)
 
     signal preferredWidthUpdated(int width)
+
+    function cssPixels(value, fallback) {
+        var parsed = parseInt(value)
+        return isNaN(parsed) ? fallback : parsed
+    }
 
     onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
     Component.onCompleted: preferredWidthUpdated(preferredWidth)
@@ -58,16 +77,16 @@ Item {
         spacing: 0
 
         Rectangle {
-            width: usageLabel.implicitWidth + 10
+            width: Math.max(1, root.preferredWidth - graphBlock.width)
             height: theme.height
             radius: 0
-            color: "#35414a"
+            color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#35414a"
 
             Text {
                 id: usageLabel
                 anchors.centerIn: parent
-                color: theme.foreground
-                font.family: theme.fontFamily
+                color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
+                font.family: cssStyle["font-family"] || theme.fontFamily
                 font.pointSize: theme.fontSize
                 text: root.usage + "%"
             }
@@ -75,10 +94,10 @@ Item {
 
         Rectangle {
             id: graphBlock
-            width: 22
+            width: root.graphWidth
             height: theme.height
             radius: 0
-            color: "#24303a"
+            color: root.graphBackground
 
             Canvas {
                 id: graph
@@ -94,7 +113,7 @@ Item {
                         return
                     }
 
-                    ctx.fillStyle = "rgba(255, 255, 255, 0.04)"
+                    ctx.fillStyle = Contrast.contrastFill(root.effectiveGraphBackground, 0.04)
                     ctx.fillRect(0, 0, width, height)
 
                     ctx.beginPath()
@@ -110,7 +129,7 @@ Item {
                     }
                     ctx.lineTo(width - 1, height)
                     ctx.closePath()
-                    ctx.fillStyle = "rgba(99, 179, 237, 0.22)"
+                    ctx.fillStyle = cssStyle["graph-fill"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.22)
                     ctx.fill()
 
                     ctx.beginPath()
@@ -127,7 +146,7 @@ Item {
                             ctx.lineTo(px, py)
                         }
                     }
-                    ctx.strokeStyle = "#63b3ed"
+                    ctx.strokeStyle = cssStyle["graph-color"] || Contrast.contrastColor(root.effectiveGraphBackground)
                     ctx.lineWidth = 1.5
                     ctx.lineJoin = "round"
                     ctx.lineCap = "round"
@@ -139,6 +158,11 @@ Item {
                 target: cpuModel
                 function onUsageChanged() { graph.requestPaint() }
                 function onUsageHistoryChanged() { graph.requestPaint() }
+            }
+
+            Connections {
+                target: root
+                function onCssStyleChanged() { graph.requestPaint() }
             }
 
             Component.onCompleted: graph.requestPaint()
