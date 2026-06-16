@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 
 Item {
     id: root
@@ -68,6 +69,14 @@ Item {
         radius: 4
     }
 
+    Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 1
+        color: root.panelBorder
+    }
+
     Column {
         id: contentColumn
         anchors.left: parent.left
@@ -86,16 +95,34 @@ Item {
         }
 
         Flickable {
+            id: scrollArea
             width: parent.width
             height: root.height - y - 12
             contentWidth: width
             contentHeight: mountGrid.implicitHeight
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+            rightMargin: diskScrollBar.visible ? 8 : 0
+
+            ScrollBar.vertical: ScrollBar {
+                id: diskScrollBar
+                policy: scrollArea.contentHeight > scrollArea.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+                width: 5
+                contentItem: Rectangle {
+                    implicitWidth: 5
+                    radius: 2
+                    color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.46)
+                }
+                background: Rectangle {
+                    implicitWidth: 5
+                    radius: 2
+                    color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.10)
+                }
+            }
 
             Grid {
                 id: mountGrid
-                width: parent.width
+                width: parent.width - scrollArea.rightMargin
                 columns: root.columns
                 rowSpacing: 8
                 columnSpacing: 8
