@@ -85,8 +85,8 @@ function hslToColor(hsl) {
 }
 
 function bestBlackOrWhite(bg) {
-    var black = Qt.rgba(0.06, 0.06, 0.06, 1)
-    var white = Qt.rgba(1, 1, 1, 1)
+    var black = Qt.rgba(0.10, 0.10, 0.12, 1)
+    var white = Qt.rgba(0.96, 0.97, 1.00, 1)
     return contrastRatio(white, bg) >= contrastRatio(black, bg) ? white : black
 }
 
@@ -101,19 +101,42 @@ function naturalContrastColor(fg, bg, minimumRatio) {
 
     var f = rgbToHsl(fg)
     var b = rgbToHsl(bg)
-    var minLightnessGap = 0.45
+    var candidates = []
     if (b.l < 0.5) {
-        f.l = Math.max(f.l, Math.min(0.96, b.l + minLightnessGap))
+        candidates = [
+            Math.max(f.l, Math.min(0.96, b.l + 0.45)),
+            0.72,
+            0.82,
+            0.92,
+            0.97
+        ]
     } else {
-        f.l = Math.min(f.l, Math.max(0.08, b.l - minLightnessGap))
+        candidates = [
+            Math.min(f.l, Math.max(0.08, b.l - 0.45)),
+            0.34,
+            0.24,
+            0.14,
+            0.08
+        ]
     }
 
-    var adjusted = hslToColor(f)
-    if (contrastRatio(adjusted, bg) >= target) {
-        return adjusted
+    var best = fg
+    var bestRatio = contrastRatio(fg, bg)
+    for (var i = 0; i < candidates.length; ++i) {
+        var candidateHsl = { h: f.h, s: f.s, l: Math.max(0, Math.min(1, candidates[i])), a: f.a }
+        var adjusted = hslToColor(candidateHsl)
+        var ratio = contrastRatio(adjusted, bg)
+        if (ratio > bestRatio) {
+            best = adjusted
+            bestRatio = ratio
+        }
+        if (ratio >= target) {
+            return adjusted
+        }
     }
 
-    return bestBlackOrWhite(bg)
+    var fallback = bestBlackOrWhite(bg)
+    return contrastRatio(fallback, bg) > bestRatio ? fallback : best
 }
 
 function averageGradientColor(gradient, fallback) {
