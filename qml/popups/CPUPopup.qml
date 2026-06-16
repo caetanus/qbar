@@ -1,5 +1,6 @@
 import QtQuick
 import QBar 1.0
+import "qrc:/qbar" as Chrome
 
 Item {
     id: root
@@ -15,20 +16,32 @@ Item {
     property int coreSpacing: 8
 
     readonly property bool memoryMode: popupMode === "memory"
-    readonly property color panelBackground: Qt.rgba(1, 1, 1, 0.045)
-    readonly property color panelBackgroundAlt: Qt.rgba(1, 1, 1, 0.07)
-    readonly property color panelBorder: Qt.rgba(1, 1, 1, 0.11)
-    readonly property color panelGraphBackground: Qt.rgba(0, 0, 0, 0.18)
-    readonly property color panelGridLine: Qt.rgba(1, 1, 1, 0.055)
-    readonly property color panelText: theme.foreground
-    readonly property color panelTextSoft: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.76)
-    readonly property color panelTextFaint: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.52)
-    readonly property color cpuBlue: "#38bdf8"
-    readonly property color cpuHot: "#fb7185"
-    readonly property color memoryGreen: "#84cc16"
-    readonly property color swapPink: "#ec4899"
-    readonly property color loadAmber: "#f59e0b"
+    readonly property color panelBackground: Qt.rgba(1, 1, 1, 0.075)
+    readonly property color panelBackgroundAlt: Qt.rgba(1, 1, 1, 0.105)
+    readonly property color panelBorder: Qt.rgba(1, 1, 1, 0.16)
+    readonly property color panelGraphBackground: Qt.rgba(0, 0, 0, 0.28)
+    readonly property color panelGridLine: Qt.rgba(1, 1, 1, 0.09)
+    readonly property color cpuBlue: "#7dd3fc"
+    readonly property color cpuHot: "#fda4af"
+    readonly property color memoryGreen: "#bef264"
+    readonly property color swapPink: "#f9a8d4"
+    readonly property color loadAmber: "#fcd34d"
     readonly property real loadScale: Math.max(1, cpu ? cpu.coreCount : 1)
+    readonly property bool cssAvailable: typeof cssTheme !== "undefined" && cssTheme && cssTheme.loaded
+    readonly property var popupStyle: cssAvailable ? cssTheme.resolve("popup") : ({})
+    readonly property var cpuPopupStyle: cssAvailable ? cssTheme.resolve("cpu-popup") : ({})
+    readonly property color popupForeground: cssAvailable && cpuPopupStyle["color"]
+        ? cssTheme.parseColor(cpuPopupStyle["color"])
+        : (cssAvailable && popupStyle["color"] ? cssTheme.parseColor(popupStyle["color"]) : "#eef2f7")
+    readonly property color panelText: popupForeground
+    readonly property color panelTextSoft: Qt.rgba(popupForeground.r, popupForeground.g, popupForeground.b, 0.92)
+    readonly property var labelTextShadow: cssAvailable
+        ? cssTheme.parseBoxShadow(cpuPopupStyle["text-shadow"] || popupStyle["text-shadow"] || "") : ({})
+
+    component PopupText: Text {
+        layer.enabled: root.labelTextShadow.color !== undefined
+        layer.effect: Chrome.CssDropShadow { shadow: root.labelTextShadow }
+    }
 
     function clamp01(value) {
         var number = Number(value)
@@ -124,10 +137,10 @@ Item {
             return cpuBlue
         }
         if (percent >= 80) {
-            return "#fb7185"
+            return root.cpuHot
         }
         if (percent >= 55) {
-            return "#f59e0b"
+            return root.loadAmber
         }
         return cpuBlue
     }
@@ -135,7 +148,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: "transparent"
-        border.color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.14)
+        border.color: Qt.rgba(root.panelText.r, root.panelText.g, root.panelText.b, 0.18)
         border.width: 1
         radius: 4
     }
@@ -166,7 +179,7 @@ Item {
                     height: 31
                     spacing: 10
 
-                    Text {
+                    PopupText {
                         width: Math.floor(parent.width * 0.30)
                         anchors.verticalCenter: parent.verticalCenter
                         color: root.panelText
@@ -176,7 +189,7 @@ Item {
                         text: root.memoryMode ? "memory" : "cpu"
                     }
 
-                    Text {
+                    PopupText {
                         width: Math.floor(parent.width * 0.17)
                         anchors.verticalCenter: parent.verticalCenter
                         color: root.memoryMode ? root.memoryGreen : root.usageColor(cpu ? cpu.usage : 0)
@@ -187,7 +200,7 @@ Item {
                         text: root.memoryMode ? root.formatPercent(cpu ? cpu.memoryUsage : 0) : root.formatPercent(cpu ? cpu.usage : 0)
                     }
 
-                    Text {
+                    PopupText {
                         width: Math.floor(parent.width * 0.25)
                         anchors.verticalCenter: parent.verticalCenter
                         color: root.panelTextSoft
@@ -197,10 +210,10 @@ Item {
                         text: "load " + root.formatLoad(cpu ? cpu.loadAverage1 : 0) + " " + root.formatLoad(cpu ? cpu.loadAverage5 : 0) + " " + root.formatLoad(cpu ? cpu.loadAverage15 : 0)
                     }
 
-                    Text {
+                    PopupText {
                         width: parent.width - x
                         anchors.verticalCenter: parent.verticalCenter
-                        color: root.panelTextFaint
+                        color: root.panelTextSoft
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize
                         horizontalAlignment: Text.AlignRight
@@ -243,7 +256,7 @@ Item {
                             }
                         }
 
-                        Text {
+                        PopupText {
                             anchors.left: parent.left
                             anchors.top: parent.top
                             anchors.margins: 8
@@ -254,7 +267,7 @@ Item {
                             text: root.memoryMode ? "RAM usage" : "CPU usage"
                         }
 
-                        Text {
+                        PopupText {
                             anchors.right: parent.right
                             anchors.top: parent.top
                             anchors.margins: 8
@@ -299,17 +312,19 @@ Item {
                             anchors.margins: 8
                             spacing: 12
 
-                            Text {
+                            PopupText {
                                 color: root.memoryMode ? root.memoryGreen : root.cpuBlue
                                 font.family: theme.fontFamily
                                 font.pointSize: theme.fontSize - 1
+                                font.bold: true
                                 text: root.memoryMode ? "mem" : "usage"
                             }
 
-                            Text {
+                            PopupText {
                                 color: root.memoryMode ? root.swapPink : root.loadAmber
                                 font.family: theme.fontFamily
                                 font.pointSize: theme.fontSize - 1
+                                font.bold: true
                                 text: root.memoryMode ? "swap" : "load"
                             }
                         }
@@ -337,15 +352,16 @@ Item {
                                     width: parent.width
                                     spacing: 8
 
-                                    Text {
+                                    PopupText {
                                         width: parent.width * 0.45
-                                        color: root.panelTextFaint
+                                        color: root.panelTextSoft
                                         font.family: theme.fontFamily
                                         font.pointSize: theme.fontSize - 1
+                                        font.bold: true
                                         text: root.memoryMode ? "cpu" : "memory"
                                     }
 
-                                    Text {
+                                    PopupText {
                                         width: parent.width - x
                                         color: root.panelTextSoft
                                         font.family: theme.fontFamily
@@ -373,9 +389,9 @@ Item {
                                     }
                                 }
 
-                                Text {
+                                PopupText {
                                     width: parent.width
-                                    color: root.panelTextFaint
+                                    color: root.panelTextSoft
                                     font.family: theme.fontFamily
                                     font.pointSize: theme.fontSize - 1
                                     elide: Text.ElideRight
@@ -402,13 +418,14 @@ Item {
                                 fillColor: root.memoryMode ? Qt.rgba(root.cpuBlue.r, root.cpuBlue.g, root.cpuBlue.b, 0.20) : Qt.rgba(root.memoryGreen.r, root.memoryGreen.g, root.memoryGreen.b, 0.20)
                             }
 
-                            Text {
+                            PopupText {
                                 anchors.left: parent.left
                                 anchors.top: parent.top
                                 anchors.margins: 8
-                                color: root.panelTextFaint
+                                color: root.panelTextSoft
                                 font.family: theme.fontFamily
                                 font.pointSize: theme.fontSize - 1
+                                font.bold: true
                                 text: root.memoryMode ? "cpu history" : "memory history"
                             }
                         }
@@ -433,7 +450,7 @@ Item {
                 Row {
                     width: parent.width
 
-                    Text {
+                    PopupText {
                         width: parent.width * 0.55
                         color: root.panelText
                         font.family: theme.fontFamily
@@ -442,9 +459,9 @@ Item {
                         text: root.memoryMode ? "top memory processes" : "top cpu processes"
                     }
 
-                    Text {
+                    PopupText {
                         width: parent.width - x
-                        color: root.panelTextFaint
+                        color: root.panelTextSoft
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize
                         horizontalAlignment: Text.AlignRight
@@ -475,19 +492,20 @@ Item {
                             color: root.memoryMode ? Qt.rgba(root.memoryGreen.r, root.memoryGreen.g, root.memoryGreen.b, 0.18) : Qt.rgba(root.cpuBlue.r, root.cpuBlue.g, root.cpuBlue.b, 0.18)
                         }
 
-                        Text {
+                        PopupText {
                             anchors.left: parent.left
                             anchors.leftMargin: 6
                             anchors.verticalCenter: parent.verticalCenter
                             width: parent.width - valueLabel.width - 16
-                            color: root.panelTextSoft
+                            color: root.panelText
                             font.family: theme.fontFamily
                             font.pointSize: theme.fontSize - 1
+                            font.bold: true
                             elide: Text.ElideRight
                             text: root.processName(processItem)
                         }
 
-                        Text {
+                        PopupText {
                             id: valueLabel
                             anchors.right: parent.right
                             anchors.rightMargin: 6
@@ -545,7 +563,7 @@ Item {
                         Row {
                             width: parent.width
 
-                            Text {
+                            PopupText {
                                 width: parent.width - usageText.width
                                 color: root.panelText
                                 font.family: theme.fontFamily
@@ -554,7 +572,7 @@ Item {
                                 text: tile.coreName
                             }
 
-                            Text {
+                            PopupText {
                                 id: usageText
                                 color: tile.chartColor
                                 font.family: theme.fontFamily
