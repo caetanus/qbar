@@ -1,6 +1,7 @@
 #include "barwindow.h"
 #include "config.h"
 #include "customtool/customtoolmodel.h"
+#include "graphics/sparkline.h"
 
 #include <QApplication>
 #include <QCalendarWidget>
@@ -233,6 +234,7 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationName(QStringLiteral("qbar"));
     QGuiApplication::setDesktopFileName(QStringLiteral("qbar"));
     qmlRegisterType<CustomToolModel>("QBar", 1, 0, "CustomToolModel");
+    qmlRegisterType<Sparkline>("QBar", 1, 0, "Sparkline");
     configureIconTheme();
 
     if (hasArg(argc, argv, "--calendar-popup")) {
@@ -292,8 +294,26 @@ int main(int argc, char *argv[])
         return app.exec();
     }
 
-    BarWindow window(loadConfig());
-    window.show();
+    // One BarWindow per config entry (a single object → one bar; an array →
+    // several, e.g. multi-monitor or top+bottom). Each targets its `output`
+    // screen when set; the layer-shell integration reads the bar's geometry from
+    // per-window properties (see BarWindow), so bars can differ.
+    const QList<BarConfig> configs = loadConfigs();
+    QList<BarWindow *> bars;
+    for (const BarConfig &config : configs) {
+        auto *bar = new BarWindow(config);
+        if (!config.output.isEmpty()) {
+            const auto screens = QGuiApplication::screens();
+            for (QScreen *screen : screens) {
+                if (screen->name() == config.output) {
+                    bar->setScreen(screen);
+                    break;
+                }
+            }
+        }
+        bar->show();
+        bars.append(bar);
+    }
 
     return app.exec();
 }

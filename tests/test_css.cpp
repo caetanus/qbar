@@ -88,7 +88,9 @@ void CssThemeTests::stripsCommentsAndAtRules()
     )"));
 
     const QVariantMap cpu = theme.resolve(QStringLiteral("cpu"));
-    QCOMPARE(cpu.value(QStringLiteral("color")).toString(), QStringLiteral("@accent"));
+    // @define-color is expanded: the @accent reference resolves to its value
+    // and the @define-color declaration itself is stripped.
+    QCOMPARE(cpu.value(QStringLiteral("color")).toString(), QStringLiteral("#63b3ed"));
     QCOMPARE(cpu.value(QStringLiteral("graph-width")).toString(), QStringLiteral("22px"));
 }
 

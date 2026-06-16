@@ -117,59 +117,40 @@ void BatteryModel::refresh()
         && QFileInfo::exists(m_devicePath + QStringLiteral("/power_now"));
     const int batteryIndex = QFileInfo(m_devicePath).baseName().mid(3).toInt();
 
-    if (!m_acpiPath.isEmpty()) {
-        QProcess acpi;
-        acpi.start(m_acpiPath, {QStringLiteral("-V")});
-        if (acpi.waitForFinished(500) && acpi.exitStatus() == QProcess::NormalExit && acpi.exitCode() == 0) {
-            const QString output = QString::fromLocal8Bit(acpi.readAllStandardOutput());
-            const QStringList lines = output.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-            const QRegularExpression batteryLine(
-                QStringLiteral("^Battery\\s+%1:\\s+[^,]+,\\s+\\d+%(?:,\\s+(.+))?$").arg(batteryIndex));
-            const QRegularExpression healthLine(
-                QStringLiteral("^Battery\\s+%1:\\s+design capacity .* = (\\d+)%$").arg(batteryIndex));
-            const QRegularExpression durationRegex(
-                QStringLiteral("(\\d{1,2}:\\d{2}(?::\\d{2})?)"));
-
-            for (const QString &rawLine : lines) {
-                const QString line = rawLine.trimmed();
-                const auto batteryMatch = batteryLine.match(line);
-                if (batteryMatch.hasMatch()) {
-                    const QString detail = batteryMatch.captured(1).trimmed();
-                    if (!detail.isEmpty()) {
-                        const auto durationMatch = durationRegex.match(detail);
-                        if (durationMatch.hasMatch()) {
-                            const QString durationText = durationMatch.captured(1);
-                            QTime duration = QTime::fromString(durationText, QStringLiteral("HH:mm:ss"));
-                            if (!duration.isValid()) {
-                                duration = QTime::fromString(durationText, QStringLiteral("H:mm:ss"));
-                            }
-                            if (!duration.isValid()) {
-                                duration = QTime::fromString(durationText, QStringLiteral("HH:mm"));
-                            }
-                            if (!duration.isValid()) {
-                                duration = QTime::fromString(durationText, QStringLiteral("H:mm"));
-                            }
-                            if (duration.isValid()) {
-                                newTimeRemaining = duration.hour() * 3600 + duration.minute() * 60 + duration.second();
-                                newTimeRemainingAvailable = true;
-                            }
-                        }
-                    }
-                }
-
-                const auto healthMatch = healthLine.match(line);
-                if (healthMatch.hasMatch()) {
-                    newHealth = healthMatch.captured(1).toInt();
-                    newHealthAvailable = true;
-                }
-            }
-        }
-    }
-
+    Q_UNUSED(batteryIndex);
     const bool newCharging = newStatus == QStringLiteral("Charging");
     const bool newDischarging = newStatus == QStringLiteral("Discharging")
         || newStatus == QStringLiteral("Not charging");
     const bool newFull = newStatus == QStringLiteral("Full");
+
+    // Health and time-remaining straight from /sys (no `acpi` subprocess): prefer
+    // energy_* (µWh / µW), fall back to charge_* / current_* (µAh / µA).
+    double full = readFile(m_devicePath + QStringLiteral("/energy_full")).toDouble();
+    double fullDesign = readFile(m_devicePath + QStringLiteral("/energy_full_design")).toDouble();
+    double now = readFile(m_devicePath + QStringLiteral("/energy_now")).toDouble();
+    double rate = readFile(m_devicePath + QStringLiteral("/power_now")).toDouble();
+    if (full <= 0.0) {
+        full = readFile(m_devicePath + QStringLiteral("/charge_full")).toDouble();
+        fullDesign = readFile(m_devicePath + QStringLiteral("/charge_full_design")).toDouble();
+        now = readFile(m_devicePath + QStringLiteral("/charge_now")).toDouble();
+        rate = readFile(m_devicePath + QStringLiteral("/current_now")).toDouble();
+    }
+    if (full > 0.0 && fullDesign > 0.0) {
+        newHealth = qRound(full / fullDesign * 100.0);
+        newHealthAvailable = true;
+    }
+    if (rate > 0.0 && full > 0.0) {
+        double hours = 0.0;
+        if (newDischarging) {
+            hours = now / rate;
+        } else if (newCharging) {
+            hours = (full - now) / rate;
+        }
+        if (hours > 0.0) {
+            newTimeRemaining = static_cast<int>(hours * 3600.0);
+            newTimeRemainingAvailable = true;
+        }
+    }
 
     if (newStatus != m_status) {
         m_status = newStatus;

@@ -26,6 +26,7 @@ qt_deps = [
   dependency('xkbregistry'),
   dependency('libedataserver-1.2'),
   dependency('libecal-2.0'),
+  dependency('libpulse'),
 ]
 
 qsb_program = find_program('/usr/lib/qt6/bin/qsb', required: false)
@@ -176,14 +177,22 @@ sources = files(
   'src/ipc/i3ipcclient.cpp',
   'src/platform/platformbarintegration.cpp',
   'src/css/csstheme.cpp',
+  'src/json/jsonc.cpp',
+  'src/dbus/dbusservice.cpp',
   'src/qml/qbarpopupservice.cpp',
   'src/tray/statusnotifiermodel.cpp',
   'src/cpu/cpumodel.cpp',
   'src/temperature/temperaturemodel.cpp',
   'src/sound/soundmodel.cpp',
+  'src/mpris/mprismodel.cpp',
+  'src/graphics/sparkline.cpp',
+  'src/platform/capslockmonitor.cpp',
   'src/network/networkmodel.cpp',
   'src/networkmanager/networkmanagermodel.cpp',
   'src/battery/batterymodel.cpp',
+  'src/disk/diskmodel.cpp',
+  'src/bluetooth/bluetoothmodel.cpp',
+  'src/powerprofiles/powerprofilesmodel.cpp',
   'src/calendar/calendarmodel.cpp',
   'src/wm/windowmanagerbackend.cpp',
   'src/wm/workspacemodel.cpp',
@@ -199,6 +208,7 @@ headers = files(
   'src/ipc/i3ipcclient.h',
   'src/platform/platformbarintegration.h',
   'src/css/csstheme.h',
+  'src/dbus/dbusservice.h',
   'src/qml/qbarpopupservice.h',
   'src/brightness/brightnessmodel.h',
   'src/caffeine/caffeinemodel.h',
@@ -207,9 +217,15 @@ headers = files(
   'src/cpu/cpumodel.h',
   'src/temperature/temperaturemodel.h',
   'src/sound/soundmodel.h',
+  'src/mpris/mprismodel.h',
+  'src/graphics/sparkline.h',
+  'src/platform/capslockmonitor.h',
   'src/network/networkmodel.h',
   'src/networkmanager/networkmanagermodel.h',
   'src/battery/batterymodel.h',
+  'src/disk/diskmodel.h',
+  'src/bluetooth/bluetoothmodel.h',
+  'src/powerprofiles/powerprofilesmodel.h',
   'src/calendar/calendarmodel.h',
   'src/wm/windowmanagerbackend.h',
   'src/wm/workspacemodel.h',
@@ -304,10 +320,53 @@ css_test_exe = executable(
 
 test('css-theme', css_test_exe)
 
+jsonc_test_moc = qt6.preprocess(
+  moc_headers: files('tests/test_jsonc.h'),
+)
+
+jsonc_test_exe = executable(
+  'test-jsonc',
+  files(
+    'tests/test_jsonc.cpp',
+    'src/json/jsonc.cpp',
+  ),
+  jsonc_test_moc,
+  dependencies: [
+    dependency('Qt6Core'),
+    qt_test_dep,
+  ],
+  include_directories: include_directories('src'),
+)
+
+test('jsonc', jsonc_test_exe)
+
+customtool_test_moc = qt6.preprocess(
+  moc_headers: files(
+    'tests/test_customtool.h',
+    'src/customtool/customtoolmodel.h',
+  ),
+)
+
+customtool_test_exe = executable(
+  'test-customtool',
+  files(
+    'tests/test_customtool.cpp',
+    'src/customtool/customtoolmodel.cpp',
+  ),
+  customtool_test_moc,
+  dependencies: [
+    dependency('Qt6Core'),
+    qt_test_dep,
+  ],
+)
+
+test('custom-tool', customtool_test_exe)
+
 qml_test_moc = qt6.preprocess(
   moc_headers: files(
     'tests/qmltests.h',
     'src/customtool/customtoolmodel.h',
+    'src/graphics/sparkline.h',
   ),
   qresources: files('tests/qml/qbar-test.qrc'),
 )
@@ -317,6 +376,7 @@ qml_test_exe = executable(
   files(
     'tests/qmltests.cpp',
     'src/customtool/customtoolmodel.cpp',
+    'src/graphics/sparkline.cpp',
   ),
   qml_test_moc,
   dependencies: [

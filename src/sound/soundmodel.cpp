@@ -1,46 +1,361 @@
 #include "soundmodel.h"
 
+#include <QMetaObject>
 #include <algorithm>
-#include <QProcess>
-#include <QRegularExpression>
-#include <QStringList>
-#include <QtGlobal>
+#include <cmath>
 
 namespace {
 
-constexpr int kRefreshIntervalMs = 1000;
+constexpr int kReconnectIntervalMs = 3000;
+
+int volumePercent(const pa_cvolume &volume)
+{
+    const double avg = static_cast<double>(pa_cvolume_avg(&volume));
+    return static_cast<int>(std::lround((avg * 100.0) / static_cast<double>(PA_VOLUME_NORM)));
+}
+
+QString formFactorOf(pa_proplist *proplist)
+{
+    if (proplist == nullptr) {
+        return {};
+    }
+    const char *value = pa_proplist_gets(proplist, "device.form_factor");
+    return value != nullptr ? QString::fromUtf8(value) : QString();
+}
 
 } // namespace
 
 SoundModel::SoundModel(QObject *parent)
     : QObject(parent)
 {
-    refresh();
-    QTimer::singleShot(1000, this, &SoundModel::refresh);
-    m_timer.setInterval(kRefreshIntervalMs);
-    m_timer.setSingleShot(false);
-    connect(&m_timer, &QTimer::timeout, this, &SoundModel::refresh);
-    m_timer.start();
+    m_reconnectTimer.setSingleShot(true);
+    m_reconnectTimer.setInterval(kReconnectIntervalMs);
+    connect(&m_reconnectTimer, &QTimer::timeout, this, &SoundModel::connectToServer);
+
+    m_mainloop = pa_threaded_mainloop_new();
+    if (m_mainloop == nullptr || pa_threaded_mainloop_start(m_mainloop) < 0) {
+        return; // libpulse unavailable; the model simply stays unavailable.
+    }
+    connectToServer();
 }
 
-bool SoundModel::available() const
+SoundModel::~SoundModel()
 {
-    return m_available;
+    if (m_mainloop != nullptr) {
+        pa_threaded_mainloop_stop(m_mainloop);
+    }
+    if (m_context != nullptr) {
+        pa_context_disconnect(m_context);
+        pa_context_unref(m_context);
+    }
+    if (m_mainloop != nullptr) {
+        pa_threaded_mainloop_free(m_mainloop);
+    }
 }
 
-bool SoundModel::muted() const
+void SoundModel::connectToServer()
 {
-    return m_muted;
+    if (m_mainloop == nullptr) {
+        return;
+    }
+
+    pa_threaded_mainloop_lock(m_mainloop);
+    if (m_context != nullptr) {
+        pa_context_disconnect(m_context);
+        pa_context_unref(m_context);
+        m_context = nullptr;
+    }
+
+    m_context = pa_context_new(pa_threaded_mainloop_get_api(m_mainloop), "qbar");
+    if (m_context == nullptr) {
+        pa_threaded_mainloop_unlock(m_mainloop);
+        scheduleReconnect();
+        return;
+    }
+
+    pa_context_set_state_callback(m_context, &SoundModel::contextStateCallback, this);
+    // NOFAIL: if the daemon isn't up yet, wait for it instead of failing.
+    const int rc = pa_context_connect(m_context, nullptr, PA_CONTEXT_NOFAIL, nullptr);
+    pa_threaded_mainloop_unlock(m_mainloop);
+
+    if (rc < 0) {
+        scheduleReconnect();
+    }
 }
 
-int SoundModel::volume() const
+void SoundModel::scheduleReconnect()
 {
-    return m_volume;
+    // Always runs on the GUI thread (queued from the mainloop callback).
+    if (!m_reconnectTimer.isActive()) {
+        m_reconnectTimer.start();
+    }
 }
 
-QString SoundModel::sinkName() const
+void SoundModel::markUnavailable()
 {
-    return m_sinkName;
+    applySinkState(State{});
+    applySourceState(State{});
+}
+
+void SoundModel::contextStateCallback(pa_context *context, void *userdata)
+{
+    auto *self = static_cast<SoundModel *>(userdata);
+    switch (pa_context_get_state(context)) {
+    case PA_CONTEXT_READY:
+        pa_context_set_subscribe_callback(context, &SoundModel::subscribeCallback, self);
+        pa_operation_unref(pa_context_subscribe(
+            context,
+            static_cast<pa_subscription_mask_t>(PA_SUBSCRIPTION_MASK_SINK | PA_SUBSCRIPTION_MASK_SOURCE | PA_SUBSCRIPTION_MASK_SERVER),
+            nullptr, nullptr));
+        self->requestUpdate();
+        break;
+    case PA_CONTEXT_FAILED:
+    case PA_CONTEXT_TERMINATED:
+        QMetaObject::invokeMethod(self, [self]() {
+            self->markUnavailable();
+            self->scheduleReconnect();
+        }, Qt::QueuedConnection);
+        break;
+    default:
+        break;
+    }
+}
+
+void SoundModel::subscribeCallback(pa_context *context, pa_subscription_event_type_t type, uint32_t, void *userdata)
+{
+    Q_UNUSED(context);
+    const auto facility = static_cast<pa_subscription_event_type_t>(type & PA_SUBSCRIPTION_EVENT_FACILITY_MASK);
+    if (facility == PA_SUBSCRIPTION_EVENT_SINK
+        || facility == PA_SUBSCRIPTION_EVENT_SOURCE
+        || facility == PA_SUBSCRIPTION_EVENT_SERVER) {
+        static_cast<SoundModel *>(userdata)->requestUpdate();
+    }
+}
+
+void SoundModel::requestUpdate()
+{
+    // Mainloop thread (called from callbacks). Query the current defaults.
+    if (m_context == nullptr) {
+        return;
+    }
+    pa_operation_unref(pa_context_get_server_info(m_context, &SoundModel::serverInfoCallback, this));
+}
+
+void SoundModel::serverInfoCallback(pa_context *context, const pa_server_info *info, void *userdata)
+{
+    auto *self = static_cast<SoundModel *>(userdata);
+    if (info == nullptr) {
+        return;
+    }
+
+    if (info->default_sink_name != nullptr && info->default_sink_name[0] != '\0') {
+        pa_operation_unref(pa_context_get_sink_info_by_name(context, info->default_sink_name, &SoundModel::sinkInfoCallback, self));
+    } else {
+        QMetaObject::invokeMethod(self, [self]() { self->applySinkState(State{}); }, Qt::QueuedConnection);
+    }
+
+    if (info->default_source_name != nullptr && info->default_source_name[0] != '\0') {
+        pa_operation_unref(pa_context_get_source_info_by_name(context, info->default_source_name, &SoundModel::sourceInfoCallback, self));
+    } else {
+        QMetaObject::invokeMethod(self, [self]() { self->applySourceState(State{}); }, Qt::QueuedConnection);
+    }
+}
+
+void SoundModel::sinkInfoCallback(pa_context *, const pa_sink_info *info, int eol, void *userdata)
+{
+    if (eol != 0 || info == nullptr) {
+        return;
+    }
+    auto *self = static_cast<SoundModel *>(userdata);
+    State state;
+    state.name = QString::fromUtf8(info->name);
+    state.description = QString::fromUtf8(info->description);
+    state.formFactor = formFactorOf(info->proplist);
+    state.volume = std::clamp(volumePercent(info->volume), 0, 150);
+    state.muted = info->mute != 0;
+    state.channels = info->volume.channels;
+    state.available = true;
+    QMetaObject::invokeMethod(self, [self, state]() { self->applySinkState(state); }, Qt::QueuedConnection);
+}
+
+void SoundModel::sourceInfoCallback(pa_context *, const pa_source_info *info, int eol, void *userdata)
+{
+    if (eol != 0 || info == nullptr) {
+        return;
+    }
+    auto *self = static_cast<SoundModel *>(userdata);
+    // Skip monitor sources (they mirror sinks and aren't real inputs).
+    if ((info->monitor_of_sink != PA_INVALID_INDEX)) {
+        return;
+    }
+    State state;
+    state.name = QString::fromUtf8(info->name);
+    state.description = QString::fromUtf8(info->description);
+    state.formFactor = formFactorOf(info->proplist);
+    state.volume = std::clamp(volumePercent(info->volume), 0, 150);
+    state.muted = info->mute != 0;
+    state.channels = info->volume.channels;
+    state.available = true;
+    QMetaObject::invokeMethod(self, [self, state]() { self->applySourceState(state); }, Qt::QueuedConnection);
+}
+
+void SoundModel::applySinkState(const State &state)
+{
+    const bool availabilityFlip = m_available != state.available;
+    const bool dataChanged = m_sinkName != state.name
+        || m_sinkDescription != state.description
+        || m_sinkFormFactor != state.formFactor
+        || m_volume != state.volume
+        || m_muted != state.muted
+        || m_available != state.available;
+
+    m_sinkName = state.name;
+    m_sinkDescription = state.description;
+    m_sinkFormFactor = state.formFactor;
+    m_volume = state.volume;
+    m_muted = state.muted;
+    m_available = state.available;
+    m_sinkChannels = state.channels;
+
+    if (availabilityFlip) {
+        emit availabilityChanged();
+    }
+    if (dataChanged) {
+        emit volumeChanged();
+    }
+}
+
+void SoundModel::applySourceState(const State &state)
+{
+    const bool availabilityFlip = m_sourceAvailable != state.available;
+    const bool dataChanged = m_sourceName != state.name
+        || m_sourceDescription != state.description
+        || m_sourceFormFactor != state.formFactor
+        || m_sourceVolume != state.volume
+        || m_sourceMuted != state.muted
+        || m_sourceAvailable != state.available;
+
+    m_sourceName = state.name;
+    m_sourceDescription = state.description;
+    m_sourceFormFactor = state.formFactor;
+    m_sourceVolume = state.volume;
+    m_sourceMuted = state.muted;
+    m_sourceAvailable = state.available;
+    m_sourceChannels = state.channels;
+
+    if (availabilityFlip) {
+        emit availabilityChanged();
+    }
+    if (dataChanged) {
+        emit volumeChanged();
+    }
+}
+
+void SoundModel::setSinkVolume(int percent)
+{
+    if (!m_available || m_sinkName.isEmpty() || m_context == nullptr || m_mainloop == nullptr) {
+        return;
+    }
+    const int target = std::clamp(percent, 0, 150);
+    pa_cvolume volume;
+    pa_cvolume_set(&volume, std::max(1u, m_sinkChannels),
+                   static_cast<pa_volume_t>((static_cast<double>(target) / 100.0) * PA_VOLUME_NORM));
+
+    pa_threaded_mainloop_lock(m_mainloop);
+    pa_operation_unref(pa_context_set_sink_volume_by_name(m_context, m_sinkName.toUtf8().constData(), &volume, nullptr, nullptr));
+    pa_threaded_mainloop_unlock(m_mainloop);
+}
+
+void SoundModel::setSourceVolume(int percent)
+{
+    if (!m_sourceAvailable || m_sourceName.isEmpty() || m_context == nullptr || m_mainloop == nullptr) {
+        return;
+    }
+    const int target = std::clamp(percent, 0, 150);
+    pa_cvolume volume;
+    pa_cvolume_set(&volume, std::max(1u, m_sourceChannels),
+                   static_cast<pa_volume_t>((static_cast<double>(target) / 100.0) * PA_VOLUME_NORM));
+
+    pa_threaded_mainloop_lock(m_mainloop);
+    pa_operation_unref(pa_context_set_source_volume_by_name(m_context, m_sourceName.toUtf8().constData(), &volume, nullptr, nullptr));
+    pa_threaded_mainloop_unlock(m_mainloop);
+}
+
+void SoundModel::stepUp(int percent)
+{
+    setSinkVolume(m_volume + std::max(1, percent));
+}
+
+void SoundModel::stepDown(int percent)
+{
+    setSinkVolume(m_volume - std::max(1, percent));
+}
+
+void SoundModel::setPercent(int percent)
+{
+    setSinkVolume(percent);
+}
+
+void SoundModel::toggleMute()
+{
+    if (!m_available || m_sinkName.isEmpty() || m_context == nullptr || m_mainloop == nullptr) {
+        return;
+    }
+    pa_threaded_mainloop_lock(m_mainloop);
+    pa_operation_unref(pa_context_set_sink_mute_by_name(m_context, m_sinkName.toUtf8().constData(), m_muted ? 0 : 1, nullptr, nullptr));
+    pa_threaded_mainloop_unlock(m_mainloop);
+}
+
+void SoundModel::stepSourceUp(int percent)
+{
+    setSourceVolume(m_sourceVolume + std::max(1, percent));
+}
+
+void SoundModel::stepSourceDown(int percent)
+{
+    setSourceVolume(m_sourceVolume - std::max(1, percent));
+}
+
+void SoundModel::setSourcePercent(int percent)
+{
+    setSourceVolume(percent);
+}
+
+void SoundModel::toggleSourceMute()
+{
+    if (!m_sourceAvailable || m_sourceName.isEmpty() || m_context == nullptr || m_mainloop == nullptr) {
+        return;
+    }
+    pa_threaded_mainloop_lock(m_mainloop);
+    pa_operation_unref(pa_context_set_source_mute_by_name(m_context, m_sourceName.toUtf8().constData(), m_sourceMuted ? 0 : 1, nullptr, nullptr));
+    pa_threaded_mainloop_unlock(m_mainloop);
+}
+
+QString SoundModel::friendlySinkName() const
+{
+    if (m_sinkName.isEmpty()) {
+        return QStringLiteral("default sink");
+    }
+    return m_sinkDescription.isEmpty() ? m_sinkName : m_sinkDescription;
+}
+
+QString SoundModel::friendlySourceName() const
+{
+    if (m_sourceName.isEmpty()) {
+        return QStringLiteral("default source");
+    }
+    return m_sourceDescription.isEmpty() ? m_sourceName : m_sourceDescription;
+}
+
+QString SoundModel::formFactorIconName(const QString &formFactor)
+{
+    if (formFactor == QStringLiteral("headset") || formFactor == QStringLiteral("hands-free")) {
+        return QStringLiteral("audio-headset-symbolic");
+    }
+    if (formFactor == QStringLiteral("headphone") || formFactor == QStringLiteral("portable")) {
+        return QStringLiteral("audio-headphones-symbolic");
+    }
+    return {};
 }
 
 QString SoundModel::displayText() const
@@ -48,7 +363,6 @@ QString SoundModel::displayText() const
     if (!m_available || m_volume < 0) {
         return QStringLiteral("--");
     }
-
     return QStringLiteral("%1%").arg(m_volume);
 }
 
@@ -56,7 +370,7 @@ QString SoundModel::tooltipText() const
 {
     QStringList parts;
     if (m_available) {
-        parts << friendlySinkName(m_sinkName);
+        parts << friendlySinkName();
         if (m_muted) {
             parts << QStringLiteral("muted");
         }
@@ -72,31 +386,10 @@ QString SoundModel::outputTooltipText() const
     if (!m_available) {
         return QStringLiteral("sound unavailable");
     }
-
     const QStringList parts = m_muted
-        ? QStringList{friendlySinkName(m_sinkName), QStringLiteral("muted"), QStringLiteral("%1%").arg(m_volume)}
-        : QStringList{friendlySinkName(m_sinkName), QStringLiteral("%1%").arg(m_volume)};
+        ? QStringList{friendlySinkName(), QStringLiteral("muted"), QStringLiteral("%1%").arg(m_volume)}
+        : QStringList{friendlySinkName(), QStringLiteral("%1%").arg(m_volume)};
     return parts.join(QStringLiteral(" | "));
-}
-
-bool SoundModel::sourceAvailable() const
-{
-    return m_sourceAvailable;
-}
-
-bool SoundModel::sourceMuted() const
-{
-    return m_sourceMuted;
-}
-
-int SoundModel::sourceVolume() const
-{
-    return m_sourceVolume;
-}
-
-QString SoundModel::sourceName() const
-{
-    return m_sourceName;
 }
 
 QString SoundModel::sourceDisplayText() const
@@ -104,8 +397,18 @@ QString SoundModel::sourceDisplayText() const
     if (!m_sourceAvailable || m_sourceVolume < 0) {
         return QStringLiteral("--");
     }
-
     return QStringLiteral("%1%").arg(m_sourceVolume);
+}
+
+QString SoundModel::sourceTooltipText() const
+{
+    if (!m_sourceAvailable) {
+        return QStringLiteral("mic unavailable");
+    }
+    const QStringList parts = m_sourceMuted
+        ? QStringList{friendlySourceName(), QStringLiteral("muted"), QStringLiteral("%1%").arg(m_sourceVolume)}
+        : QStringList{friendlySourceName(), QStringLiteral("%1%").arg(m_sourceVolume)};
+    return parts.join(QStringLiteral(" | "));
 }
 
 QString SoundModel::outputIconName() const
@@ -116,409 +419,4 @@ QString SoundModel::outputIconName() const
 QString SoundModel::inputIconName() const
 {
     return formFactorIconName(m_sourceFormFactor);
-}
-
-QString SoundModel::sourceTooltipText() const
-{
-    if (!m_sourceAvailable) {
-        return QStringLiteral("mic unavailable");
-    }
-
-    const QStringList parts = m_sourceMuted
-        ? QStringList{friendlySourceName(m_sourceName), QStringLiteral("muted"), QStringLiteral("%1%").arg(m_sourceVolume)}
-        : QStringList{friendlySourceName(m_sourceName), QStringLiteral("%1%").arg(m_sourceVolume)};
-    return parts.join(QStringLiteral(" | "));
-}
-
-QString SoundModel::runPactl(const QStringList &args, bool *ok)
-{
-    QProcess process;
-    process.start(QStringLiteral("pactl"), args);
-    if (!process.waitForFinished(500)) {
-        if (ok != nullptr) {
-            *ok = false;
-        }
-        return {};
-    }
-
-    const bool success = process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
-    if (ok != nullptr) {
-        *ok = success;
-    }
-    return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
-}
-
-QString SoundModel::defaultSinkName()
-{
-    bool ok = false;
-    const QString info = runPactl({QStringLiteral("info")}, &ok);
-    if (!ok || info.isEmpty()) {
-        return {};
-    }
-
-    const QStringList lines = info.split(QChar::LineFeed, Qt::SkipEmptyParts);
-    for (const QString &rawLine : lines) {
-        const QString line = rawLine.trimmed();
-        if (!line.startsWith(QStringLiteral("Default Sink:"))) {
-            continue;
-        }
-
-        const QString sink = line.mid(QStringLiteral("Default Sink:").size()).trimmed();
-        return sink;
-    }
-
-    return {};
-}
-
-QString SoundModel::defaultSourceName()
-{
-    bool ok = false;
-    const QString info = runPactl({QStringLiteral("info")}, &ok);
-    if (!ok || info.isEmpty()) {
-        return {};
-    }
-
-    const QStringList lines = info.split(QChar::LineFeed, Qt::SkipEmptyParts);
-    for (const QString &rawLine : lines) {
-        const QString line = rawLine.trimmed();
-        if (!line.startsWith(QStringLiteral("Default Source:"))) {
-            continue;
-        }
-
-        return line.mid(QStringLiteral("Default Source:").size()).trimmed();
-    }
-
-    return {};
-}
-
-QString SoundModel::friendlySinkName(const QString &sinkName)
-{
-    if (sinkName.isEmpty()) {
-        return QStringLiteral("default sink");
-    }
-
-    bool ok = false;
-    const QString output = runPactl({QStringLiteral("list"), QStringLiteral("sinks")}, &ok);
-    if (!ok || output.isEmpty()) {
-        return sinkName;
-    }
-
-    const QString description = deviceInfo(output, sinkName).description;
-    return description.isEmpty() ? sinkName : description;
-}
-
-QString SoundModel::friendlySourceName(const QString &sourceName)
-{
-    if (sourceName.isEmpty()) {
-        return QStringLiteral("default source");
-    }
-
-    bool ok = false;
-    const QString output = runPactl({QStringLiteral("list"), QStringLiteral("sources")}, &ok);
-    if (!ok || output.isEmpty()) {
-        return sourceName;
-    }
-
-    const QString description = deviceInfo(output, sourceName).description;
-    return description.isEmpty() ? sourceName : description;
-}
-
-SoundModel::DeviceInfo SoundModel::deviceInfo(const QString &listOutput, const QString &deviceName)
-{
-    DeviceInfo info;
-    if (deviceName.isEmpty() || listOutput.isEmpty()) {
-        return info;
-    }
-
-    QString currentName;
-    QString currentDescription;
-    QString currentFormFactor;
-
-    const auto captureIfMatch = [&]() {
-        if (currentName == deviceName) {
-            info.description = currentDescription;
-            info.formFactor = currentFormFactor;
-        }
-    };
-
-    const QStringList lines = listOutput.split(QChar::LineFeed, Qt::SkipEmptyParts);
-    for (const QString &rawLine : lines) {
-        const QString line = rawLine.trimmed();
-        if (line.startsWith(QStringLiteral("Name:"))) {
-            captureIfMatch();
-            currentName = line.mid(QStringLiteral("Name:").size()).trimmed();
-            currentDescription.clear();
-            currentFormFactor.clear();
-            continue;
-        }
-        if (line.startsWith(QStringLiteral("Description:"))) {
-            currentDescription = line.mid(QStringLiteral("Description:").size()).trimmed();
-            continue;
-        }
-        if (line.startsWith(QStringLiteral("device.form_factor"))) {
-            const int eq = line.indexOf(QChar('='));
-            if (eq >= 0) {
-                QString value = line.mid(eq + 1).trimmed();
-                value.remove(QChar('"'));
-                currentFormFactor = value;
-            }
-        }
-    }
-    captureIfMatch();
-
-    return info;
-}
-
-// Maps a PipeWire/PulseAudio "device.form_factor" to a freedesktop symbolic
-// icon name for "personal audio" devices. Other form factors (internal
-// speakers, HDMI, etc.) return an empty string so callers fall back to the
-// built-in volume-level icon.
-QString SoundModel::formFactorIconName(const QString &formFactor)
-{
-    if (formFactor == QStringLiteral("headset") || formFactor == QStringLiteral("hands-free")) {
-        return QStringLiteral("audio-headset-symbolic");
-    }
-    if (formFactor == QStringLiteral("headphone") || formFactor == QStringLiteral("portable")) {
-        return QStringLiteral("audio-headphones-symbolic");
-    }
-    return {};
-}
-
-int SoundModel::parseVolumePercent(const QString &output)
-{
-    const QRegularExpression regex(QStringLiteral(R"((\d+)%)"));
-    QRegularExpressionMatchIterator it = regex.globalMatch(output);
-    int count = 0;
-    int total = 0;
-    while (it.hasNext()) {
-        const QRegularExpressionMatch match = it.next();
-        bool ok = false;
-        const int value = match.captured(1).toInt(&ok);
-        if (!ok) {
-            continue;
-        }
-        total += value;
-        ++count;
-    }
-
-    if (count <= 0) {
-        return -1;
-    }
-
-    return qBound(0, qRound(total / static_cast<double>(count)), 150);
-}
-
-bool SoundModel::parseMuted(const QString &output)
-{
-    return output.contains(QStringLiteral("yes"), Qt::CaseInsensitive);
-}
-
-void SoundModel::refresh()
-{
-    const QString sink = defaultSinkName();
-    const QString source = defaultSourceName();
-
-    State sinkState;
-    if (!sink.isEmpty()) {
-        bool volumeOk = false;
-        const QString volumeOutput = runPactl({QStringLiteral("get-sink-volume"), sink}, &volumeOk);
-        bool muteOk = false;
-        const QString muteOutput = runPactl({QStringLiteral("get-sink-mute"), sink}, &muteOk);
-        const int volume = parseVolumePercent(volumeOutput);
-        const bool muted = muteOk ? parseMuted(muteOutput) : m_muted;
-        if (volumeOk && volume >= 0) {
-            sinkState.sinkName = sink;
-            sinkState.volume = qBound(0, volume, 100);
-            sinkState.muted = muted;
-            sinkState.available = true;
-
-            bool sinksOk = false;
-            const QString sinksOutput = runPactl({QStringLiteral("list"), QStringLiteral("sinks")}, &sinksOk);
-            if (sinksOk) {
-                sinkState.formFactor = deviceInfo(sinksOutput, sink).formFactor;
-            }
-        }
-    }
-
-    State sourceState;
-    if (!source.isEmpty()) {
-        bool volumeOk = false;
-        const QString volumeOutput = runPactl({QStringLiteral("get-source-volume"), source}, &volumeOk);
-        bool muteOk = false;
-        const QString muteOutput = runPactl({QStringLiteral("get-source-mute"), source}, &muteOk);
-        const int volume = parseVolumePercent(volumeOutput);
-        const bool muted = muteOk ? parseMuted(muteOutput) : m_sourceMuted;
-        if (volumeOk && volume >= 0) {
-            sourceState.sinkName = source;
-            sourceState.volume = qBound(0, volume, 100);
-            sourceState.muted = muted;
-            sourceState.available = true;
-
-            bool sourcesOk = false;
-            const QString sourcesOutput = runPactl({QStringLiteral("list"), QStringLiteral("sources")}, &sourcesOk);
-            if (sourcesOk) {
-                sourceState.formFactor = deviceInfo(sourcesOutput, source).formFactor;
-            }
-        }
-    }
-
-    if (!sinkState.available && !sourceState.available) {
-        if (!m_available && !m_sourceAvailable) {
-            return;
-        }
-        setState(State{});
-        setSourceState(State{});
-        return;
-    }
-
-    setState(sinkState);
-    setSourceState(sourceState);
-}
-
-void SoundModel::setState(const State &state)
-{
-    const bool availabilityChangedLocal = m_available != state.available;
-    const bool dataChanged = m_sinkName != state.sinkName
-        || m_sinkFormFactor != state.formFactor
-        || m_volume != state.volume
-        || m_muted != state.muted
-        || m_available != state.available;
-
-    m_sinkName = state.sinkName;
-    m_sinkFormFactor = state.formFactor;
-    m_volume = state.volume;
-    m_muted = state.muted;
-    m_available = state.available;
-
-    if (availabilityChangedLocal) {
-        emit availabilityChanged();
-    }
-    if (dataChanged) {
-        emit volumeChanged();
-    }
-}
-
-void SoundModel::setSourceState(const State &state)
-{
-    const bool availabilityChangedLocal = m_sourceAvailable != state.available;
-    const bool dataChanged = m_sourceName != state.sinkName
-        || m_sourceFormFactor != state.formFactor
-        || m_sourceVolume != state.volume
-        || m_sourceMuted != state.muted
-        || m_sourceAvailable != state.available;
-
-    m_sourceName = state.sinkName;
-    m_sourceFormFactor = state.formFactor;
-    m_sourceVolume = state.volume;
-    m_sourceMuted = state.muted;
-    m_sourceAvailable = state.available;
-
-    if (availabilityChangedLocal) {
-        emit availabilityChanged();
-    }
-    if (dataChanged) {
-        emit volumeChanged();
-    }
-}
-
-void SoundModel::adjustPercent(int deltaPercent)
-{
-    if (!m_available || m_sinkName.isEmpty()) {
-        return;
-    }
-
-    const int target = qBound(0, m_volume + deltaPercent, 150);
-    bool ok = false;
-    runPactl({QStringLiteral("set-sink-volume"), m_sinkName, QStringLiteral("%1%").arg(target)}, &ok);
-    if (ok) {
-        refresh();
-    }
-}
-
-void SoundModel::stepUp(int percent)
-{
-    adjustPercent(std::max(1, percent));
-}
-
-void SoundModel::stepDown(int percent)
-{
-    adjustPercent(-std::max(1, percent));
-}
-
-void SoundModel::setPercent(int percent)
-{
-    if (!m_available || m_sinkName.isEmpty()) {
-        return;
-    }
-
-    const int target = qBound(0, percent, 150);
-    bool ok = false;
-    runPactl({QStringLiteral("set-sink-volume"), m_sinkName, QStringLiteral("%1%").arg(target)}, &ok);
-    if (ok) {
-        refresh();
-    }
-}
-
-void SoundModel::toggleMute()
-{
-    if (!m_available || m_sinkName.isEmpty()) {
-        return;
-    }
-
-    bool ok = false;
-    runPactl({QStringLiteral("set-sink-mute"), m_sinkName, QStringLiteral("toggle")}, &ok);
-    if (ok) {
-        refresh();
-    }
-}
-
-void SoundModel::adjustSourcePercent(int deltaPercent)
-{
-    if (!m_sourceAvailable || m_sourceName.isEmpty()) {
-        return;
-    }
-
-    const int target = qBound(0, m_sourceVolume + deltaPercent, 150);
-    bool ok = false;
-    runPactl({QStringLiteral("set-source-volume"), m_sourceName, QStringLiteral("%1%").arg(target)}, &ok);
-    if (ok) {
-        refresh();
-    }
-}
-
-void SoundModel::stepSourceUp(int percent)
-{
-    adjustSourcePercent(std::max(1, percent));
-}
-
-void SoundModel::stepSourceDown(int percent)
-{
-    adjustSourcePercent(-std::max(1, percent));
-}
-
-void SoundModel::setSourcePercent(int percent)
-{
-    if (!m_sourceAvailable || m_sourceName.isEmpty()) {
-        return;
-    }
-
-    const int target = qBound(0, percent, 150);
-    bool ok = false;
-    runPactl({QStringLiteral("set-source-volume"), m_sourceName, QStringLiteral("%1%").arg(target)}, &ok);
-    if (ok) {
-        refresh();
-    }
-}
-
-void SoundModel::toggleSourceMute()
-{
-    if (!m_sourceAvailable || m_sourceName.isEmpty()) {
-        return;
-    }
-
-    bool ok = false;
-    runPactl({QStringLiteral("set-source-mute"), m_sourceName, QStringLiteral("toggle")}, &ok);
-    if (ok) {
-        refresh();
-    }
 }

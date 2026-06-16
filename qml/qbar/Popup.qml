@@ -7,6 +7,9 @@ Item {
     property url source
     property var payload: ({})
     property var explicitPosition: null
+    // "popup" → backdrop overlay (modal, dismissable). "tooltip" → ordinary
+    // standalone window (no backdrop, no keyboard), via openTooltip.
+    property string kind: "popup"
     property string popupId: ""
     property int popupWidth: 240
     property int popupHeight: 160
@@ -64,7 +67,9 @@ Item {
         var point = explicitPosition && explicitPosition.x !== undefined && explicitPosition.y !== undefined
             ? explicitPosition
             : anchorPoint()
-        popupId = qbarPopups.openPopup(source, payload, point.x, point.y, popupWidth, popupHeight, popupId)
+        popupId = kind === "tooltip"
+            ? qbarPopups.openTooltip(source, payload, point.x, point.y, popupWidth, popupHeight, popupId)
+            : qbarPopups.openPopup(source, payload, point.x, point.y, popupWidth, popupHeight, popupId)
         if (popupId.length > 0) {
             popupOpened(popupId)
         }
@@ -76,7 +81,11 @@ Item {
             return
         }
 
-        qbarPopups.closePopup(popupId)
+        if (kind === "tooltip") {
+            qbarPopups.closeTooltip(popupId)
+        } else {
+            qbarPopups.closePopup(popupId)
+        }
         popupId = ""
         closed()
     }
@@ -92,7 +101,13 @@ Item {
     Connections {
         target: qbarPopups
         function onPopupClosed(id) {
-            if (id === root.popupId) {
+            if (root.kind !== "tooltip" && id === root.popupId) {
+                root.popupId = ""
+                root.closed()
+            }
+        }
+        function onTooltipClosed(id) {
+            if (root.kind === "tooltip" && id === root.popupId) {
                 root.popupId = ""
                 root.closed()
             }

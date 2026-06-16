@@ -5,7 +5,7 @@ Item {
     width: implicitWidth
     height: implicitHeight
     implicitWidth: label.implicitWidth + 20
-    implicitHeight: 28
+    implicitHeight: Math.max(28, label.implicitHeight + 12)
 
     property string text: ""
 

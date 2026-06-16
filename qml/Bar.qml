@@ -66,7 +66,12 @@ Item {
         if (!item) {
             return 0
         }
-        if (typeof item.preferredWidth === "number" && item.preferredWidth > 0) {
+        // An applet that declares preferredWidth opts into Bar.qml driving its
+        // slot size — trust it even when 0 (e.g. I3Mode hidden). Falling back to
+        // item.width here would read a stale value: Loader's anchors.fill resize
+        // clears the applet's own "width: preferredWidth" binding the first time
+        // it runs, so item.width can no longer track preferredWidth back down to 0.
+        if (typeof item.preferredWidth === "number") {
             return item.preferredWidth
         }
         if (typeof item.implicitWidth === "number" && item.implicitWidth > 0) {

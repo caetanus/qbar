@@ -11,66 +11,14 @@ constexpr int kMaxHistory = 24;
 
 } // namespace
 
-NetworkModel::NetworkModel(QObject *parent)
-    : QObject(parent)
-{
-    m_elapsed.start();
-    refresh();
-    QTimer::singleShot(1000, this, &NetworkModel::refresh);
-    m_timer.setInterval(1000);
-    m_timer.setSingleShot(false);
-    connect(&m_timer, &QTimer::timeout, this, &NetworkModel::refresh);
-    m_timer.start();
-}
-
-double NetworkModel::downloadRateBytesPerSecond() const
-{
-    return m_downloadRateBytesPerSecond;
-}
-
-double NetworkModel::uploadRateBytesPerSecond() const
-{
-    return m_uploadRateBytesPerSecond;
-}
-
-double NetworkModel::totalRateBytesPerSecond() const
-{
-    return m_totalRateBytesPerSecond;
-}
-
-double NetworkModel::downloadPeakBytesPerSecond() const
-{
-    return m_downloadPeakBytesPerSecond;
-}
-
-double NetworkModel::uploadPeakBytesPerSecond() const
-{
-    return m_uploadPeakBytesPerSecond;
-}
-
-QVariantList NetworkModel::downloadRateHistory() const
-{
-    return m_downloadRateHistory;
-}
-
-QVariantList NetworkModel::uploadRateHistory() const
-{
-    return m_uploadRateHistory;
-}
-
-bool NetworkModel::available() const
-{
-    return true;
-}
-
-NetworkModel::TrafficSample NetworkModel::readTrafficSample() const
+NetworkSampler::Bytes NetworkSampler::read()
 {
     QFile file(QStringLiteral("/proc/net/dev"));
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         return {};
     }
 
-    TrafficSample sample;
+    Bytes sample;
     const QString content = QString::fromUtf8(file.readAll());
     const QStringList lines = content.split(QChar::LineFeed, Qt::SkipEmptyParts);
     for (const QString &rawLine : lines) {
@@ -110,6 +58,63 @@ NetworkModel::TrafficSample NetworkModel::readTrafficSample() const
     return sample;
 }
 
+void NetworkSampler::start()
+{
+    m_elapsed.start();
+    m_timer = new QTimer(this);
+    m_timer->setInterval(1000);
+    connect(m_timer, &QTimer::timeout, this, &NetworkSampler::poll);
+    m_timer->start();
+    poll();
+}
+
+void NetworkSampler::poll()
+{
+    const Bytes sample = read();
+    if (!sample.valid) {
+        return;
+    }
+
+    if (!m_hasSample) {
+        m_hasSample = true;
+        m_last = sample;
+        emit sampled(NetworkSample{0.0, 0.0});
+        return;
+    }
+
+    const qint64 elapsedMs = qMax<qint64>(1, m_elapsed.restart());
+    qint64 downloadDelta = sample.downloadBytes - m_last.downloadBytes;
+    qint64 uploadDelta = sample.uploadBytes - m_last.uploadBytes;
+    if (downloadDelta < 0) {
+        downloadDelta = 0;
+    }
+    if (uploadDelta < 0) {
+        uploadDelta = 0;
+    }
+    m_last = sample;
+
+    emit sampled(NetworkSample{(downloadDelta * 1000.0) / static_cast<double>(elapsedMs),
+                               (uploadDelta * 1000.0) / static_cast<double>(elapsedMs)});
+}
+
+NetworkModel::NetworkModel(QObject *parent)
+    : QObject(parent)
+    , m_sampler(new NetworkSampler)
+{
+    qRegisterMetaType<NetworkSample>();
+    m_sampler->moveToThread(&m_thread);
+    connect(&m_thread, &QThread::started, m_sampler, &NetworkSampler::start);
+    connect(m_sampler, &NetworkSampler::sampled, this, &NetworkModel::onSampled);
+    m_thread.start();
+}
+
+NetworkModel::~NetworkModel()
+{
+    m_thread.quit();
+    m_thread.wait();
+    delete m_sampler;
+}
+
 void NetworkModel::appendHistory(QVariantList *history, double rate)
 {
     history->append(rate);
@@ -118,7 +123,7 @@ void NetworkModel::appendHistory(QVariantList *history, double rate)
     }
 }
 
-double NetworkModel::computePeak(const QVariantList &history) const
+double NetworkModel::computePeak(const QVariantList &history)
 {
     double peak = 0.0;
     for (const QVariant &value : history) {
@@ -130,43 +135,13 @@ double NetworkModel::computePeak(const QVariantList &history) const
     return peak;
 }
 
-void NetworkModel::refresh()
+void NetworkModel::onSampled(const NetworkSample &sample)
 {
-    const TrafficSample sample = readTrafficSample();
-    if (!sample.valid) {
-        return;
-    }
-
-    if (!m_hasSample) {
-        m_hasSample = true;
-        m_lastSample = sample;
-        m_downloadRateBytesPerSecond = 0.0;
-        m_uploadRateBytesPerSecond = 0.0;
-        m_totalRateBytesPerSecond = 0.0;
-        appendHistory(&m_downloadRateHistory, 0.0);
-        appendHistory(&m_uploadRateHistory, 0.0);
-        m_downloadPeakBytesPerSecond = computePeak(m_downloadRateHistory);
-        m_uploadPeakBytesPerSecond = computePeak(m_uploadRateHistory);
-        emit statsChanged();
-        return;
-    }
-
-    const qint64 elapsedMs = qMax<qint64>(1, m_elapsed.restart());
-    qint64 downloadDelta = sample.downloadBytes - m_lastSample.downloadBytes;
-    qint64 uploadDelta = sample.uploadBytes - m_lastSample.uploadBytes;
-    if (downloadDelta < 0) {
-        downloadDelta = 0;
-    }
-    if (uploadDelta < 0) {
-        uploadDelta = 0;
-    }
-
-    m_lastSample = sample;
-    m_downloadRateBytesPerSecond = (downloadDelta * 1000.0) / elapsedMs;
-    m_uploadRateBytesPerSecond = (uploadDelta * 1000.0) / elapsedMs;
-    m_totalRateBytesPerSecond = m_downloadRateBytesPerSecond + m_uploadRateBytesPerSecond;
-    appendHistory(&m_downloadRateHistory, m_downloadRateBytesPerSecond);
-    appendHistory(&m_uploadRateHistory, m_uploadRateBytesPerSecond);
+    m_downloadRateBytesPerSecond = sample.downloadRate;
+    m_uploadRateBytesPerSecond = sample.uploadRate;
+    m_totalRateBytesPerSecond = sample.downloadRate + sample.uploadRate;
+    appendHistory(&m_downloadRateHistory, sample.downloadRate);
+    appendHistory(&m_uploadRateHistory, sample.uploadRate);
     m_downloadPeakBytesPerSecond = computePeak(m_downloadRateHistory);
     m_uploadPeakBytesPerSecond = computePeak(m_uploadRateHistory);
     emit statsChanged();

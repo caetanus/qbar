@@ -1,6 +1,7 @@
 #include "qmltests.h"
 
 #include "src/customtool/customtoolmodel.h"
+#include "src/graphics/sparkline.h"
 
 #include <algorithm>
 #include <QPainter>
@@ -39,6 +40,7 @@ public:
 QBarQuickTestSetup::QBarQuickTestSetup()
 {
     qmlRegisterType<CustomToolModel>("QBar", 1, 0, "CustomToolModel");
+    qmlRegisterType<Sparkline>("QBar", 1, 0, "Sparkline");
 }
 
 void QBarQuickTestSetup::qmlEngineAvailable(QQmlEngine *engine)

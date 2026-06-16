@@ -100,6 +100,7 @@ private:
     void addItemAddress(const QString &address);
     void removeItemAddress(const QString &address);
     void refreshItem(int row);
+    void applyItemProperties(const QString &service, const QString &path, const QVariantMap &values);
     void callItemMethod(int row, const QString &method, int x, int y);
     bool showDbusMenu(int row, int x, int y);
     int itemRow(const QString &service, const QString &path) const;

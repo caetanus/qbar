@@ -1,7 +1,12 @@
 import QtQuick
+import "qrc:/qbar" as QBar
 
 Item {
     id: root
+
+    // #popup text-shadow, applied to the popup's prominent labels.
+    readonly property var popupTextShadow: cssTheme && cssTheme.loaded
+        ? cssTheme.parseBoxShadow(cssTheme.resolve("popup")["text-shadow"] || "") : ({})
 
     property date selectedDate: new Date()
     property date displayedDate: new Date()
@@ -14,6 +19,36 @@ Item {
 
     implicitWidth: 560
     implicitHeight: 380
+
+    // Keyboard date navigation (active when the overlay grabbed the keyboard,
+    // i.e. BarConfig::popupKeyboardFocus). PopupShell forces activeFocus here.
+    focus: true
+
+    function moveSelection(days) {
+        var next = new Date(root.selectedDate)
+        next.setDate(next.getDate() + days)
+        root.selectedDate = next
+    }
+
+    function moveMonths(months) {
+        var next = new Date(root.selectedDate)
+        next.setMonth(next.getMonth() + months)
+        root.selectedDate = next
+    }
+
+    Keys.onLeftPressed: function(event) { root.moveSelection(-1); event.accepted = true }
+    Keys.onRightPressed: function(event) { root.moveSelection(1); event.accepted = true }
+    Keys.onUpPressed: function(event) { root.moveSelection(-7); event.accepted = true }
+    Keys.onDownPressed: function(event) { root.moveSelection(7); event.accepted = true }
+    Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_PageUp) {
+            root.moveMonths(-1)
+            event.accepted = true
+        } else if (event.key === Qt.Key_PageDown) {
+            root.moveMonths(1)
+            event.accepted = true
+        }
+    }
 
     Component.onCompleted: {
         displayedDate = root.startOfMonth(root.selectedDate)
@@ -85,12 +120,13 @@ Item {
         }
     }
 
+    // Background/border come from the popup chrome (PopupShell, #popup); keep
+    // this transparent so the calendar inherits the popup's neutral color
+    // instead of the bar's translucent blue (theme.background).
     Rectangle {
         anchors.fill: parent
         radius: 2
-        color: theme.background
-        border.color: Qt.rgba(1, 1, 1, 0.18)
-        border.width: 1
+        color: "transparent"
     }
 
     Row {
@@ -140,6 +176,8 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
+                        layer.enabled: root.popupTextShadow.color !== undefined
+                        layer.effect: QBar.CssDropShadow { shadow: root.popupTextShadow }
                     }
 
                     Text {
@@ -311,6 +349,8 @@ Item {
                     font.pointSize: theme.fontSize + 1
                     font.bold: true
                     elide: Text.ElideRight
+                    layer.enabled: root.popupTextShadow.color !== undefined
+                    layer.effect: QBar.CssDropShadow { shadow: root.popupTextShadow }
                 }
 
                 Text {

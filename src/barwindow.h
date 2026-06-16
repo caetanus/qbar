@@ -8,7 +8,12 @@
 #include "battery/batterymodel.h"
 #include "network/networkmodel.h"
 #include "networkmanager/networkmanagermodel.h"
+#include "disk/diskmodel.h"
+#include "bluetooth/bluetoothmodel.h"
+#include "powerprofiles/powerprofilesmodel.h"
 #include "sound/soundmodel.h"
+#include "mpris/mprismodel.h"
+#include "platform/capslockmonitor.h"
 #include "calendar/calendarmodel.h"
 #include "css/csstheme.h"
 #include "tray/statusnotifiermodel.h"
@@ -72,8 +77,13 @@ private:
     BrightnessModel *m_brightnessModel = nullptr;
     CaffeineModel *m_caffeineModel = nullptr;
     SoundModel *m_soundModel = nullptr;
+    MprisModel *m_mprisModel = nullptr;
+    CapsLockMonitor *m_capsLockMonitor = nullptr;
     CalendarModel *m_calendarModel = nullptr;
     BatteryModel *m_batteryModel = nullptr;
+    DiskModel *m_diskModel = nullptr;
+    BluetoothModel *m_bluetoothModel = nullptr;
+    PowerProfilesModel *m_powerProfilesModel = nullptr;
     CssTheme *m_cssTheme = nullptr;
     QFileSystemWatcher *m_configWatcher = nullptr;
     QByteArray m_configHash;

@@ -4,6 +4,9 @@
     <file alias="qbar/Popup.qml">../../qml/qbar/Popup.qml</file>
     <file alias="qbar/DismissOverlay.qml">../../qml/qbar/DismissOverlay.qml</file>
     <file alias="qbar/PopupShell.qml">../../qml/qbar/PopupShell.qml</file>
+    <file alias="qbar/CssFill.qml">../../qml/qbar/CssFill.qml</file>
+    <file alias="qbar/CssDropShadow.qml">../../qml/qbar/CssDropShadow.qml</file>
+    <file alias="qbar/MarqueeText.qml">../../qml/qbar/MarqueeText.qml</file>
     <file alias="qbar/Tooltip.qml">../../qml/qbar/Tooltip.qml</file>
     <file alias="qbar/Contrast.js">../../qml/qbar/Contrast.js</file>
     <file alias="icons/caffeine-cup-empty-white.svg">../../qml/icons/caffeine-cup-empty-white.svg</file>

@@ -2,6 +2,7 @@
 
 #include <QEasingCurve>
 #include <QColor>
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <QVariantMap>
@@ -20,6 +21,9 @@ struct BarConfig {
     BarPosition position = BarPosition::Top;
     bool exclusiveZone = true;
     bool waylandLayerShell = true;
+    // When true, the popup backdrop overlay grabs the keyboard while open so it
+    // can handle Escape-to-close. When false the overlay stays focusless.
+    bool popupKeyboardFocus = false;
     QColor background = QColor(38, 48, 57, 175);
     QColor foreground = QColor(238, 242, 247);
     QColor accent = QColor(99, 179, 237);
@@ -38,9 +42,11 @@ struct BarConfig {
     int marginRight  = -1;
     QStringList appletsLeft = {
         QStringLiteral("Workspaces"),
+        QStringLiteral("I3Mode"),
         QStringLiteral("CPU"),
         QStringLiteral("Memory"),
         QStringLiteral("Network"),
+        QStringLiteral("Media"),
     };
     QStringList appletsCenter = {
         QStringLiteral("Title"),
@@ -61,9 +67,11 @@ struct BarConfig {
     QString configFilePath;
     QStringList applets = {
         QStringLiteral("Workspaces"),
+        QStringLiteral("I3Mode"),
         QStringLiteral("CPU"),
         QStringLiteral("Memory"),
         QStringLiteral("Network"),
+        QStringLiteral("Media"),
         QStringLiteral("Title"),
         QStringLiteral("Caffeine"),
         QStringLiteral("Brightness"),
@@ -80,5 +88,7 @@ struct BarConfig {
 };
 
 BarConfig loadConfig();
+QList<BarConfig> loadConfigs();
 QString barPositionName(BarPosition position);
 QEasingCurve easingCurveFromName(const QString &name);
+QVariantMap parseCustomTools(const QJsonObject &root);

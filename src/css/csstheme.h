@@ -46,6 +46,17 @@ public:
     // Parse a CSS color string to a QColor
     Q_INVOKABLE QColor parseColor(const QString &cssColor) const;
 
+    // Parse `linear-gradient(<angle|to side>, <color> [<pos%>], ...)`.
+    // Returns { "type": "linear", "angle": <deg, CSS convention>,
+    //           "stops": [ { "position": <0..1>, "color": <QColor> }, ... ] }
+    // or an empty map when the value is not a gradient.
+    Q_INVOKABLE QVariantMap parseGradient(const QString &cssValue) const;
+
+    // Parse `box-shadow: [inset] <x> <y> <blur> [spread] <color>`.
+    // Returns { "x","y","blur","spread" (px), "color" (QColor), "inset" (bool) }
+    // or an empty map when unset/none.
+    Q_INVOKABLE QVariantMap parseBoxShadow(const QString &cssValue) const;
+
 signals:
     void loadedChanged();
 

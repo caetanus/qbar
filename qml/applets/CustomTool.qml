@@ -1,5 +1,6 @@
 import QtQuick
 import QBar 1.0
+import "qrc:/qbar" as Chrome
 
 Item {
     id: root
@@ -7,6 +8,7 @@ Item {
     property string toolId: ""
     property var toolConfig: (customTools && toolId !== "" && customTools[toolId]) ? customTools[toolId] : ({})
     property bool initialized: false
+    property alias toolModel: toolModel
 
     // waybar module names use "custom/foo"; CSS selectors use "#custom-foo"
     readonly property string cssId: toolId.replace("/", "-")
@@ -29,7 +31,10 @@ Item {
         toolModel.arguments = cfg.arguments || []
         toolModel.workingDirectory = cfg.workingDirectory || ""
         toolModel.intervalMs = ((cfg.interval !== undefined ? cfg.interval : (cfg.intervalMs !== undefined ? cfg.intervalMs : 10)) * 1000)
-        toolModel.waybarFormat = cfg["return-type"] === "json" || cfg.waybarFormat === undefined
+        // Waybar default is plain text; JSON only when return-type is "json".
+        toolModel.waybarFormat = cfg["return-type"] === "json"
+        toolModel.format = cfg.format !== undefined ? cfg.format : "{}"
+        toolModel.formatIcons = cfg["format-icons"] || {}
         if (!root.initialized) {
             root.initialized = true
         }
@@ -53,7 +58,13 @@ Item {
 
         Text {
             id: outputText
-            text: toolModel.text
+            text: toolModel.displayText
+
+            readonly property var dropShadow: cssTheme && cssTheme.loaded
+                ? cssTheme.parseBoxShadow(root.cssStyle["text-shadow"] || "") : ({})
+            layer.enabled: dropShadow.color !== undefined
+            layer.effect: Chrome.CssDropShadow { shadow: outputText.dropShadow }
+
             color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
             font.family: theme.fontFamily
             font.pointSize: theme.fontSize
@@ -67,8 +78,32 @@ Item {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
-        acceptedButtons: Qt.LeftButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         cursorShape: Qt.PointingHandCursor
-        onClicked: toolModel.refresh()
+
+        function action(key) {
+            var cfg = root.toolConfig || {}
+            return cfg[key] || ""
+        }
+
+        onClicked: function(mouse) {
+            if (mouse.button === Qt.RightButton) {
+                toolModel.runAction(action("on-click-right"))
+            } else if (mouse.button === Qt.MiddleButton) {
+                toolModel.runAction(action("on-click-middle"))
+            } else if (action("on-click").length > 0) {
+                toolModel.runAction(action("on-click"))
+            } else {
+                toolModel.refresh()
+            }
+        }
+
+        onWheel: function(wheel) {
+            if (wheel.angleDelta.y > 0) {
+                toolModel.runAction(action("on-scroll-up"))
+            } else if (wheel.angleDelta.y < 0) {
+                toolModel.runAction(action("on-scroll-down"))
+            }
+        }
     }
 }

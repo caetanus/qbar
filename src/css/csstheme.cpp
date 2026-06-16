@@ -3,6 +3,7 @@
 #include <QCryptographicHash>
 #include <QDebug>
 #include <QFile>
+#include <QHash>
 #include <QRegularExpression>
 #include <algorithm>
 
@@ -15,6 +16,61 @@ QString stripComments(const QString &css)
     QString result = css;
     result.remove(re);
     return result;
+}
+
+// Replace `@name` references with values from `vars`; unknown names (e.g.
+// `@media`) are left untouched.
+QString substituteVars(const QString &text, const QHash<QString, QString> &vars)
+{
+    static const QRegularExpression refRe(QStringLiteral(R"(@([A-Za-z0-9_-]+))"));
+    QString result;
+    qsizetype last = 0;
+    auto it = refRe.globalMatch(text);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch m = it.next();
+        result += text.mid(last, m.capturedStart() - last);
+        const QString name = m.captured(1);
+        result += vars.contains(name) ? vars.value(name) : m.captured(0);
+        last = m.capturedEnd();
+    }
+    result += text.mid(last);
+    return result;
+}
+
+// Expand GTK-style `@define-color name value;` declarations: collect them,
+// resolve references between them, substitute `@name` throughout, then strip
+// the declarations themselves.
+QString expandDefineColors(const QString &cssIn)
+{
+    static const QRegularExpression defRe(
+        QStringLiteral(R"(@define-color\s+([A-Za-z0-9_-]+)\s+([^;]+);)"));
+
+    QHash<QString, QString> vars;
+    auto it = defRe.globalMatch(cssIn);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch m = it.next();
+        vars.insert(m.captured(1).trimmed(), m.captured(2).trimmed());
+    }
+    if (vars.isEmpty())
+        return cssIn;
+
+    // Resolve references between definitions (e.g. `@define-color a @b;`).
+    for (int pass = 0; pass < 5; ++pass) {
+        bool changed = false;
+        for (auto v = vars.begin(); v != vars.end(); ++v) {
+            const QString expanded = substituteVars(v.value(), vars);
+            if (expanded != v.value()) {
+                v.value() = expanded;
+                changed = true;
+            }
+        }
+        if (!changed)
+            break;
+    }
+
+    QString css = cssIn;
+    css.remove(defRe);
+    return substituteVars(css, vars);
 }
 
 CssSimpleSelector parseSimpleSelector(const QString &raw)
@@ -125,7 +181,7 @@ QVariantMap parseDeclarationBlock(const QString &block)
 QList<CssRule> parseCss(const QString &css)
 {
     QList<CssRule> rules;
-    const QString cleaned = stripComments(css);
+    const QString cleaned = expandDefineColors(stripComments(css));
 
     int i = 0;
     while (i < cleaned.length()) {
@@ -204,6 +260,82 @@ QColor parseColorString(const QString &colorStr)
                           static_cast<int>(parts[3].trimmed().toFloat() * 255.0f));
     }
     return QColor(s); // named colors
+}
+
+// Split on `sep` only at parenthesis depth 0, so commas/spaces inside rgba(...)
+// or gradient stops aren't broken up.
+QStringList splitTopLevel(const QString &text, QChar sep)
+{
+    QStringList out;
+    int depth = 0;
+    int start = 0;
+    for (int i = 0; i < text.length(); ++i) {
+        const QChar c = text[i];
+        if (c == QLatin1Char('('))
+            ++depth;
+        else if (c == QLatin1Char(')'))
+            --depth;
+        else if (depth == 0 && c == sep) {
+            out.append(text.mid(start, i - start));
+            start = i + 1;
+        }
+    }
+    out.append(text.mid(start));
+    return out;
+}
+
+// Split on whitespace runs at parenthesis depth 0.
+QStringList splitTopLevelWhitespace(const QString &text)
+{
+    QStringList out;
+    int depth = 0;
+    QString current;
+    for (const QChar c : text) {
+        if (c == QLatin1Char('(')) {
+            ++depth;
+            current.append(c);
+        } else if (c == QLatin1Char(')')) {
+            --depth;
+            current.append(c);
+        } else if (depth == 0 && c.isSpace()) {
+            if (!current.isEmpty()) {
+                out.append(current);
+                current.clear();
+            }
+        } else {
+            current.append(c);
+        }
+    }
+    if (!current.isEmpty())
+        out.append(current);
+    return out;
+}
+
+bool parseLengthPx(const QString &token, double *out)
+{
+    QString t = token.trimmed();
+    if (t.endsWith(QLatin1String("px"), Qt::CaseInsensitive))
+        t = t.left(t.length() - 2);
+    bool ok = false;
+    const double v = t.toDouble(&ok);
+    if (ok)
+        *out = v;
+    return ok;
+}
+
+// CSS gradient side keywords → angle (0deg points up, increasing clockwise).
+double cssSideToAngle(const QString &sideRaw)
+{
+    const QString side = sideRaw.toLower().simplified();
+    if (side == QLatin1String("top")) return 0.0;
+    if (side == QLatin1String("right")) return 90.0;
+    if (side == QLatin1String("bottom")) return 180.0;
+    if (side == QLatin1String("left")) return 270.0;
+    if (side == QLatin1String("top right") || side == QLatin1String("right top")) return 45.0;
+    if (side == QLatin1String("bottom right") || side == QLatin1String("right bottom")) return 135.0;
+    if (side == QLatin1String("bottom left") || side == QLatin1String("left bottom")) return 225.0;
+    if (side == QLatin1String("top left") || side == QLatin1String("left top")) return 315.0;
+    return 180.0;
 }
 
 } // namespace
@@ -334,5 +466,101 @@ QVariantMap CssTheme::resolveExact(const QString &id, const QStringList &classes
 QColor CssTheme::parseColor(const QString &cssColor) const
 {
     return parseColorString(cssColor);
+}
+
+QVariantMap CssTheme::parseGradient(const QString &cssValue) const
+{
+    const QString s = cssValue.trimmed();
+    const QString prefix = QStringLiteral("linear-gradient(");
+    if (!s.startsWith(prefix, Qt::CaseInsensitive) || !s.endsWith(QLatin1Char(')')))
+        return {};
+
+    const QString inner = s.mid(prefix.length(), s.length() - prefix.length() - 1);
+    QStringList parts = splitTopLevel(inner, QLatin1Char(','));
+    for (QString &p : parts)
+        p = p.trimmed();
+    if (parts.isEmpty())
+        return {};
+
+    double angle = 180.0; // CSS default direction: "to bottom"
+    int firstStop = 0;
+    const QString head = parts.first();
+    if (head.endsWith(QLatin1String("deg"), Qt::CaseInsensitive)) {
+        angle = head.left(head.length() - 3).trimmed().toDouble();
+        firstStop = 1;
+    } else if (head.startsWith(QLatin1String("to "), Qt::CaseInsensitive)) {
+        angle = cssSideToAngle(head.mid(3));
+        firstStop = 1;
+    }
+
+    QList<QColor> colors;
+    QList<double> positions;
+    for (int i = firstStop; i < parts.size(); ++i) {
+        const QStringList toks = splitTopLevelWhitespace(parts.at(i));
+        if (toks.isEmpty())
+            continue;
+        colors.append(parseColorString(toks.first()));
+        double pos = -1.0;
+        if (toks.size() >= 2 && toks.at(1).endsWith(QLatin1Char('%')))
+            pos = toks.at(1).left(toks.at(1).length() - 1).toDouble() / 100.0;
+        positions.append(pos);
+    }
+    if (colors.size() < 2)
+        return {};
+
+    QVariantList stops;
+    for (int i = 0; i < colors.size(); ++i) {
+        double pos = positions.at(i);
+        if (pos < 0.0)
+            pos = static_cast<double>(i) / static_cast<double>(colors.size() - 1);
+        QVariantMap stop;
+        stop.insert(QStringLiteral("position"), pos);
+        stop.insert(QStringLiteral("color"), colors.at(i));
+        stops.append(stop);
+    }
+
+    QVariantMap result;
+    result.insert(QStringLiteral("type"), QStringLiteral("linear"));
+    result.insert(QStringLiteral("angle"), angle);
+    result.insert(QStringLiteral("stops"), stops);
+    return result;
+}
+
+QVariantMap CssTheme::parseBoxShadow(const QString &cssValue) const
+{
+    QString s = cssValue.trimmed();
+    if (s.isEmpty() || s.compare(QLatin1String("none"), Qt::CaseInsensitive) == 0)
+        return {};
+
+    // Single shadow: take the first comma-separated segment.
+    s = splitTopLevel(s, QLatin1Char(',')).first().trimmed();
+    const QStringList toks = splitTopLevelWhitespace(s);
+
+    bool inset = false;
+    QList<double> lengths;
+    QColor color(0, 0, 0, 128);
+    for (const QString &tok : toks) {
+        if (tok.compare(QLatin1String("inset"), Qt::CaseInsensitive) == 0) {
+            inset = true;
+            continue;
+        }
+        double value = 0.0;
+        if (parseLengthPx(tok, &value)) {
+            lengths.append(value);
+            continue;
+        }
+        color = parseColorString(tok);
+    }
+    if (lengths.size() < 2)
+        return {};
+
+    QVariantMap result;
+    result.insert(QStringLiteral("x"), lengths.value(0, 0.0));
+    result.insert(QStringLiteral("y"), lengths.value(1, 0.0));
+    result.insert(QStringLiteral("blur"), lengths.value(2, 0.0));
+    result.insert(QStringLiteral("spread"), lengths.value(3, 0.0));
+    result.insert(QStringLiteral("color"), color);
+    result.insert(QStringLiteral("inset"), inset);
+    return result;
 }
 

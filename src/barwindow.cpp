@@ -8,9 +8,15 @@
 #include "battery/batterymodel.h"
 #include "network/networkmodel.h"
 #include "networkmanager/networkmanagermodel.h"
+#include "disk/diskmodel.h"
+#include "bluetooth/bluetoothmodel.h"
+#include "powerprofiles/powerprofilesmodel.h"
 #include "sound/soundmodel.h"
+#include "mpris/mprismodel.h"
+#include "platform/capslockmonitor.h"
 #include "calendar/calendarmodel.h"
 #include "css/csstheme.h"
+#include "dbus/dbusservice.h"
 #include "platform/platformbarintegration.h"
 #include "wm/wmbackendfactory.h"
 #include "ipc/i3ipcclient.h"
@@ -283,8 +289,13 @@ BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
     m_brightnessModel = new BrightnessModel(this);
     m_caffeineModel = new CaffeineModel(this, this);
     m_soundModel = new SoundModel(this);
+    m_mprisModel = new MprisModel(this);
+    m_capsLockMonitor = new CapsLockMonitor(this);
     m_calendarModel = new CalendarModel(this);
     m_batteryModel = new BatteryModel(this);
+    m_diskModel = new DiskModel(this);
+    m_bluetoothModel = new BluetoothModel(this);
+    m_powerProfilesModel = new PowerProfilesModel(this);
     m_cssTheme = new CssTheme(this);
     loadCssTheme();
 
@@ -381,13 +392,20 @@ void BarWindow::onConfigFileChanged(const QString &path)
         qWarning() << "qbar: config.json is broken (invalid JSON), ignoring reload";
         return;
     }
+    const QJsonObject root = doc.object();
 
-    const QString newStyleSheet = doc.object().value(QStringLiteral("styleSheet")).toString();
+    const QString newStyleSheet = root.value(QStringLiteral("styleSheet")).toString();
     if (newStyleSheet != m_config.styleSheet) {
         m_config.styleSheet = newStyleSheet;
         loadCssTheme();
     } else {
         // styleSheet unchanged — CSS watcher handles its own reloads
+    }
+
+    const QVariantMap newCustomTools = parseCustomTools(root);
+    if (newCustomTools != m_config.customTools) {
+        m_config.customTools = newCustomTools;
+        rootContext()->setContextProperty(QStringLiteral("customTools"), m_config.customTools);
     }
 }
 
@@ -396,6 +414,11 @@ void BarWindow::configureWindow()
     setTitle(QStringLiteral("QBar"));
     setProperty("appId", QStringLiteral("qbar"));
     setProperty("desktopFileName", QStringLiteral("qbar"));
+    // Per-window layer geometry so multiple bars (multi-monitor, top+bottom) can
+    // differ; the layer-shell integration reads these, falling back to env.
+    setProperty("qbarBarHeight", m_config.height);
+    setProperty("qbarBarPosition", barPositionName(m_config.position));
+    setProperty("qbarBarExclusive", m_config.exclusiveZone);
     const int windowHeight = !m_config.waylandLayerShell && m_config.height < 50 ? 50 : m_config.height;
     setMinimumHeight(windowHeight);
     setMaximumHeight(windowHeight);
@@ -414,7 +437,9 @@ void BarWindow::buildLayout()
         engine()->addImageProvider(QStringLiteral("themeicon"), new ThemeIconProvider);
     }
 
-    m_popupService = new QBarPopupService(engine(), theme, m_wm->workspaceModel(), m_wm, m_trayModel, this);
+    m_popupService = new QBarPopupService(engine(), theme, m_wm->workspaceModel(), m_wm, m_trayModel, m_cssTheme, this);
+    m_popupService->setOverlayKeyboardFocus(m_config.popupKeyboardFocus);
+    m_popupService->setBarWindow(this);
     connect(m_popupService, &QBarPopupService::popupClosed, this, [this](const QString &id) {
         if (id == m_calendarPopupId) {
             m_calendarPopupId.clear();
@@ -439,12 +464,18 @@ void BarWindow::buildLayout()
     rootContext()->setContextProperty(QStringLiteral("brightnessModel"), m_brightnessModel);
     rootContext()->setContextProperty(QStringLiteral("caffeineModel"), m_caffeineModel);
     rootContext()->setContextProperty(QStringLiteral("soundModel"), m_soundModel);
+    rootContext()->setContextProperty(QStringLiteral("mprisModel"), m_mprisModel);
+    rootContext()->setContextProperty(QStringLiteral("capsLock"), m_capsLockMonitor);
     rootContext()->setContextProperty(QStringLiteral("calendarModel"), m_calendarModel);
     rootContext()->setContextProperty(QStringLiteral("wm"), m_wm);
     rootContext()->setContextProperty(QStringLiteral("i3Ipc"), m_wm);
     rootContext()->setContextProperty(QStringLiteral("trayModel"), m_trayModel);
     rootContext()->setContextProperty(QStringLiteral("batteryModel"), m_batteryModel);
+    rootContext()->setContextProperty(QStringLiteral("diskModel"), m_diskModel);
+    rootContext()->setContextProperty(QStringLiteral("bluetoothModel"), m_bluetoothModel);
+    rootContext()->setContextProperty(QStringLiteral("powerProfilesModel"), m_powerProfilesModel);
     rootContext()->setContextProperty(QStringLiteral("cssTheme"), m_cssTheme);
+    rootContext()->setContextProperty(QStringLiteral("dbus"), new DBusService(engine(), this));
     rootContext()->setContextProperty(QStringLiteral("customTools"), m_config.customTools);
     rootContext()->setContextProperty(QStringLiteral("appletNames"), m_config.applets);
     rootContext()->setContextProperty(QStringLiteral("leftApplets"), m_config.appletsLeft);

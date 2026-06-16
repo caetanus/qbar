@@ -1,10 +1,16 @@
 import QtQuick
 import Qt.labs.settings
+import "qrc:/qbar" as QBar
 
 Item {
     id: root
     width: preferredWidth > 0 ? preferredWidth : (clockText.implicitWidth + 20)
     height: theme.height
+
+    // Tooltip text: time on the first line, full date on the second.
+    property string tooltipText: Qt.formatDateTime(new Date(), "HH:mm:ss") + "\n"
+        + Qt.formatDateTime(new Date(), "dddd, d MMMM yyyy")
+    property bool tooltipHovered: false
 
     readonly property string cssId: "clock"
     readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
@@ -69,6 +75,12 @@ Item {
     Text {
         id: clockText
         anchors.centerIn: parent
+
+        readonly property var dropShadow: cssTheme && cssTheme.loaded
+            ? cssTheme.parseBoxShadow(root.cssStyle["text-shadow"] || "") : ({})
+        layer.enabled: dropShadow.color !== undefined
+        layer.effect: QBar.CssDropShadow { shadow: clockText.dropShadow }
+
         color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
         font.family: cssStyle["font-family"] || theme.fontFamily
         font.pointSize: theme.fontSize
@@ -80,7 +92,18 @@ Item {
         interval: 1000
         running: true
         repeat: true
-        onTriggered: clockText.text = Qt.formatDateTime(new Date(), root.currentFormat())
+        onTriggered: {
+            var now = new Date()
+            clockText.text = Qt.formatDateTime(now, root.currentFormat())
+            root.tooltipText = Qt.formatDateTime(now, "HH:mm:ss") + "\n"
+                + Qt.formatDateTime(now, "dddd, d MMMM yyyy")
+        }
+    }
+
+    QBar.Tooltip {
+        anchorItem: root
+        hovered: root.tooltipHovered
+        text: root.tooltipText
     }
 
     MouseArea {
@@ -89,6 +112,7 @@ Item {
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton
         onClicked: root.activated()
+        onContainsMouseChanged: root.tooltipHovered = containsMouse
         onWheel: function(wheel) {
             var delta = wheel.angleDelta.y > 0 ? 1 : -1
             root.setFormatIndex(formatIndex + delta)

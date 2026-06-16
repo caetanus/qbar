@@ -14,6 +14,7 @@ constexpr auto magic = "i3-ipc";
 constexpr int headerSize = 14;
 constexpr quint32 eventBit = 1u << 31u;
 constexpr quint32 workspaceEvent = eventBit | 0u;
+constexpr quint32 modeEvent = eventBit | 2u;
 constexpr quint32 windowEvent = eventBit | 3u;
 constexpr quint32 inputEvent = eventBit | 21u;
 
@@ -292,6 +293,11 @@ qint64 I3IpcClient::focusedContainerId() const
     return m_focusedContainerId;
 }
 
+QString I3IpcClient::bindingMode() const
+{
+    return m_bindingMode;
+}
+
 void I3IpcClient::start()
 {
     connectSockets();
@@ -332,6 +338,17 @@ void I3IpcClient::activateRelativeWorkspace(int direction)
     runCommand(direction > 0
                    ? QStringLiteral("workspace next_on_output")
                    : QStringLiteral("workspace prev_on_output"));
+}
+
+void I3IpcClient::activateWindowByPid(qint64 pid)
+{
+    if (pid <= 0) {
+        return;
+    }
+    // The pid criterion matches the window owned by that process (switching to
+    // its workspace). Windowless/headless players (mpd, mpDris2) match nothing,
+    // so this is a harmless no-op for them.
+    runCommand(QStringLiteral("[pid=%1] focus").arg(pid));
 }
 
 void I3IpcClient::cycleKeyboardLayout()
@@ -412,8 +429,8 @@ void I3IpcClient::requestInputs()
 void I3IpcClient::subscribeWorkspaceEvents()
 {
     sendMessage(&m_eventSocket, Subscribe, supportsSwayInputs()
-                    ? QByteArrayLiteral("[\"workspace\",\"window\",\"input\"]")
-                    : QByteArrayLiteral("[\"workspace\",\"window\"]"));
+                    ? QByteArrayLiteral("[\"workspace\",\"window\",\"mode\",\"input\"]")
+                    : QByteArrayLiteral("[\"workspace\",\"window\",\"mode\"]"));
 }
 
 void I3IpcClient::sendMessage(QLocalSocket *socket, MessageType type, const QByteArray &payload)
@@ -481,6 +498,8 @@ void I3IpcClient::handleMessage(quint32 type, const QByteArray &payload, bool ev
             }
             requestWorkspaces();
             requestTreeSnapshot();
+        } else if (type == modeEvent) {
+            setBindingMode(change);
         } else if (type == windowEvent) {
             const auto container = event.value(QStringLiteral("container")).toObject();
             if (change == QStringLiteral("focus")) {
@@ -578,6 +597,17 @@ void I3IpcClient::setFocusedContainerId(qint64 containerId)
 
     m_focusedContainerId = containerId;
     emit focusedContainerChanged(containerId);
+}
+
+void I3IpcClient::setBindingMode(const QString &mode)
+{
+    const QString newMode = mode.isEmpty() ? QStringLiteral("default") : mode;
+    if (m_bindingMode == newMode) {
+        return;
+    }
+
+    m_bindingMode = newMode;
+    emit bindingModeChanged();
 }
 
 bool I3IpcClient::supportsSwayInputs() const

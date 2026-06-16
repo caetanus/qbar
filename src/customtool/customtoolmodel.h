@@ -50,6 +50,8 @@ public:
 
 public slots:
     void refresh();
+    // Runs a waybar on-click/on-scroll command via `sh -c`, detached.
+    Q_INVOKABLE void runAction(const QString &command);
 
     void setCommand(const QString &command);
     void setArguments(const QVariantList &arguments);

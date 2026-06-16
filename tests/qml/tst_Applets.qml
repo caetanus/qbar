@@ -44,6 +44,7 @@ TestCase {
         id: i3Ipc
         property string currentWindowTitle: "Focused window"
         property string currentKeyboardLayout: "br"
+        property string bindingMode: "default"
     }
 
     QtObject {
@@ -153,30 +154,36 @@ TestCase {
         "custom/test": {
             "command": "",
             "interval": 60,
-            "return-type": "json"
+            "return-type": "json",
+            "format": "{} ({percentage}%)",
+            "format-icons": {
+                "up": "▲",
+                "down": "▼"
+            }
         }
     })
 
     Item {
         id: harness
         width: 900
-        height: 500
+        height: 530
 
         Applets.Workspaces { id: workspaces; y: 0 }
-        Applets.CPU { id: cpu; y: 32 }
-        Applets.Memory { id: memory; y: 64 }
-        Applets.Network { id: network; y: 96 }
-        Applets.Title { id: title; y: 128; barWidth: 420 }
-        Applets.Caffeine { id: caffeine; y: 160 }
-        Applets.Brightness { id: brightness; y: 192 }
-        Applets.XInput { id: xinput; y: 224 }
-        Applets.NetworkManager { id: networkManager; y: 256 }
-        Applets.Temperature { id: temperature; y: 288 }
-        Applets.Sound { id: sound; y: 320 }
-        Applets.Battery { id: battery; y: 352 }
-        Applets.Clock { id: clock; y: 384 }
-        Applets.Tray { id: tray; y: 416 }
-        Applets.CustomTool { id: customTool; y: 448; toolId: "custom/test" }
+        Applets.I3Mode { id: i3Mode; y: 32 }
+        Applets.CPU { id: cpu; y: 64 }
+        Applets.Memory { id: memory; y: 96 }
+        Applets.Network { id: network; y: 128 }
+        Applets.Title { id: title; y: 160; barWidth: 420 }
+        Applets.Caffeine { id: caffeine; y: 192 }
+        Applets.Brightness { id: brightness; y: 224 }
+        Applets.XInput { id: xinput; y: 256 }
+        Applets.NetworkManager { id: networkManager; y: 288 }
+        Applets.Temperature { id: temperature; y: 320 }
+        Applets.Sound { id: sound; y: 352 }
+        Applets.Battery { id: battery; y: 384 }
+        Applets.Clock { id: clock; y: 416 }
+        Applets.Tray { id: tray; y: 448 }
+        Applets.CustomTool { id: customTool; y: 480; toolId: "custom/test" }
     }
 
     function assertApplet(item, name) {
@@ -211,5 +218,32 @@ TestCase {
         compare(network.formatRate(800), "0.8 K/s")
         clock.setFormatIndex(clock.formatIndex + 1)
         verify(clock.width >= 1)
+    }
+
+    function test_custom_tool_reads_format_from_config() {
+        compare(customTool.toolModel.format, "{} ({percentage}%)",
+            "CustomTool should read 'format' from customTools config")
+        compare(customTool.toolModel.formatIcons["up"], "▲",
+            "CustomTool should read 'format-icons' from customTools config")
+    }
+
+    function test_i3_mode_hidden_in_default_mode() {
+        i3Ipc.bindingMode = "default"
+        compare(i3Mode.height, theme.height, "I3Mode should use bar height")
+        compare(i3Mode.active, false, "I3Mode should be inactive in the default binding mode")
+        compare(i3Mode.width, 0, "I3Mode should occupy no width in the default binding mode")
+    }
+
+    function test_i3_mode_visible_in_resize_mode() {
+        i3Ipc.bindingMode = "resize"
+        compare(i3Mode.modeName, "resize", "I3Mode should reflect i3Ipc.bindingMode")
+        compare(i3Mode.active, true, "I3Mode should be active outside of the default binding mode")
+        verify(i3Mode.width >= 1, "I3Mode should have a positive width outside of the default binding mode")
+
+        i3Ipc.bindingMode = "default"
+        compare(i3Mode.modeName, "default", "I3Mode should reflect i3Ipc.bindingMode going back to default")
+        compare(i3Mode.active, false, "I3Mode should become inactive again after leaving the binding mode")
+        compare(i3Mode.preferredWidth, 0, "I3Mode preferredWidth should return to 0 after leaving the binding mode")
+        compare(i3Mode.width, 0, "I3Mode should occupy no width again after leaving the binding mode")
     }
 }

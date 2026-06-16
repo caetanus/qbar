@@ -10,6 +10,8 @@ Item {
 
     signal activated()
 
+    // When Caps Lock is on, the layout text is shown uppercased as the indicator.
+    property bool capsActive: capsLock ? capsLock.active : false
     property string layoutName: i3Ipc ? i3Ipc.currentKeyboardLayout : ""
     property string shortLayout: {
         if (layoutName.length === 0) {
@@ -35,7 +37,8 @@ Item {
         color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : "#101418"
         font.family: cssStyle["font-family"] || theme.fontFamily
         font.pointSize: theme.fontSize
-        text: root.shortLayout
+        font.bold: root.capsActive
+        text: root.capsActive ? root.shortLayout.toUpperCase() : root.shortLayout
     }
 
     MouseArea {

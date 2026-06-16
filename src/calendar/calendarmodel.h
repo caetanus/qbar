@@ -79,13 +79,11 @@ private:
                                     gpointer user_data,
                                     GCancellable *cancellable,
                                     GError **error);
-    static QDateTime parseCacheTimestamp(const QString &value);
-    static bool parseCacheIcalRange(const QString &rawObject, QDateTime *start, QDateTime *end, bool *allDay);
-    static QString sourceLabelForUid(const QString &sourceUid);
-    static QString cacheDbPathForUid(const QString &sourceUid);
-    static QList<EventItem> loadCachedEventsForSource(const QString &sourceUid,
-                                                     const QDateTime &windowStart,
-                                                     const QDateTime &windowEnd);
+    // Our own sqlite cache (~/.cache/qbar/calendar.db), populated from the
+    // libecal online refresh — we never read evolution's private cache.
+    static QString ourCacheDbPath();
+    static QList<EventItem> loadEventsFromCache();
+    static void persistEventsToCache(const QList<EventItem> &events);
 
     QList<EventItem> m_allEvents;
     QVariantList m_selectedDayEvents;

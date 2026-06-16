@@ -7,6 +7,9 @@
 #include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDBusObjectPath>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QDBusReply>
 #include <QDBusVariant>
 #include <QBuffer>
@@ -812,14 +815,32 @@ void StatusNotifierModel::refreshItem(int row)
         return;
     }
 
+    // Async GetAll: a hung tray app must not block the GUI for the D-Bus timeout
+    // (~25s). The item is re-located by service+path when the reply arrives.
+    const QString service = m_items.at(row).service;
+    const QString path = m_items.at(row).path;
+    QDBusMessage message = QDBusMessage::createMethodCall(service, path,
+                                                          QString::fromLatin1(propertiesInterface),
+                                                          QStringLiteral("GetAll"));
+    message << QString::fromLatin1(itemInterface);
+
+    auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, service, path](QDBusPendingCallWatcher *self) {
+        const QDBusPendingReply<QVariantMap> reply = *self;
+        self->deleteLater();
+        applyItemProperties(service, path, reply.isError() ? QVariantMap() : reply.value());
+    });
+}
+
+void StatusNotifierModel::applyItemProperties(const QString &service, const QString &path, const QVariantMap &values)
+{
+    const int row = itemRow(service, path);
+    if (row < 0 || row >= m_items.size()) {
+        return;
+    }
+
     Item &item = m_items[row];
-    QDBusInterface properties(item.service,
-                              item.path,
-                              QString::fromLatin1(propertiesInterface),
-                              QDBusConnection::sessionBus());
-    const QDBusReply<QVariantMap> reply = properties.call(QStringLiteral("GetAll"), QString::fromLatin1(itemInterface));
-    if (reply.isValid()) {
-        const QVariantMap values = reply.value();
+    if (!values.isEmpty()) {
         item.title = propertyValue(values, QStringLiteral("Title")).toString();
         item.iconName = propertyValue(values, QStringLiteral("IconName")).toString();
         item.iconPixmapSource = imageDataUrl(propertyValue(values, QStringLiteral("IconPixmap")));

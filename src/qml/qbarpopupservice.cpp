@@ -7,8 +7,10 @@
 #include <QMouseEvent>
 #include <QGuiApplication>
 #include <QMenu>
+#include <QQmlComponent>
 #include <QQuickItem>
 #include <QQuickView>
+#include <QQuickWindow>
 #include <QScreen>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -16,25 +18,12 @@
 #include <QWidget>
 #include <QTimer>
 
-namespace {
-
-bool isInObjectTree(QObject *candidate, QObject *root)
-{
-    for (QObject *object = candidate; object != nullptr; object = object->parent()) {
-        if (object == root) {
-            return true;
-        }
-    }
-    return false;
-}
-
-} // namespace
-
 QBarPopupService::QBarPopupService(QQmlEngine *engine,
                                    QVariantMap theme,
                                    QObject *workspaceModel,
                                    QObject *ipcClient,
                                    QObject *trayModel,
+                                   QObject *cssTheme,
                                    QObject *parent)
     : QObject(parent)
     , m_engine(engine)
@@ -42,13 +31,11 @@ QBarPopupService::QBarPopupService(QQmlEngine *engine,
     , m_workspaceModel(workspaceModel)
     , m_ipcClient(ipcClient)
     , m_trayModel(trayModel)
+    , m_cssTheme(cssTheme)
 {
-    qApp->installEventFilter(this);
-    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
-        if (state != Qt::ApplicationActive) {
-            closeAll();
-        }
-    });
+    // Dismissal is owned by the overlay's backdrop (DismissOverlay → closeAll)
+    // and by WM workspace-focus changes (wired in BarWindow). No global event
+    // filter or app-focus tracking: the overlay is a plain focusless window.
 }
 
 QBarPopupService::~QBarPopupService()
@@ -72,60 +59,81 @@ QString QBarPopupService::openPopup(const QUrl &source,
     forceClosePopup(id);
     ensureDismissOverlay();
 
-    auto *view = createPopupView(source,
-                                 properties,
-                                 id,
-                                 Qt::Tool | Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint,
-                                 QStringLiteral("QBar Popup"));
-    if (view == nullptr) {
+    if (m_overlayPopupLayer == nullptr) {
         destroyDismissOverlay();
         return {};
     }
 
-    QObject *popupTarget = view->rootObject();
-    if (popupTarget != nullptr) {
-        if (QObject *loader = popupTarget->findChild<QObject *>(QStringLiteral("qbarPopupLoader"))) {
-            QObject *loaded = loader->property("item").value<QObject *>();
-            if (loaded != nullptr) {
-                popupTarget = loaded;
-            }
+    // One popup at a time: opening a popup dismisses any other open popup. The
+    // destroyed handler removes them from m_popups and emits popupClosed; we
+    // keep the overlay alive since a new popup is taking their place.
+    const auto existingIds = m_popups.keys();
+    for (const QString &existingId : existingIds) {
+        if (QQuickItem *old = m_popups.value(existingId)) {
+            old->deleteLater();
         }
     }
-    const int popupWidth = width > 0 ? width : (popupTarget != nullptr ? popupTarget->property("implicitWidth").toInt() : 240);
-    const int popupHeight = height > 0 ? height : (popupTarget != nullptr ? popupTarget->property("implicitHeight").toInt() : 160);
-    view->resize(1, 1);
+
+    // Build the popup content (PopupShell + its loaded applet) as a child item
+    // of the overlay's popup layer, with a dedicated context carrying the
+    // per-popup ids/data on top of the shared theme/model context properties.
+    auto *context = new QQmlContext(m_engine->rootContext());
+    applyPopupContext(context);
+    context->setContextProperty(QStringLiteral("popupId"), id);
+    context->setContextProperty(QStringLiteral("popupData"), properties);
+    context->setContextProperty(QStringLiteral("contentSource"), source);
+
+    QQmlComponent component(m_engine, popupShellSource());
+    auto *shell = qobject_cast<QQuickItem *>(component.create(context));
+    if (shell == nullptr) {
+        qWarning() << "[popup] failed to create shell" << id << component.errorString();
+        delete context;
+        if (m_popups.isEmpty()) {
+            destroyDismissOverlay();
+        }
+        return {};
+    }
+    context->setParent(shell);
+    shell->setParentItem(m_overlayPopupLayer);
+
+    QObject *popupTarget = shell;
+    if (QObject *loader = shell->findChild<QObject *>(QStringLiteral("qbarPopupLoader"))) {
+        if (QObject *loaded = loader->property("item").value<QObject *>()) {
+            popupTarget = loaded;
+        }
+    }
+    const int popupWidth = width > 0 ? width : popupTarget->property("implicitWidth").toInt();
+    const int popupHeight = height > 0 ? height : popupTarget->property("implicitHeight").toInt();
 
     if (x == 0 && y == 0) {
         const QPoint position = QCursor::pos();
         x = position.x();
         y = position.y();
     }
-    view->setPosition(x, y);
+    // Args are global screen coordinates; the overlay surface starts at the
+    // usable area's top-left (below a top bar), so subtract that origin.
+    shell->setX(x - m_overlayOrigin.x());
+    if (m_barBottom && m_barWindow != nullptr && m_barWindow->screen() != nullptr) {
+        // A bottom bar's window has no reliable global Y on Wayland, so the
+        // anchor Y would land the popup near the top of the screen. Pin it to the
+        // bar's edge instead: the overlay spans the screen down to the bar's top,
+        // so place the popup flush against that bottom edge, growing upward.
+        const int overlayHeight = m_barWindow->screen()->geometry().height() - m_barHeight;
+        shell->setY(overlayHeight - popupHeight);
+    } else {
+        shell->setY(y - m_overlayOrigin.y());
+    }
 
-    m_popups.insert(id, Popup{view});
-    m_popupFocusBaseline = m_ipcClient != nullptr
-        ? m_ipcClient->property("focusedContainerId").toLongLong()
-        : -1;
-    m_lastPopupFocusEvent = -1;
-    m_armedForContainerActivation = false;
-    connect(view, &QObject::destroyed, this, [this, id]() {
+    m_popups.insert(id, shell);
+    connect(shell, &QObject::destroyed, this, [this, id]() {
         m_popups.remove(id);
-        if (m_popups.isEmpty()) {
-            m_popupFocusBaseline = -1;
-            m_lastPopupFocusEvent = -1;
-            m_armedForContainerActivation = false;
-        }
         emit popupClosed(id);
     });
 
-    view->show();
-    view->raise();
-    if (auto *root = view->rootObject()) {
-        root->setProperty("animateBounds", true);
-        root->setProperty("targetWidth", popupWidth);
-        root->setProperty("targetHeight", popupHeight);
-        root->setProperty("popupClosing", false);
-    }
+    shell->setProperty("animateBounds", true);
+    shell->setProperty("targetWidth", popupWidth);
+    shell->setProperty("targetHeight", popupHeight);
+    shell->setProperty("popupClosing", false);
     return id;
 }
 
@@ -199,25 +207,14 @@ QString QBarPopupService::openTooltip(const QUrl &source,
 
 void QBarPopupService::updatePopup(const QString &id, const QVariantMap &properties)
 {
-    if (!m_popups.contains(id)) {
+    QQuickItem *shell = m_popups.value(id);
+    if (shell == nullptr) {
         qWarning() << "[popup] update ignored (missing id)" << id << properties;
         return;
     }
 
-    const auto popup = m_popups.value(id);
-    if (popup.view == nullptr) {
-        qWarning() << "[popup] update ignored (missing view)" << id << properties;
-        return;
-    }
-
-    auto *root = popup.view->rootObject();
-    if (root == nullptr) {
-        qWarning() << "[popup] update ignored (missing root)" << id << properties;
-        return;
-    }
-
-    QObject *target = root;
-    if (QObject *loader = root->findChild<QObject *>(QStringLiteral("qbarPopupLoader"))) {
+    QObject *target = shell;
+    if (QObject *loader = shell->findChild<QObject *>(QStringLiteral("qbarPopupLoader"))) {
         QObject *loaded = loader->property("item").value<QObject *>();
         if (loaded != nullptr) {
             target = loaded;
@@ -230,7 +227,8 @@ void QBarPopupService::updatePopup(const QString &id, const QVariantMap &propert
 
     const int width = qMax(1, target->property("implicitWidth").toInt());
     const int height = qMax(1, target->property("implicitHeight").toInt());
-    popup.view->resize(width, height);
+    shell->setProperty("targetWidth", width);
+    shell->setProperty("targetHeight", height);
 
     qWarning() << "[popup] updated" << id << properties << "size:" << width << height;
 }
@@ -275,19 +273,17 @@ void QBarPopupService::updateTooltip(const QString &id, const QVariantMap &prope
 
 void QBarPopupService::closePopup(const QString &id)
 {
-    const auto popup = m_popups.value(id);
-    if (popup.view == nullptr) {
+    QQuickItem *shell = m_popups.value(id);
+    if (shell == nullptr) {
         return;
     }
 
-    if (popup.view->property("_qbarClosing").toBool()) {
+    if (shell->property("_qbarClosing").toBool()) {
         return;
     }
 
-    popup.view->setProperty("_qbarClosing", true);
-    if (auto *root = popup.view->rootObject()) {
-        root->setProperty("popupClosing", true);
-    }
+    shell->setProperty("_qbarClosing", true);
+    shell->setProperty("popupClosing", true);
     QTimer::singleShot(popupAnimationDuration(), this, [this, id]() {
         forceClosePopup(id);
     });
@@ -354,79 +350,7 @@ void QBarPopupService::closeAll()
         m_openMenu = nullptr;
     }
 
-    m_popupFocusBaseline = -1;
-    m_lastPopupFocusEvent = -1;
-    m_armedForContainerActivation = false;
     destroyDismissOverlay();
-}
-
-void QBarPopupService::handleExternalFocusChanged(qint64 containerId)
-{
-    if (m_popups.isEmpty() && m_openMenu == nullptr) {
-        m_popupFocusBaseline = containerId;
-        return;
-    }
-
-    if (containerId < 0) {
-        return;
-    }
-
-    if (m_popupFocusBaseline < 0) {
-        m_popupFocusBaseline = containerId;
-        return;
-    }
-
-    if (containerId != m_popupFocusBaseline) {
-        closeAll();
-    }
-}
-
-void QBarPopupService::handleContainerFocusEvent(qint64 containerId)
-{
-    if (m_popups.isEmpty() && m_openMenu == nullptr) {
-        m_popupFocusBaseline = containerId;
-        m_lastPopupFocusEvent = -1;
-        m_armedForContainerActivation = false;
-        return;
-    }
-
-    if (containerId < 0) {
-        return;
-    }
-
-    if (!m_armedForContainerActivation) {
-        m_lastPopupFocusEvent = containerId;
-        m_armedForContainerActivation = true;
-        return;
-    }
-
-    closeAll();
-}
-
-bool QBarPopupService::eventFilter(QObject *object, QEvent *event)
-{
-    if (event == nullptr) {
-        return QObject::eventFilter(object, event);
-    }
-
-    switch (event->type()) {
-    case QEvent::MouseButtonPress:
-    case QEvent::MouseButtonDblClick:
-    case QEvent::Wheel:
-    case QEvent::TouchBegin:
-        if (isManagedPopupObject(object)) {
-            return QObject::eventFilter(object, event);
-        }
-
-        if (!m_popups.isEmpty() || !m_tooltips.isEmpty()) {
-            closeAll();
-        }
-        break;
-    default:
-        break;
-    }
-
-    return QObject::eventFilter(object, event);
 }
 
 QString QBarPopupService::openMenu(const QVariantList &items, int x, int y, const QString &requestedId)
@@ -486,10 +410,9 @@ int QBarPopupService::popupAnimationDuration() const
 
 void QBarPopupService::forceClosePopup(const QString &id)
 {
-    const auto popup = m_popups.take(id);
-    if (popup.view != nullptr) {
-        popup.view->close();
-        popup.view->deleteLater();
+    QQuickItem *shell = m_popups.take(id);
+    if (shell != nullptr) {
+        shell->deleteLater();
     }
     if (m_popups.isEmpty() && m_openMenu == nullptr) {
         destroyDismissOverlay();
@@ -513,24 +436,67 @@ void QBarPopupService::ensureDismissOverlay()
     }
 
     auto *view = new QQuickView(m_engine, nullptr);
-    view->setTitle(QStringLiteral("QBar Popup Dismiss Overlay"));
+    view->setTitle(QStringLiteral("QBar Popup Overlay"));
     view->setFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::NoDropShadowWindowHint);
     view->setColor(Qt::transparent);
     view->setResizeMode(QQuickView::SizeRootObjectToView);
+    // Marks this window for the layer-shell integration so it spans the whole
+    // output below the bar (not the bar's own 28px geometry). Popups are drawn
+    // as child items inside it — no separate per-popup window.
+    view->setProperty("qbarOverlay", true);
+    view->setProperty("qbarOverlayKeyboard", m_overlayKeyboardFocus);
+
+    // Mirror the owning bar's geometry onto the overlay so the layer-shell
+    // integration sizes/anchors the backdrop per-bar (multi-monitor, top+bottom),
+    // falling back to the QBAR_LAYER_* env when there is no bar window.
+    const QVariant heightProp = m_barWindow != nullptr ? m_barWindow->property("qbarBarHeight") : QVariant();
+    const QVariant positionProp = m_barWindow != nullptr ? m_barWindow->property("qbarBarPosition") : QVariant();
+    const QVariant exclusiveProp = m_barWindow != nullptr ? m_barWindow->property("qbarBarExclusive") : QVariant();
+    const bool bottomBar = positionProp.isValid()
+        ? positionProp.toString() == QLatin1String("bottom")
+        : qgetenv("QBAR_LAYER_POSITION") == "bottom";
+    const bool exclusive = exclusiveProp.isValid()
+        ? exclusiveProp.toBool()
+        : qgetenv("QBAR_LAYER_EXCLUSIVE") != "0";
+    const int rawBarHeight = heightProp.isValid()
+        ? heightProp.toInt()
+        : qEnvironmentVariableIntValue("QBAR_LAYER_HEIGHT");
+    const int barHeight = rawBarHeight > 0 ? rawBarHeight : 28;
+    m_barBottom = bottomBar;
+    m_barHeight = barHeight;
+    view->setProperty("qbarBarHeight", barHeight);
+    view->setProperty("qbarBarPosition", QString::fromLatin1(bottomBar ? "bottom" : "top"));
+    view->setProperty("qbarBarExclusive", exclusive);
+
+    applyPopupContext(view->rootContext());
     view->setSource(QUrl(QStringLiteral("qrc:/qbar/DismissOverlay.qml")));
 
-    if (auto *screen = QGuiApplication::primaryScreen()) {
-        view->setGeometry(screen->virtualGeometry());
+    // Put the overlay on the same screen as its bar so the layer surface targets
+    // the right output; fall back to the primary screen.
+    QScreen *screen = m_barWindow != nullptr ? m_barWindow->screen() : nullptr;
+    if (screen == nullptr) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    if (screen != nullptr) {
+        view->setScreen(screen);
+        const QRect area = screen->availableGeometry();
+        view->setGeometry(area);
+        // The overlay layer-surface starts below the bar — its top margin equals
+        // the bar height. availableGeometry on Wayland may report (0,0) instead
+        // of (0, barHeight), which would add an extra bar-height gap to every
+        // popup, so derive the origin from the same per-bar geometry the layer
+        // margin uses.
+        const int topInset = (!bottomBar && exclusive) ? barHeight : 0;
+        m_overlayOrigin = QPoint(area.left(), topInset);
     }
 
     if (auto *root = view->rootObject()) {
         connect(root, SIGNAL(dismissed()), this, SLOT(closeAll()));
+        m_overlayPopupLayer = root->property("popupLayer").value<QQuickItem *>();
     }
 
-    if (auto *transient = popupTransientParent()) {
-        view->setTransientParent(transient);
-    }
-
+    // No transient parent: this is a standalone full-output layer surface, not
+    // an xdg_popup anchored to the bar.
     m_dismissOverlay = view;
     view->show();
     view->raise();
@@ -567,43 +533,21 @@ QWindow *QBarPopupService::popupTransientParent() const
     return qobject_cast<QWindow *>(parent());
 }
 
-bool QBarPopupService::isManagedPopupObject(QObject *object) const
+void QBarPopupService::applyPopupContext(QQmlContext *context)
 {
-    if (object == nullptr) {
-        return false;
-    }
-
-    for (const auto &popup : m_popups) {
-        if (popup.view != nullptr && (isInObjectTree(object, popup.view) || isInObjectTree(object, popup.view->rootObject()))) {
-            return true;
-        }
-    }
-
-    for (const auto &tooltip : m_tooltips) {
-        if (tooltip.view != nullptr && (isInObjectTree(object, tooltip.view) || isInObjectTree(object, tooltip.view->rootObject()))) {
-            return true;
-        }
-    }
-
-    if (m_openMenu != nullptr && isInObjectTree(object, m_openMenu)) {
-        return true;
-    }
-
-    return false;
-}
-
-void QBarPopupService::applyPopupContext(QQuickView *view)
-{
-    view->rootContext()->setContextProperty(QStringLiteral("theme"), m_theme);
-    view->rootContext()->setContextProperty(QStringLiteral("qbarPopups"), this);
+    context->setContextProperty(QStringLiteral("theme"), m_theme);
+    context->setContextProperty(QStringLiteral("qbarPopups"), this);
     if (m_workspaceModel != nullptr) {
-        view->rootContext()->setContextProperty(QStringLiteral("workspaceModel"), m_workspaceModel);
+        context->setContextProperty(QStringLiteral("workspaceModel"), m_workspaceModel);
     }
     if (m_ipcClient != nullptr) {
-        view->rootContext()->setContextProperty(QStringLiteral("i3Ipc"), m_ipcClient);
+        context->setContextProperty(QStringLiteral("i3Ipc"), m_ipcClient);
     }
     if (m_trayModel != nullptr) {
-        view->rootContext()->setContextProperty(QStringLiteral("trayModel"), m_trayModel);
+        context->setContextProperty(QStringLiteral("trayModel"), m_trayModel);
+    }
+    if (m_cssTheme != nullptr) {
+        context->setContextProperty(QStringLiteral("cssTheme"), m_cssTheme);
     }
 }
 
@@ -622,7 +566,7 @@ QQuickView *QBarPopupService::createPopupView(const QUrl &source,
     view->setTitle(QStringLiteral("%1 %2").arg(titlePrefix, id));
     view->setColor(Qt::transparent);
     view->setResizeMode(QQuickView::SizeViewToRootObject);
-    applyPopupContext(view);
+    applyPopupContext(view->rootContext());
     view->rootContext()->setContextProperty(QStringLiteral("popupId"), id);
     view->rootContext()->setContextProperty(QStringLiteral("popupData"), properties);
     view->rootContext()->setContextProperty(QStringLiteral("contentSource"), source);

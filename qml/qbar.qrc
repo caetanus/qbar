@@ -2,11 +2,16 @@
   <qresource prefix="/">
     <file>Bar.qml</file>
     <file>applets/Battery.qml</file>
+    <file>applets/Bluetooth.qml</file>
     <file>applets/Caffeine.qml</file>
+    <file>applets/Disk.qml</file>
+    <file>applets/PowerProfiles.qml</file>
     <file>applets/CPU.qml</file>
     <file>applets/Clock.qml</file>
     <file>applets/Brightness.qml</file>
     <file>applets/CustomTool.qml</file>
+    <file>applets/I3Mode.qml</file>
+    <file>applets/Media.qml</file>
     <file>applets/Memory.qml</file>
     <file>applets/Network.qml</file>
     <file>applets/NetworkManager.qml</file>
@@ -20,6 +25,9 @@
     <file>qbar/Popup.qml</file>
     <file>qbar/DismissOverlay.qml</file>
     <file>qbar/PopupShell.qml</file>
+    <file>qbar/CssFill.qml</file>
+    <file>qbar/CssDropShadow.qml</file>
+    <file>qbar/MarqueeText.qml</file>
     <file>qbar/Tooltip.qml</file>
     <file>qbar/Contrast.js</file>
     <file>icons/caffeine-cup-empty-white.svg</file>
@@ -27,6 +35,7 @@
     <file>popups/BatteryPopup.qml</file>
     <file>popups/CalendarPopup.qml</file>
     <file>popups/CPUPopup.qml</file>
+    <file>popups/MediaPopup.qml</file>
     <file>popups/CPUTooltip.qml</file>
     <file>popups/TooltipPopup.qml</file>
   </qresource>

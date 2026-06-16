@@ -19,12 +19,14 @@ public:
     QString currentWindowTitle() const override;
     QString currentKeyboardLayout() const override;
     qint64 focusedContainerId() const override;
+    QString bindingMode() const override;
 
 public slots:
     void start() override;
     void runCommand(const QString &command) override;
     void activateWorkspace(const QString &workspaceName) override;
     void activateRelativeWorkspace(int direction) override;
+    void activateWindowByPid(qint64 pid) override;
     void cycleKeyboardLayout() override;
     void requestTreeSnapshot() override;
 
@@ -58,6 +60,7 @@ private:
     void setCurrentWindowTitle(const QString &title);
     void setCurrentKeyboardLayout(const QString &layout);
     void setFocusedContainerId(qint64 containerId);
+    void setBindingMode(const QString &mode);
     bool supportsSwayInputs() const;
     QString socketPath() const;
 
@@ -65,6 +68,7 @@ private:
     QString m_currentWindowTitle;
     QString m_currentKeyboardLayout;
     qint64 m_focusedContainerId = -1;
+    QString m_bindingMode = QStringLiteral("default");
     QLocalSocket m_commandSocket;
     QLocalSocket m_eventSocket;
     QByteArray m_commandBuffer;

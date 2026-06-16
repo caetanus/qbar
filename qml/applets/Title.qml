@@ -1,4 +1,5 @@
 import QtQuick
+import "qrc:/qbar" as QBar
 
 Item {
     id: root
@@ -39,6 +40,12 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         leftPadding: root.textPadding
         rightPadding: root.textPadding
+
+        readonly property var dropShadow: cssTheme && cssTheme.loaded
+            ? cssTheme.parseBoxShadow(root.cssStyle["text-shadow"] || "") : ({})
+        layer.enabled: dropShadow.color !== undefined
+        layer.effect: QBar.CssDropShadow { shadow: titleText.dropShadow }
+
         color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
         horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight

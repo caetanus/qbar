@@ -17,6 +17,7 @@
 #include <QPointer>
 #include <QRegularExpression>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QTime>
 #include <QTimeZone>
 #include <QThreadPool>
@@ -56,21 +57,6 @@ QString eventLocation(ICalComponent *icomp)
         return QString::fromUtf8(location);
     }
     return {};
-}
-
-QString textFromColumn(sqlite3_stmt *stmt, int column)
-{
-    const unsigned char *text = sqlite3_column_text(stmt, column);
-    if (text == nullptr) {
-        return {};
-    }
-    return QString::fromUtf8(reinterpret_cast<const char *>(text));
-}
-
-QString firstMatch(const QString &value, const QRegularExpression &expression)
-{
-    const QRegularExpressionMatch match = expression.match(value);
-    return match.hasMatch() ? match.captured(1).trimmed() : QString();
 }
 
 } // namespace
@@ -146,38 +132,16 @@ void CalendarModel::startCacheRefresh()
         CalendarLoadResult result;
         result.generation = generation;
 
-        QList<EventItem> events;
-        int sourceCount = 0;
-
-        const QDate today = QDate::currentDate();
-        const QDate startMonth = QDate(today.year(), today.month(), 1).addMonths(-1);
-        const QDate endMonth = startMonth.addMonths(3);
-        const QDateTime startWindow(startMonth, QTime(0, 0), QTimeZone::systemTimeZone());
-        const QDateTime endWindow(endMonth, QTime(0, 0), QTimeZone::systemTimeZone());
-
-        QDirIterator it(QDir::homePath() + QStringLiteral("/.cache/evolution/calendar"),
-                        QStringList() << QStringLiteral("cache.db"),
-                        QDir::Files,
-                        QDirIterator::Subdirectories);
-
-        while (it.hasNext()) {
-            const QString dbPath = it.next();
-            const QString sourceUid = QFileInfo(dbPath).dir().dirName();
-            const QList<EventItem> sourceEvents = loadCachedEventsForSource(sourceUid, startWindow, endWindow);
-            if (!sourceEvents.isEmpty()) {
-                events.append(sourceEvents);
-            }
-            ++sourceCount;
-        }
-
+        // Read from our own sqlite cache (populated by the last online refresh).
+        QList<EventItem> events = loadEventsFromCache();
         std::sort(events.begin(), events.end(), [](const EventItem &a, const EventItem &b) {
             return a.start < b.start;
         });
 
-        result.available = sourceCount > 0;
-        result.statusText = sourceCount > 0
-            ? QStringLiteral("%1 cached calendars, %2 events").arg(sourceCount).arg(events.size())
-            : QStringLiteral("No cached calendar sources");
+        result.available = !events.isEmpty();
+        result.statusText = result.available
+            ? QStringLiteral("%1 cached events").arg(events.size())
+            : QStringLiteral("No cached calendar data");
         result.events = std::move(events);
 
         if (!guard) {
@@ -358,132 +322,36 @@ void CalendarModel::applyOnlineRefreshResult(int generation, bool available, con
     m_onlineRefreshInFlight = false;
     rebuildDerivedData();
 
+    if (available) {
+        // Persist to our own sqlite cache off the GUI thread for the next startup.
+        const QList<EventItem> snapshot = m_allEvents;
+        QThreadPool::globalInstance()->start(QRunnable::create([snapshot]() {
+            persistEventsToCache(snapshot);
+        }));
+    }
+
     if (m_onlineRefreshQueued) {
         m_onlineRefreshQueued = false;
         startOnlineRefresh(false);
     }
 }
 
-QDateTime CalendarModel::parseCacheTimestamp(const QString &value)
+QString CalendarModel::ourCacheDbPath()
 {
-    const QString trimmed = value.trimmed();
-    if (trimmed.isEmpty()) {
-        return {};
-    }
-
-    if (trimmed.length() == 8) {
-        const QDate date = QDate::fromString(trimmed, QStringLiteral("yyyyMMdd"));
-        if (date.isValid()) {
-            return QDateTime(date, QTime(0, 0), QTimeZone::systemTimeZone());
-        }
-    }
-
-    if (trimmed.endsWith(QLatin1Char('Z')) && trimmed.length() == 16) {
-        QDateTime dateTime = QDateTime::fromString(trimmed, QStringLiteral("yyyyMMdd'T'HHmmss'Z'"));
-        if (dateTime.isValid()) {
-            dateTime.setTimeZone(QTimeZone::utc());
-            return dateTime.toLocalTime();
-        }
-    }
-
-    if (trimmed.contains(QLatin1Char('T'))) {
-        const QString token = trimmed.left(15);
-        QDateTime dateTime = QDateTime::fromString(token, QStringLiteral("yyyyMMdd'T'HHmmss"));
-        if (dateTime.isValid()) {
-            return dateTime;
-        }
-    }
-
-    if (trimmed.length() == 14) {
-        QDateTime dateTime = QDateTime::fromString(trimmed, QStringLiteral("yyyyMMddHHmmss"));
-        if (dateTime.isValid()) {
-            return dateTime;
-        }
-    }
-
-    return {};
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation);
+    return QDir(base).filePath(QStringLiteral("qbar/calendar.db"));
 }
 
-bool CalendarModel::parseCacheIcalRange(const QString &rawObject, QDateTime *start, QDateTime *end, bool *allDay)
-{
-    const QRegularExpression startPattern(QStringLiteral(R"(DTSTART(?:;[^:\r\n]*)?:(\d{8}(?:T\d{6}Z?)?))"));
-    const QRegularExpression endPattern(QStringLiteral(R"(DTEND(?:;[^:\r\n]*)?:(\d{8}(?:T\d{6}Z?)?))"));
-
-    const QRegularExpressionMatch startMatch = startPattern.match(rawObject);
-    if (startMatch.hasMatch()) {
-        const QString token = startMatch.captured(1);
-        if (allDay != nullptr) {
-            *allDay = !token.contains(QLatin1Char('T'));
-        }
-        if (start != nullptr) {
-            *start = parseCacheTimestamp(token);
-        }
-    }
-
-    const QRegularExpressionMatch endMatch = endPattern.match(rawObject);
-    if (endMatch.hasMatch() && end != nullptr) {
-        *end = parseCacheTimestamp(endMatch.captured(1));
-    }
-
-    return start != nullptr && start->isValid();
-}
-
-QString CalendarModel::sourceLabelForUid(const QString &sourceUid)
-{
-    const QStringList searchRoots = {
-        QDir::homePath() + QStringLiteral("/.cache/evolution/sources"),
-        QDir::homePath() + QStringLiteral("/.config/evolution/sources"),
-    };
-
-    for (const QString &root : searchRoots) {
-        QDirIterator it(root,
-                        QStringList() << (sourceUid + QStringLiteral(".source")),
-                        QDir::Files,
-                        QDirIterator::Subdirectories);
-        if (!it.hasNext()) {
-            continue;
-        }
-
-        const QString sourcePath = it.next();
-        QSettings settings(sourcePath, QSettings::IniFormat);
-        settings.beginGroup(QStringLiteral("Data Source"));
-        QString label = settings.value(QStringLiteral("DisplayName")).toString().trimmed();
-        settings.endGroup();
-
-        if (label.isEmpty()) {
-            settings.beginGroup(QStringLiteral("GNOME Online Accounts"));
-            label = settings.value(QStringLiteral("Name")).toString().trimmed();
-            settings.endGroup();
-        }
-
-        if (!label.isEmpty()) {
-            return label;
-        }
-    }
-
-    return sourceUid;
-}
-
-QString CalendarModel::cacheDbPathForUid(const QString &sourceUid)
-{
-    return QDir::homePath()
-        + QStringLiteral("/.cache/evolution/calendar/")
-        + sourceUid
-        + QStringLiteral("/cache.db");
-}
-
-QList<CalendarModel::EventItem> CalendarModel::loadCachedEventsForSource(const QString &sourceUid,
-                                                                         const QDateTime &windowStart,
-                                                                         const QDateTime &windowEnd)
+QList<CalendarModel::EventItem> CalendarModel::loadEventsFromCache()
 {
     QList<EventItem> events;
-    const QString dbPath = cacheDbPathForUid(sourceUid);
-    if (!QFileInfo::exists(dbPath)) {
+    const QString path = ourCacheDbPath();
+    if (!QFileInfo::exists(path)) {
         return events;
     }
 
     sqlite3 *db = nullptr;
-    if (sqlite3_open_v2(dbPath.toUtf8().constData(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK || db == nullptr) {
+    if (sqlite3_open_v2(path.toUtf8().constData(), &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK || db == nullptr) {
         if (db != nullptr) {
             sqlite3_close(db);
         }
@@ -491,68 +359,74 @@ QList<CalendarModel::EventItem> CalendarModel::loadCachedEventsForSource(const Q
     }
 
     sqlite3_stmt *stmt = nullptr;
-    static const char *sql = "SELECT summary, location, occur_start, occur_end, ECacheOBJ FROM ECacheObjects WHERE ECacheState = 0";
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK || stmt == nullptr) {
-        sqlite3_close(db);
-        return events;
+    static const char *sql =
+        "SELECT source_label, title, location, url, start_secs, end_secs, all_day, cancelled FROM events";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK && stmt != nullptr) {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            EventItem event;
+            event.sourceLabel = QString::fromUtf8(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)));
+            event.title = QString::fromUtf8(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1)));
+            event.location = QString::fromUtf8(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2)));
+            event.url = QString::fromUtf8(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 3)));
+            event.start = QDateTime::fromSecsSinceEpoch(sqlite3_column_int64(stmt, 4));
+            event.end = QDateTime::fromSecsSinceEpoch(sqlite3_column_int64(stmt, 5));
+            event.allDay = sqlite3_column_int(stmt, 6) != 0;
+            event.cancelled = sqlite3_column_int(stmt, 7) != 0;
+            events.append(event);
+        }
+        sqlite3_finalize(stmt);
     }
-
-    const QString sourceLabel = sourceLabelForUid(sourceUid);
-
-    while (sqlite3_step(stmt) == SQLITE_ROW) {
-        EventItem event;
-        event.sourceLabel = sourceLabel;
-        event.title = textFromColumn(stmt, 0).trimmed();
-        if (event.title.isEmpty()) {
-            event.title = QStringLiteral("(untitled)");
-        }
-        event.location = textFromColumn(stmt, 1).trimmed();
-
-        const QString occurStart = textFromColumn(stmt, 2).trimmed();
-        const QString occurEnd = textFromColumn(stmt, 3).trimmed();
-        const QString rawObject = textFromColumn(stmt, 4);
-
-        event.start = parseCacheTimestamp(occurStart);
-        event.end = parseCacheTimestamp(occurEnd);
-        event.allDay = occurStart.length() == 8;
-
-        if (!event.start.isValid() || !event.end.isValid()) {
-            bool rawAllDay = false;
-            QDateTime rawStart;
-            QDateTime rawEnd;
-            if (parseCacheIcalRange(rawObject, &rawStart, &rawEnd, &rawAllDay)) {
-                if (!event.start.isValid()) {
-                    event.start = rawStart;
-                }
-                if (!event.end.isValid()) {
-                    event.end = rawEnd;
-                }
-                event.allDay = event.allDay || rawAllDay;
-            }
-        }
-
-        event.cancelled = rawObject.contains(QStringLiteral("STATUS:CANCELLED"), Qt::CaseInsensitive)
-            || rawObject.contains(QStringLiteral("STATUS;VALUE=TEXT:CANCELLED"), Qt::CaseInsensitive);
-        event.url = firstMatch(rawObject, QRegularExpression(QStringLiteral(R"(URL:(https?://[^\r\n]+))")));
-
-        if (!event.start.isValid()) {
-            continue;
-        }
-        if (!event.end.isValid() || event.end < event.start) {
-            event.end = event.start;
-        }
-
-        if (event.end < windowStart || event.start > windowEnd) {
-            continue;
-        }
-
-        events.push_back(event);
-    }
-
-    sqlite3_finalize(stmt);
     sqlite3_close(db);
-
     return events;
+}
+
+void CalendarModel::persistEventsToCache(const QList<EventItem> &events)
+{
+    const QString path = ourCacheDbPath();
+    QDir().mkpath(QFileInfo(path).path());
+
+    sqlite3 *db = nullptr;
+    if (sqlite3_open_v2(path.toUtf8().constData(), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr) != SQLITE_OK || db == nullptr) {
+        if (db != nullptr) {
+            sqlite3_close(db);
+        }
+        return;
+    }
+
+    sqlite3_exec(db,
+                 "CREATE TABLE IF NOT EXISTS events ("
+                 "source_label TEXT, title TEXT, location TEXT, url TEXT,"
+                 "start_secs INTEGER, end_secs INTEGER, all_day INTEGER, cancelled INTEGER)",
+                 nullptr, nullptr, nullptr);
+    sqlite3_exec(db, "DELETE FROM events", nullptr, nullptr, nullptr);
+    sqlite3_exec(db, "BEGIN TRANSACTION", nullptr, nullptr, nullptr);
+
+    sqlite3_stmt *stmt = nullptr;
+    static const char *sql =
+        "INSERT INTO events (source_label, title, location, url, start_secs, end_secs, all_day, cancelled)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) == SQLITE_OK && stmt != nullptr) {
+        for (const EventItem &event : events) {
+            const QByteArray label = event.sourceLabel.toUtf8();
+            const QByteArray title = event.title.toUtf8();
+            const QByteArray location = event.location.toUtf8();
+            const QByteArray url = event.url.toUtf8();
+            sqlite3_bind_text(stmt, 1, label.constData(), label.size(), SQLITE_TRANSIENT);
+            sqlite3_bind_text(stmt, 2, title.constData(), title.size(), SQLITE_TRANSIENT);
+            sqlite3_bind_text(stmt, 3, location.constData(), location.size(), SQLITE_TRANSIENT);
+            sqlite3_bind_text(stmt, 4, url.constData(), url.size(), SQLITE_TRANSIENT);
+            sqlite3_bind_int64(stmt, 5, event.start.isValid() ? event.start.toSecsSinceEpoch() : 0);
+            sqlite3_bind_int64(stmt, 6, event.end.isValid() ? event.end.toSecsSinceEpoch() : 0);
+            sqlite3_bind_int(stmt, 7, event.allDay ? 1 : 0);
+            sqlite3_bind_int(stmt, 8, event.cancelled ? 1 : 0);
+            sqlite3_step(stmt);
+            sqlite3_reset(stmt);
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    sqlite3_exec(db, "COMMIT", nullptr, nullptr, nullptr);
+    sqlite3_close(db);
 }
 
 QDateTime CalendarModel::toLocalDateTime(const ICalTime *timeValue)

@@ -43,7 +43,7 @@ Item {
                 clip: true
                 property real hoverReveal: 0.0
                 property real hoverOpacity: 0.0
-                property bool attention: false
+                property bool attention: urgent
                 property real activeProgress: focused ? 1.0 : 0.0
 
                 // #workspaces button[.focused/.visible/.urgent] from the CSS theme

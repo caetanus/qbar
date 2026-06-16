@@ -24,7 +24,7 @@ Item {
             return
         }
 
-        qbarPopups.updatePopup(tooltipId, ({ text: root.text }))
+        qbarPopups.updateTooltip(tooltipId, ({ text: root.text }))
     }
 
     function open() {
@@ -65,6 +65,7 @@ Item {
 
     QBar.Popup {
         id: tooltipPopup
+        kind: "tooltip"
         anchorItem: root.anchorItem ? root.anchorItem : root
         source: "qrc:/popups/TooltipPopup.qml"
         payload: ({ text: root.text })

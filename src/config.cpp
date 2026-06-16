@@ -1,8 +1,12 @@
 #include "config.h"
 
+#include "json/jsonc.h"
+
 #include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -60,6 +64,103 @@ QString configPath()
 
     const auto base = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
     return QDir(base).filePath(QStringLiteral("qbar/config.json"));
+}
+
+// JSON Schema for the config, written next to it so editors (VSCode, etc.) can
+// offer completion/validation. The config carries comments/trailing commas
+// (JSONC), so associate it via "$schema": "./config.schema.json" or an editor
+// file-association rule.
+const char *kConfigSchema = R"JSON({
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "qbar configuration",
+  "description": "A single bar object, or an array of bar objects (multi-monitor, top+bottom).",
+  "oneOf": [
+    { "$ref": "#/$defs/bar" },
+    { "type": "array", "items": { "$ref": "#/$defs/bar" } }
+  ],
+  "$defs": {
+    "bar": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "$schema": { "type": "string", "description": "Path to this schema." },
+    "layer": { "type": "string", "enum": ["background", "bottom", "top", "overlay"], "description": "wlr-layer-shell layer." },
+    "position": { "type": "string", "enum": ["top", "bottom"], "description": "Bar edge." },
+    "height": { "type": "integer", "minimum": 1 },
+    "margin": { "type": "integer" },
+    "spacing": { "type": "integer", "description": "Gap between applets." },
+    "x": { "type": "integer" },
+    "y": { "type": "integer" },
+    "exclusiveZone": { "type": "boolean", "description": "Reserve screen space for the bar." },
+    "waylandLayerShell": { "type": "boolean" },
+    "popupKeyboardFocus": { "type": "boolean", "description": "Let popups grab the keyboard (enables Esc-to-close)." },
+    "background": { "type": "string", "description": "Color (#rrggbb, #aarrggbb, rgb(), rgba(), name)." },
+    "foreground": { "type": "string" },
+    "accent": { "type": "string" },
+    "fontFamily": { "type": "string" },
+    "fontSize": { "type": "integer", "minimum": 1 },
+    "trayItemPadding": { "type": "integer" },
+    "animationDuration": { "type": "integer", "minimum": 0 },
+    "animationEasing": { "type": "string", "description": "e.g. linear, inoutquad, outcubic." },
+    "windowManagerBackend": { "type": "string", "enum": ["auto", "i3", "sway", "hyprland", "bspwm", "ewmh", "none"] },
+    "styleSheet": { "type": "string", "description": "Path to a CSS theme." },
+    "output": { "type": "string", "description": "Target monitor name." },
+    "marginTop": { "type": "integer" },
+    "marginBottom": { "type": "integer" },
+    "marginLeft": { "type": "integer" },
+    "marginRight": { "type": "integer" },
+    "modules-left": { "$ref": "#/$defs/moduleList" },
+    "modules-center": { "$ref": "#/$defs/moduleList" },
+    "modules-right": { "$ref": "#/$defs/moduleList" },
+    "applets": { "$ref": "#/$defs/moduleList" },
+    "customTools": {
+      "type": "object",
+      "description": "Map of \"custom/<name>\" to a tool definition.",
+      "additionalProperties": { "$ref": "#/$defs/customTool" }
+    }
+      }
+    },
+    "moduleList": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "customTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exec": { "type": "string", "description": "Command to run." },
+        "command": { "type": "string" },
+        "arguments": { "type": "array", "items": { "type": "string" } },
+        "workingDirectory": { "type": "string" },
+        "interval": { "type": "number", "description": "Seconds between runs." },
+        "return-type": { "type": "string", "enum": ["json"], "description": "Omit for plain text; \"json\" for the waybar object format." },
+        "format": { "type": "string", "description": "e.g. \"{} ({percentage:.1f}%)\"." },
+        "format-icons": { "type": "object" },
+        "tooltip": { "type": "boolean" },
+        "exec-if": { "type": "string" },
+        "show-empty": { "type": "boolean" },
+        "on-click": { "type": "string" },
+        "on-click-middle": { "type": "string" },
+        "on-click-right": { "type": "string" },
+        "on-scroll-up": { "type": "string" },
+        "on-scroll-down": { "type": "string" }
+      }
+    }
+  }
+}
+)JSON";
+
+void ensureConfigSchema(const QString &configFilePath)
+{
+    const QString schemaPath = QFileInfo(configFilePath).dir().filePath(QStringLiteral("config.schema.json"));
+    if (QFileInfo::exists(schemaPath)) {
+        return;
+    }
+    QDir().mkpath(QFileInfo(schemaPath).path());
+    QFile file(schemaPath);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(kConfigSchema);
+    }
 }
 
 void applyCommandLineOverrides(BarConfig *config)
@@ -128,26 +229,21 @@ QVariantMap defaultCustomTools()
 
 } // namespace
 
-BarConfig loadConfig()
+QVariantMap parseCustomTools(const QJsonObject &root)
+{
+    QVariantMap customTools = defaultCustomTools();
+    if (root.contains(QStringLiteral("customTools")) && root.value(QStringLiteral("customTools")).isObject()) {
+        const QVariantMap overrides = root.value(QStringLiteral("customTools")).toObject().toVariantMap();
+        for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
+            customTools.insert(it.key(), it.value());
+        }
+    }
+    return customTools;
+}
+
+static BarConfig parseBarObject(const QJsonObject &root)
 {
     BarConfig config;
-
-    const QString path = configPath();
-    config.configFilePath = path;
-
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        applyCommandLineOverrides(&config);
-        return config;
-    }
-
-    const auto document = QJsonDocument::fromJson(file.readAll());
-    if (!document.isObject()) {
-        applyCommandLineOverrides(&config);
-        return config;
-    }
-
-    const auto root = document.object();
     config.height = root.value(QStringLiteral("height")).toInt(config.height);
     config.margin = root.value(QStringLiteral("margin")).toInt(config.margin);
     config.spacing = root.value(QStringLiteral("spacing")).toInt(config.spacing);
@@ -159,6 +255,9 @@ BarConfig loadConfig()
     }
     if (root.contains(QStringLiteral("waylandLayerShell"))) {
         config.waylandLayerShell = root.value(QStringLiteral("waylandLayerShell")).toBool(config.waylandLayerShell);
+    }
+    if (root.contains(QStringLiteral("popupKeyboardFocus"))) {
+        config.popupKeyboardFocus = root.value(QStringLiteral("popupKeyboardFocus")).toBool(config.popupKeyboardFocus);
     }
     config.fontFamily = root.value(QStringLiteral("fontFamily")).toString(config.fontFamily);
     config.fontSize = root.value(QStringLiteral("fontSize")).toInt(config.fontSize);
@@ -175,13 +274,7 @@ BarConfig loadConfig()
         const QJsonObject wm = root.value(QStringLiteral("windowManager")).toObject();
         config.windowManagerBackend = wm.value(QStringLiteral("backend")).toString(config.windowManagerBackend);
     }
-    config.customTools = defaultCustomTools();
-    if (root.contains(QStringLiteral("customTools")) && root.value(QStringLiteral("customTools")).isObject()) {
-        const QVariantMap customTools = root.value(QStringLiteral("customTools")).toObject().toVariantMap();
-        for (auto it = customTools.cbegin(); it != customTools.cend(); ++it) {
-            config.customTools.insert(it.key(), it.value());
-        }
-    }
+    config.customTools = parseCustomTools(root);
 
     const bool hasModuleSections = root.contains(QStringLiteral("modules-left"))
         || root.contains(QStringLiteral("modules-center"))
@@ -210,8 +303,59 @@ BarConfig loadConfig()
         config.appletsRight.clear();
     }
 
-    applyCommandLineOverrides(&config);
     return config;
+}
+
+QList<BarConfig> loadConfigs()
+{
+    const QString path = configPath();
+    ensureConfigSchema(path);
+
+    const auto withDefaults = [&](BarConfig config) {
+        config.configFilePath = path;
+        applyCommandLineOverrides(&config);
+        return config;
+    };
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {withDefaults(BarConfig{})};
+    }
+
+    QString jsonError;
+    const auto document = Jsonc::parse(QString::fromUtf8(file.readAll()), &jsonError);
+
+    // A single object is one bar; an array is several (multi-monitor, top+bottom).
+    QList<QJsonObject> barObjects;
+    if (document.isArray()) {
+        for (const auto &value : document.array()) {
+            if (value.isObject()) {
+                barObjects.append(value.toObject());
+            }
+        }
+    } else if (document.isObject()) {
+        barObjects.append(document.object());
+    }
+
+    if (barObjects.isEmpty()) {
+        if (!jsonError.isEmpty()) {
+            qWarning() << "qbar: config" << path << jsonError;
+        }
+        return {withDefaults(BarConfig{})};
+    }
+
+    QList<BarConfig> configs;
+    configs.reserve(barObjects.size());
+    for (const QJsonObject &object : barObjects) {
+        configs.append(withDefaults(parseBarObject(object)));
+    }
+    return configs;
+}
+
+BarConfig loadConfig()
+{
+    const QList<BarConfig> configs = loadConfigs();
+    return configs.isEmpty() ? BarConfig{} : configs.first();
 }
 
 QString barPositionName(BarPosition position)

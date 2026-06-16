@@ -1,6 +1,7 @@
 #include "qbarlayershellintegration.h"
 
 #include <QtWaylandClient/6.11.1/QtWaylandClient/private/qwaylanddisplay_p.h>
+#include <QtWaylandClient/6.11.1/QtWaylandClient/private/qwaylandscreen_p.h>
 #include <QtWaylandClient/6.11.1/QtWaylandClient/private/qwaylandwindow_p.h>
 
 #include <QCoreApplication>
@@ -133,13 +134,18 @@ bool QBarLayerShellIntegration::initialize(QtWaylandClient::QWaylandDisplay *dis
 
 QtWaylandClient::QWaylandShellSurface *QBarLayerShellIntegration::createShellSurface(QtWaylandClient::QWaylandWindow *window)
 {
-    if (window != nullptr && window->window() != nullptr
+    // The backdrop overlay must be a full-output layer surface. It carries
+    // Qt::Tool flags (which include the Qt::Popup bit), so it must be checked
+    // BEFORE the popup test below, otherwise it would be misclassified as an
+    // xdg_popup and never get its layer geometry.
+    const bool overlay = window != nullptr && window->window() != nullptr
+        && window->window()->property("qbarOverlay").toBool();
+    if (!overlay && window != nullptr && window->window() != nullptr
         && (window->window()->flags() & Qt::Popup) == Qt::Popup) {
         qWarning() << "QBar layer-shell create popup surface";
         return new QBarXdgPopupSurface(this, window);
     }
 
-    qWarning() << "QBar layer-shell create surface";
     return new QBarLayerShellSurface(this, window);
 }
 
@@ -156,10 +162,19 @@ xdg_wm_base *QBarLayerShellIntegration::xdgWmBase() const
 QBarLayerShellSurface::QBarLayerShellSurface(QBarLayerShellIntegration *integration, QtWaylandClient::QWaylandWindow *window)
     : QtWaylandClient::QWaylandShellSurface(window)
 {
+    // Bind the surface to the window's target wl_output so each bar lands on its
+    // own monitor (main.cpp resolves BarConfig::output → QScreen before show()).
+    // A null output lets the compositor pick, which is right for the single bar.
+    ::wl_output *output = nullptr;
+    if (window != nullptr) {
+        if (auto *screen = window->waylandScreen()) {
+            output = screen->output();
+        }
+    }
     m_layerSurface = zwlr_layer_shell_v1_get_layer_surface(
         integration->layerShell(),
         wlSurface(),
-        nullptr,
+        output,
         ZWLR_LAYER_SHELL_V1_LAYER_TOP,
         "qbar");
     zwlr_layer_surface_v1_add_listener(m_layerSurface, &layerSurfaceListener, this);
@@ -247,9 +262,60 @@ void QBarLayerShellSurface::applyLayerState()
         return;
     }
 
-    const int height = envInt("QBAR_LAYER_HEIGHT", 28);
-    const bool exclusive = envBool("QBAR_LAYER_EXCLUSIVE", true);
-    const uint32_t verticalAnchor = isBottom()
+    // The popup backdrop overlay (flagged via the "qbarOverlay" window property)
+    // spans the whole output except the bar's strip. Rather than rely on the
+    // compositor carving the bar's exclusive zone out of an all-anchored surface
+    // (which not all compositors do), we ignore exclusive zones (-1) and inset
+    // the overlay ourselves with a margin on the bar's edge equal to its height.
+    const bool isOverlay = window() != nullptr && window()->window() != nullptr
+        && window()->window()->property("qbarOverlay").toBool();
+    if (isOverlay) {
+        // The overlay mirrors its bar's geometry (set as qbarBar* properties by
+        // QBarPopupService), falling back to the process-wide env.
+        const QWindow *overlayWin = window()->window();
+        const QVariant heightProp = overlayWin->property("qbarBarHeight");
+        const QVariant exclusiveProp = overlayWin->property("qbarBarExclusive");
+        const QVariant positionProp = overlayWin->property("qbarBarPosition");
+        const int barHeight = heightProp.isValid() ? heightProp.toInt() : envInt("QBAR_LAYER_HEIGHT", 28);
+        const bool exclusive = exclusiveProp.isValid() ? exclusiveProp.toBool() : envBool("QBAR_LAYER_EXCLUSIVE", true);
+        const bool bottom = positionProp.isValid()
+            ? positionProp.toString() == QLatin1String("bottom")
+            : isBottom();
+        const int barInset = exclusive ? barHeight : 0;
+        const int topMargin = bottom ? 0 : barInset;
+        const int bottomMargin = bottom ? barInset : 0;
+        zwlr_layer_surface_v1_set_anchor(
+            m_layerSurface,
+            ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP
+                | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
+                | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
+                | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+        zwlr_layer_surface_v1_set_size(m_layerSurface, 0, 0);
+        zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, -1);
+        zwlr_layer_surface_v1_set_margin(m_layerSurface, topMargin, 0, bottomMargin, 0);
+        // Grab the keyboard (for Escape-to-close) only when the user opted in via
+        // BarConfig::popupKeyboardFocus; otherwise stay focusless.
+        const bool grabKeyboard = window()->window()->property("qbarOverlayKeyboard").toBool();
+        zwlr_layer_surface_v1_set_keyboard_interactivity(
+            m_layerSurface,
+            grabKeyboard
+                ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
+                : ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+        return;
+    }
+
+    // Per-window geometry (set by BarWindow from its BarConfig) wins over the
+    // process-wide QBAR_LAYER_* env so several bars in one config can differ.
+    const QWindow *win = window() != nullptr ? window()->window() : nullptr;
+    const QVariant heightProp = win != nullptr ? win->property("qbarBarHeight") : QVariant();
+    const QVariant exclusiveProp = win != nullptr ? win->property("qbarBarExclusive") : QVariant();
+    const QVariant positionProp = win != nullptr ? win->property("qbarBarPosition") : QVariant();
+    const int height = heightProp.isValid() ? heightProp.toInt() : envInt("QBAR_LAYER_HEIGHT", 28);
+    const bool exclusive = exclusiveProp.isValid() ? exclusiveProp.toBool() : envBool("QBAR_LAYER_EXCLUSIVE", true);
+    const bool bottom = positionProp.isValid()
+        ? positionProp.toString() == QLatin1String("bottom")
+        : isBottom();
+    const uint32_t verticalAnchor = bottom
         ? ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
         : ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP;
 
