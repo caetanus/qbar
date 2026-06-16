@@ -45,8 +45,13 @@ Item {
     readonly property color popupForeground: hasCssPopupForeground ? cssPopupForeground : fallbackPopupForeground
     readonly property color panelText: popupForeground
     readonly property color panelTextSoft: Qt.rgba(popupForeground.r, popupForeground.g, popupForeground.b, 0.92)
-    readonly property var labelTextShadow: cssAvailable
+    readonly property bool hasCssLabelTextShadow: cssAvailable && (cpuPopupStyle["text-shadow"] || popupStyle["text-shadow"])
+    readonly property var cssLabelTextShadow: hasCssLabelTextShadow
         ? cssTheme.parseBoxShadow(cpuPopupStyle["text-shadow"] || popupStyle["text-shadow"] || "") : ({})
+    readonly property var automaticLabelTextShadow: Contrast.luminance(panelText) < 0.5
+        ? ({ x: 0, y: 1, blur: 1.5, color: Qt.rgba(1, 1, 1, 0.42) })
+        : ({ x: 0, y: 1, blur: 2, color: Qt.rgba(0.06, 0.07, 0.12, 0.46) })
+    readonly property var labelTextShadow: hasCssLabelTextShadow ? cssLabelTextShadow : automaticLabelTextShadow
 
     component PopupText: Text {
         layer.enabled: root.labelTextShadow.color !== undefined
