@@ -24,11 +24,10 @@ Item {
         ? configuredWidth
         : Math.ceil(usageLabel.implicitWidth + labelPadding + graphWidth)
     property bool tooltipHovered: false
-    property int popupColumns: cpuModel ? (cpuModel.coreCount > 32 ? 6 : (cpuModel.coreCount > 16 ? 4 : (cpuModel.coreCount > 8 ? 3 : 2))) : 2
-    property int popupHeaderHeight: 82
-    property int popupMetricHeight: 0
-    property int popupMemoryHeight: 14
-    property int popupTileHeight: 96
+    property int popupColumns: cpuModel ? (cpuModel.coreCount > 24 ? 6 : (cpuModel.coreCount > 4 ? 4 : 2)) : 2
+    property int popupHeaderHeight: 188
+    property int popupProcessHeight: 96
+    property int popupTileHeight: 84
     property int popupTileSpacing: 8
     property int popupVerticalSpacing: 10
     property int popupOuterMargins: 24
@@ -36,9 +35,7 @@ Item {
     property int popupHeight: popupOuterMargins
         + popupHeaderHeight
         + popupVerticalSpacing
-        + popupMetricHeight
-        + popupVerticalSpacing
-        + popupMemoryHeight
+        + popupProcessHeight
         + popupVerticalSpacing
         + (popupGridRows * popupTileHeight + Math.max(0, popupGridRows - 1) * popupTileSpacing)
 
@@ -57,7 +54,7 @@ Item {
         anchorItem: root
         source: "qrc:/popups/CPUPopup.qml"
         payload: ({ cpu: cpuModel, coreColumns: root.popupColumns })
-        popupWidth: 520
+        popupWidth: 640
         popupHeight: root.popupHeight
         gap: 2
         placement: "below"

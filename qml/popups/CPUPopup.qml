@@ -1,29 +1,48 @@
 import QtQuick
+import QBar 1.0
 
 Item {
     id: root
-    width: 560
-    implicitWidth: 560
+    width: 640
+    implicitWidth: 640
     implicitHeight: contentColumn.implicitHeight + 24
     height: implicitHeight
 
     property var cpu: null
     property string popupMode: (typeof popupData !== "undefined" && popupData && popupData.popupMode !== undefined) ? String(popupData.popupMode) : "cpu"
-    property int coreColumns: 2
-    property int coreTileHeight: 96
+    property int coreColumns: 4
+    property int coreTileHeight: 84
     property int coreSpacing: 8
-    readonly property color panelBackground: Qt.rgba(1, 1, 1, 0.05)
-    readonly property color panelBackgroundAlt: Qt.rgba(1, 1, 1, 0.08)
-    readonly property color panelBorder: Qt.rgba(1, 1, 1, 0.10)
-    readonly property color panelGraphBackground: Qt.rgba(1, 1, 1, 0.03)
+
+    readonly property bool memoryMode: popupMode === "memory"
+    readonly property color panelBackground: Qt.rgba(1, 1, 1, 0.045)
+    readonly property color panelBackgroundAlt: Qt.rgba(1, 1, 1, 0.07)
+    readonly property color panelBorder: Qt.rgba(1, 1, 1, 0.11)
+    readonly property color panelGraphBackground: Qt.rgba(0, 0, 0, 0.18)
+    readonly property color panelGridLine: Qt.rgba(1, 1, 1, 0.055)
     readonly property color panelText: theme.foreground
-    readonly property color panelTextSoft: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.82)
+    readonly property color panelTextSoft: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.76)
+    readonly property color panelTextFaint: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.52)
+    readonly property color cpuBlue: "#38bdf8"
+    readonly property color cpuHot: "#fb7185"
+    readonly property color memoryGreen: "#84cc16"
+    readonly property color swapPink: "#ec4899"
+    readonly property color loadAmber: "#f59e0b"
+    readonly property real loadScale: Math.max(1, cpu ? cpu.coreCount : 1)
+
+    function clamp01(value) {
+        var number = Number(value)
+        if (isNaN(number)) {
+            return 0
+        }
+        return Math.max(0, Math.min(1, number))
+    }
 
     function formatPercent(value) {
         if (value === undefined || value === null) {
             return "--"
         }
-        return Number(value) + "%"
+        return Math.round(Number(value)) + "%"
     }
 
     function formatLoad(value) {
@@ -54,73 +73,63 @@ Item {
         return Math.round(kb) + " KiB"
     }
 
-    function formatTopProcesses(list, mode) {
-        if (!list || list.length === 0) {
-            return "--"
+    function processList() {
+        if (!cpu) {
+            return []
         }
-
-        var parts = []
-        for (var i = 0; i < list.length; ++i) {
-            var item = list[i]
-            if (!item) {
-                continue
-            }
-            var name = item.name !== undefined ? item.name : "pid " + item.pid
-            if (mode === "memory") {
-                parts.push(name + " " + root.formatMemoryKb(item.memoryKb))
-            } else {
-                var usage = item.usage !== undefined ? Number(item.usage).toFixed(1) : "0.0"
-                parts.push(name + " " + usage + "%")
-            }
-        }
-        return parts.join("   ")
+        return memoryMode ? cpu.topMemoryProcesses : cpu.topProcesses
     }
 
-    function drawSeries(ctx, points, width, height, fillColor, strokeColor, scale, fillAlpha) {
-        if (!points || points.length === 0) {
-            return
+    function processName(item) {
+        if (!item) {
+            return "--"
+        }
+        if (item.name !== undefined && String(item.name).length > 0) {
+            return String(item.name)
+        }
+        return "pid " + item.pid
+    }
+
+    function processValue(item) {
+        if (!item) {
+            return "--"
+        }
+        if (memoryMode) {
+            return formatMemoryKb(item.memoryKb)
+        }
+        return (item.usage !== undefined ? Number(item.usage).toFixed(1) : "0.0") + "%"
+    }
+
+    function processWeight(item, list) {
+        if (!item) {
+            return 0
+        }
+        if (!memoryMode) {
+            return clamp01(Number(item.usage) / 100.0)
         }
 
-        var maxValue = scale && scale > 0 ? scale : 100
-        ctx.beginPath()
-        ctx.moveTo(0, height)
-        for (var i = 0; i < points.length; ++i) {
-            var value = Number(points[i])
-            if (isNaN(value)) {
-                value = 0
-            }
-            var normalized = Math.max(0, Math.min(1, value / maxValue))
-            var x = points.length === 1 ? width - 1 : (i * (width - 1)) / (points.length - 1)
-            var y = height - Math.max(1, normalized * (height - 2)) - 1
-            ctx.lineTo(x, y)
+        var maxKb = 0
+        for (var i = 0; list && i < list.length; ++i) {
+            maxKb = Math.max(maxKb, Number(list[i].memoryKb))
         }
-        ctx.lineTo(width - 1, height)
-        ctx.closePath()
-        ctx.save()
-        ctx.globalAlpha = fillAlpha !== undefined ? fillAlpha : 1.0
-        ctx.fillStyle = fillColor
-        ctx.fill()
-        ctx.restore()
+        if (maxKb <= 0) {
+            return 0
+        }
+        return clamp01(Number(item.memoryKb) / maxKb)
+    }
 
-        ctx.beginPath()
-        for (var j = 0; j < points.length; ++j) {
-            var sample = Number(points[j])
-            if (isNaN(sample)) {
-                sample = 0
-            }
-            var px = points.length === 1 ? width - 1 : (j * (width - 1)) / (points.length - 1)
-            var py = height - Math.max(1, Math.min(1, sample / maxValue) * (height - 2)) - 1
-            if (j === 0) {
-                ctx.moveTo(px, py)
-            } else {
-                ctx.lineTo(px, py)
-            }
+    function usageColor(value) {
+        var percent = Number(value)
+        if (isNaN(percent)) {
+            return cpuBlue
         }
-        ctx.strokeStyle = strokeColor
-        ctx.lineWidth = 1.4
-        ctx.lineJoin = "round"
-        ctx.lineCap = "round"
-        ctx.stroke()
+        if (percent >= 80) {
+            return "#fb7185"
+        }
+        if (percent >= 55) {
+            return "#f59e0b"
+        }
+        return cpuBlue
     }
 
     Rectangle {
@@ -141,89 +150,355 @@ Item {
 
         Rectangle {
             width: contentColumn.width
-            height: 82
-            radius: 3
+            height: 188
+            radius: 4
             color: root.panelBackground
             border.color: root.panelBorder
             border.width: 1
 
             Column {
                 anchors.fill: parent
-                anchors.margins: 8
-                spacing: 5
+                anchors.margins: 10
+                spacing: 9
 
                 Row {
+                    width: parent.width
+                    height: 31
                     spacing: 10
 
                     Text {
-                        text: root.formatPercent(cpu ? cpu.usage : 0) + " cpu usage"
+                        width: Math.floor(parent.width * 0.30)
+                        anchors.verticalCenter: parent.verticalCenter
                         color: root.panelText
                         font.family: theme.fontFamily
-                        font.pointSize: theme.fontSize + 1
+                        font.pointSize: theme.fontSize + 2
                         font.bold: true
+                        text: root.memoryMode ? "memory" : "cpu"
                     }
 
                     Text {
-                        text: "load avg " + root.formatLoad(cpu ? cpu.loadAverage1 : 0) + " " + root.formatLoad(cpu ? cpu.loadAverage5 : 0) + " " + root.formatLoad(cpu ? cpu.loadAverage15 : 0)
+                        width: Math.floor(parent.width * 0.17)
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: root.memoryMode ? root.memoryGreen : root.usageColor(cpu ? cpu.usage : 0)
+                        font.family: theme.fontFamily
+                        font.pointSize: theme.fontSize + 2
+                        font.bold: true
+                        horizontalAlignment: Text.AlignRight
+                        text: root.memoryMode ? root.formatPercent(cpu ? cpu.memoryUsage : 0) : root.formatPercent(cpu ? cpu.usage : 0)
+                    }
+
+                    Text {
+                        width: Math.floor(parent.width * 0.25)
+                        anchors.verticalCenter: parent.verticalCenter
                         color: root.panelTextSoft
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize
+                        horizontalAlignment: Text.AlignRight
+                        text: "load " + root.formatLoad(cpu ? cpu.loadAverage1 : 0) + " " + root.formatLoad(cpu ? cpu.loadAverage5 : 0) + " " + root.formatLoad(cpu ? cpu.loadAverage15 : 0)
+                    }
+
+                    Text {
+                        width: parent.width - x
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: root.panelTextFaint
+                        font.family: theme.fontFamily
+                        font.pointSize: theme.fontSize
+                        horizontalAlignment: Text.AlignRight
+                        text: (cpu ? cpu.runningProcesses : 0) + " running / " + (cpu ? cpu.processCount : 0) + " proc"
                     }
                 }
 
                 Row {
                     width: parent.width
-                    spacing: 10
+                    height: 128
+                    spacing: 8
 
-                    Text {
-                        text: (cpu ? cpu.processCount : 0) + " processes"
-                        color: root.panelText
-                        font.family: theme.fontFamily
-                        font.pointSize: theme.fontSize
-                    }
+                    Rectangle {
+                        width: Math.floor((parent.width - parent.spacing) * 0.58)
+                        height: parent.height
+                        radius: 3
+                        color: root.panelGraphBackground
+                        border.color: Qt.rgba(1, 1, 1, 0.07)
+                        border.width: 1
 
-                    Text {
-                        width: parent.width - implicitWidth
-                        text: (root.popupMode === "memory" ? "top memory: " : "top: ") + root.formatTopProcesses(cpu ? (root.popupMode === "memory" ? cpu.topMemoryProcesses : cpu.topProcesses) : [], root.popupMode)
-                        color: root.panelTextSoft
-                        font.family: theme.fontFamily
-                        font.pointSize: theme.fontSize
-                        elide: Text.ElideRight
-                    }
-                }
+                        Repeater {
+                            model: 4
+                            Rectangle {
+                                x: Math.round((parent.width / 4) * index)
+                                y: 0
+                                width: 1
+                                height: parent.height
+                                color: root.panelGridLine
+                            }
+                        }
 
-                Rectangle {
-                    width: Math.max(1, Math.floor(parent.width * 0.7))
-                    height: 29
-                    radius: 2
-                    color: root.panelGraphBackground
-                    border.color: Qt.rgba(1, 1, 1, 0.06)
-                    border.width: 1
-                    anchors.horizontalCenter: parent.horizontalCenter
+                        Repeater {
+                            model: 4
+                            Rectangle {
+                                x: 0
+                                y: Math.round((parent.height / 4) * index)
+                                width: parent.width
+                                height: 1
+                                color: root.panelGridLine
+                            }
+                        }
 
-                    Canvas {
-                        id: memoryGraph
-                        anchors.fill: parent
+                        Text {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.margins: 8
+                            color: root.panelText
+                            font.family: theme.fontFamily
+                            font.pointSize: theme.fontSize
+                            font.bold: true
+                            text: root.memoryMode ? "RAM usage" : "CPU usage"
+                        }
 
-                        onPaint: {
-                            var ctx = getContext("2d")
-                            ctx.clearRect(0, 0, width, height)
-                            root.drawSeries(ctx, cpu ? cpu.swapUsageHistory : [], width, height, "#ec4899", "#ec4899", 100, 0.60)
-                            root.drawSeries(ctx, cpu ? cpu.memoryUsageHistory : [], width, height, "#84cc16", "#84cc16", 100, 0.60)
+                        Text {
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 8
+                            color: root.panelTextSoft
+                            font.family: theme.fontFamily
+                            font.pointSize: theme.fontSize
+                            font.bold: true
+                            text: root.memoryMode ? root.formatPercent(cpu ? cpu.memoryUsage : 0) : root.formatPercent(cpu ? cpu.usage : 0)
+                        }
+
+                        Sparkline {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            anchors.topMargin: 28
+                            anchors.bottomMargin: 10
+                            values: root.memoryMode ? (cpu ? cpu.swapUsageHistory : []) : (cpu ? cpu.loadAverageHistory : [])
+                            maxValue: root.memoryMode ? 100 : root.loadScale
+                            lineWidth: 1.2
+                            lineColor: root.memoryMode ? root.swapPink : root.loadAmber
+                            fillColor: root.memoryMode ? Qt.rgba(root.swapPink.r, root.swapPink.g, root.swapPink.b, 0.20) : Qt.rgba(root.loadAmber.r, root.loadAmber.g, root.loadAmber.b, 0.16)
+                        }
+
+                        Sparkline {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            anchors.topMargin: 28
+                            anchors.bottomMargin: 10
+                            values: root.memoryMode ? (cpu ? cpu.memoryUsageHistory : []) : (cpu ? cpu.usageHistory : [])
+                            maxValue: 100
+                            lineWidth: 1.8
+                            lineColor: root.memoryMode ? root.memoryGreen : root.usageColor(cpu ? cpu.usage : 0)
+                            fillColor: root.memoryMode
+                                ? Qt.rgba(root.memoryGreen.r, root.memoryGreen.g, root.memoryGreen.b, 0.26)
+                                : Qt.rgba(root.usageColor(cpu ? cpu.usage : 0).r, root.usageColor(cpu ? cpu.usage : 0).g, root.usageColor(cpu ? cpu.usage : 0).b, 0.24)
+                        }
+
+                        Row {
+                            anchors.left: parent.left
+                            anchors.bottom: parent.bottom
+                            anchors.margins: 8
+                            spacing: 12
+
+                            Text {
+                                color: root.memoryMode ? root.memoryGreen : root.cpuBlue
+                                font.family: theme.fontFamily
+                                font.pointSize: theme.fontSize - 1
+                                text: root.memoryMode ? "mem" : "usage"
+                            }
+
+                            Text {
+                                color: root.memoryMode ? root.swapPink : root.loadAmber
+                                font.family: theme.fontFamily
+                                font.pointSize: theme.fontSize - 1
+                                text: root.memoryMode ? "swap" : "load"
+                            }
                         }
                     }
 
-                    Connections {
-                        target: root
-                        function onCpuChanged() { memoryGraph.requestPaint() }
+                    Column {
+                        width: parent.width - x
+                        height: parent.height
+                        spacing: 8
+
+                        Rectangle {
+                            width: parent.width
+                            height: 60
+                            radius: 3
+                            color: root.panelBackgroundAlt
+                            border.color: Qt.rgba(1, 1, 1, 0.07)
+                            border.width: 1
+
+                            Column {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                spacing: 5
+
+                                Row {
+                                    width: parent.width
+                                    spacing: 8
+
+                                    Text {
+                                        width: parent.width * 0.45
+                                        color: root.panelTextFaint
+                                        font.family: theme.fontFamily
+                                        font.pointSize: theme.fontSize - 1
+                                        text: root.memoryMode ? "cpu" : "memory"
+                                    }
+
+                                    Text {
+                                        width: parent.width - x
+                                        color: root.panelTextSoft
+                                        font.family: theme.fontFamily
+                                        font.pointSize: theme.fontSize
+                                        font.bold: true
+                                        horizontalAlignment: Text.AlignRight
+                                        text: root.memoryMode ? root.formatPercent(cpu ? cpu.usage : 0) : root.formatPercent(cpu ? cpu.memoryUsage : 0)
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: parent.width
+                                    height: 10
+                                    radius: 2
+                                    color: Qt.rgba(0, 0, 0, 0.22)
+
+                                    Rectangle {
+                                        anchors.left: parent.left
+                                        anchors.top: parent.top
+                                        anchors.bottom: parent.bottom
+                                        width: parent.width * (root.memoryMode ? root.clamp01((cpu ? cpu.usage : 0) / 100.0) : root.clamp01((cpu ? cpu.memoryUsage : 0) / 100.0))
+                                        radius: 2
+                                        color: root.memoryMode ? root.usageColor(cpu ? cpu.usage : 0) : root.memoryGreen
+                                        Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                                    }
+                                }
+
+                                Text {
+                                    width: parent.width
+                                    color: root.panelTextFaint
+                                    font.family: theme.fontFamily
+                                    font.pointSize: theme.fontSize - 1
+                                    elide: Text.ElideRight
+                                    text: root.memoryMode ? ((cpu ? cpu.coreCount : 0) + " logical cores") : ("swap " + root.formatPercent(cpu ? cpu.swapUsage : 0))
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            height: 60
+                            radius: 3
+                            color: root.panelBackgroundAlt
+                            border.color: Qt.rgba(1, 1, 1, 0.07)
+                            border.width: 1
+
+                            Sparkline {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                values: root.memoryMode ? (cpu ? cpu.usageHistory : []) : (cpu ? cpu.memoryUsageHistory : [])
+                                maxValue: 100
+                                lineWidth: 1.5
+                                lineColor: root.memoryMode ? root.cpuBlue : root.memoryGreen
+                                fillColor: root.memoryMode ? Qt.rgba(root.cpuBlue.r, root.cpuBlue.g, root.cpuBlue.b, 0.20) : Qt.rgba(root.memoryGreen.r, root.memoryGreen.g, root.memoryGreen.b, 0.20)
+                            }
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.margins: 8
+                                color: root.panelTextFaint
+                                font.family: theme.fontFamily
+                                font.pointSize: theme.fontSize - 1
+                                text: root.memoryMode ? "cpu history" : "memory history"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            width: contentColumn.width
+            height: 96
+            radius: 4
+            color: root.panelBackground
+            border.color: root.panelBorder
+            border.width: 1
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 6
+
+                Row {
+                    width: parent.width
+
+                    Text {
+                        width: parent.width * 0.55
+                        color: root.panelText
+                        font.family: theme.fontFamily
+                        font.pointSize: theme.fontSize
+                        font.bold: true
+                        text: root.memoryMode ? "top memory processes" : "top cpu processes"
                     }
 
-                    Connections {
-                        target: cpu
-                        function onMemoryStatsChanged() { memoryGraph.requestPaint() }
+                    Text {
+                        width: parent.width - x
+                        color: root.panelTextFaint
+                        font.family: theme.fontFamily
+                        font.pointSize: theme.fontSize
+                        horizontalAlignment: Text.AlignRight
+                        text: (cpu ? cpu.processCount : 0) + " total"
                     }
+                }
 
-                    Component.onCompleted: memoryGraph.requestPaint()
+                Repeater {
+                    id: processRepeater
+                    property var rows: root.processList()
+                    model: Math.min(3, rows.length)
+
+                    delegate: Rectangle {
+                        width: parent.width
+                        height: 17
+                        radius: 2
+                        color: index % 2 === 0 ? Qt.rgba(1, 1, 1, 0.035) : "transparent"
+
+                        readonly property var processItem: processRepeater.rows[index]
+                        readonly property real processRatio: root.processWeight(processItem, processRepeater.rows)
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: Math.max(1, parent.width * processRatio)
+                            radius: 2
+                            color: root.memoryMode ? Qt.rgba(root.memoryGreen.r, root.memoryGreen.g, root.memoryGreen.b, 0.18) : Qt.rgba(root.cpuBlue.r, root.cpuBlue.g, root.cpuBlue.b, 0.18)
+                        }
+
+                        Text {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - valueLabel.width - 16
+                            color: root.panelTextSoft
+                            font.family: theme.fontFamily
+                            font.pointSize: theme.fontSize - 1
+                            elide: Text.ElideRight
+                            text: root.processName(processItem)
+                        }
+
+                        Text {
+                            id: valueLabel
+                            anchors.right: parent.right
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: root.memoryMode ? root.memoryGreen : root.cpuBlue
+                            font.family: theme.fontFamily
+                            font.pointSize: theme.fontSize - 1
+                            font.bold: true
+                            text: root.processValue(processItem)
+                        }
+                    }
                 }
             }
         }
@@ -242,17 +517,15 @@ Item {
                     id: tile
                     width: Math.floor((coreGrid.width - root.coreSpacing * (root.coreColumns - 1)) / root.coreColumns)
                     height: root.coreTileHeight
-                    radius: 3
+                    radius: 4
                     color: index % 2 === 0 ? root.panelBackgroundAlt : root.panelBackground
-                    border.color: Qt.rgba(1, 1, 1, 0.06)
+                    border.color: Qt.rgba(1, 1, 1, 0.07)
                     border.width: 1
 
                     property int usageValue: cpu ? cpu.coreUsage(index) : 0
                     property string coreName: cpu ? cpu.coreName(index) : String(index)
                     property var coreHistory: cpu ? cpu.coreHistory(index) : []
-                    property bool hot: usageValue > 50
-                    property color chartStroke: hot ? "#f43f5e" : "#63b3ed"
-                    property color chartFill: hot ? "#f43f5e" : "#63b3ed"
+                    property color chartColor: root.usageColor(usageValue)
 
                     function syncCoreData() {
                         if (!cpu) {
@@ -261,76 +534,94 @@ Item {
                         usageValue = cpu.coreUsage(index)
                         coreName = cpu.coreName(index)
                         coreHistory = cpu.coreHistory(index)
-                        hot = usageValue > 50
-                        chartStroke = hot ? "#f43f5e" : "#63b3ed"
-                        chartFill = hot ? "#f43f5e" : "#63b3ed"
+                        chartColor = root.usageColor(usageValue)
                     }
 
                     Column {
                         anchors.fill: parent
                         anchors.margins: 8
-                        spacing: 6
+                        spacing: 5
 
                         Row {
                             width: parent.width
-                            spacing: 8
 
                             Text {
-                                width: 34
+                                width: parent.width - usageText.width
                                 color: root.panelText
                                 font.family: theme.fontFamily
-                                font.pointSize: theme.fontSize
+                                font.pointSize: theme.fontSize - 1
+                                font.bold: true
                                 text: tile.coreName
                             }
 
                             Text {
-                                width: 44
-                                color: root.panelTextSoft
+                                id: usageText
+                                color: tile.chartColor
                                 font.family: theme.fontFamily
-                                font.pointSize: theme.fontSize
+                                font.pointSize: theme.fontSize - 1
                                 font.bold: true
-                                text: root.formatPercent(usageValue)
+                                text: root.formatPercent(tile.usageValue)
                             }
                         }
 
                         Rectangle {
                             width: parent.width
-                            height: 34
+                            height: 7
+                            radius: 2
+                            color: Qt.rgba(0, 0, 0, 0.22)
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: parent.width * root.clamp01(tile.usageValue / 100.0)
+                                radius: 2
+                                color: tile.chartColor
+                                Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                            }
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            height: 38
                             radius: 2
                             color: root.panelGraphBackground
-                            border.color: Qt.rgba(1, 1, 1, 0.05)
+                            border.color: Qt.rgba(1, 1, 1, 0.045)
                             border.width: 1
 
-                            Canvas {
-                                id: coreChart
-                                anchors.fill: parent
-
-                                onPaint: {
-                                    var ctx = getContext("2d")
-                                    ctx.clearRect(0, 0, width, height)
-                                    root.drawSeries(ctx, tile.coreHistory, width, height, tile.chartFill, tile.chartStroke, 100, 0.60)
+                            Repeater {
+                                model: 3
+                                Rectangle {
+                                    x: Math.round((parent.width / 3) * index)
+                                    width: 1
+                                    height: parent.height
+                                    color: root.panelGridLine
                                 }
+                            }
+
+                            Sparkline {
+                                anchors.fill: parent
+                                anchors.margins: 3
+                                values: tile.coreHistory
+                                maxValue: 100
+                                lineWidth: 1.35
+                                lineColor: tile.chartColor
+                                fillColor: Qt.rgba(tile.chartColor.r, tile.chartColor.g, tile.chartColor.b, 0.25)
                             }
                         }
                     }
 
                     Connections {
                         target: root
-                        function onCpuChanged() { coreChart.requestPaint() }
+                        function onCpuChanged() { tile.syncCoreData() }
                     }
 
                     Connections {
                         target: cpu
-                        function onCoresChanged() {
-                            tile.syncCoreData()
-                            coreChart.requestPaint()
-                        }
+                        function onCoresChanged() { tile.syncCoreData() }
                     }
 
-                    Component.onCompleted: {
-                        tile.syncCoreData()
-                        coreChart.requestPaint()
-                    }
+                    Component.onCompleted: tile.syncCoreData()
                 }
             }
         }

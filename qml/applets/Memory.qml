@@ -25,6 +25,20 @@ Item {
         ? configuredWidth
         : Math.ceil(usageLabel.implicitWidth + labelPadding + graphWidth)
     property bool tooltipHovered: false
+    property int popupColumns: cpuModel ? (cpuModel.coreCount > 24 ? 6 : (cpuModel.coreCount > 4 ? 4 : 2)) : 2
+    property int popupHeaderHeight: 188
+    property int popupProcessHeight: 96
+    property int popupTileHeight: 84
+    property int popupTileSpacing: 8
+    property int popupVerticalSpacing: 10
+    property int popupOuterMargins: 24
+    property int popupGridRows: cpuModel ? Math.max(1, Math.ceil(cpuModel.coreCount / popupColumns)) : 1
+    property int popupHeight: popupOuterMargins
+        + popupHeaderHeight
+        + popupVerticalSpacing
+        + popupProcessHeight
+        + popupVerticalSpacing
+        + (popupGridRows * popupTileHeight + Math.max(0, popupGridRows - 1) * popupTileSpacing)
 
     signal preferredWidthUpdated(int width)
 
@@ -40,9 +54,9 @@ Item {
         id: memoryPopup
         anchorItem: root
         source: "qrc:/popups/CPUPopup.qml"
-        payload: ({ cpu: cpuModel, popupMode: "memory", coreColumns: cpuModel ? (cpuModel.coreCount > 32 ? 6 : (cpuModel.coreCount > 16 ? 4 : (cpuModel.coreCount > 8 ? 3 : 2))) : 2 })
-        popupWidth: 520
-        popupHeight: cpuModel ? (24 + 82 + 10 + 14 + 10 + (Math.max(1, Math.ceil(cpuModel.coreCount / (cpuModel.coreCount > 32 ? 6 : (cpuModel.coreCount > 16 ? 4 : (cpuModel.coreCount > 8 ? 3 : 2))))) * 96 + Math.max(0, Math.ceil(cpuModel.coreCount / (cpuModel.coreCount > 32 ? 6 : (cpuModel.coreCount > 16 ? 4 : (cpuModel.coreCount > 8 ? 3 : 2)))) - 1) * 8)) : 320
+        payload: ({ cpu: cpuModel, popupMode: "memory", coreColumns: root.popupColumns })
+        popupWidth: 640
+        popupHeight: root.popupHeight
         gap: 2
         placement: "below"
         horizontalAlignment: "left"
