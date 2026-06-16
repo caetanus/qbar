@@ -19,6 +19,7 @@ Item {
     property color panelBorder: Qt.rgba(1, 1, 1, 0.14)
     property color usedColor: "#7dd3fc"
     property color freeColor: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.14)
+    property int bottomPadding: Math.ceil(theme.fontSize)
 
     function percentValue(value) {
         var number = Number(value)
@@ -69,14 +70,6 @@ Item {
         radius: 4
     }
 
-    Rectangle {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: 1
-        color: root.panelBorder
-    }
-
     Column {
         id: contentColumn
         anchors.left: parent.left
@@ -97,9 +90,9 @@ Item {
         Flickable {
             id: scrollArea
             width: parent.width
-            height: root.height - y - 12
+            height: root.height - y - root.bottomPadding - 8
             contentWidth: width
-            contentHeight: mountGrid.implicitHeight
+            contentHeight: mountGrid.implicitHeight + root.bottomPadding
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             rightMargin: diskScrollBar.visible ? 8 : 0
@@ -225,5 +218,14 @@ Item {
                 }
             }
         }
+    }
+
+    Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 1
+        z: 10
+        color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.28)
     }
 }
