@@ -4,6 +4,22 @@ function luminance(c) {
     return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
 }
 
+function linearChannel(v) {
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+}
+
+function relativeLuminance(c) {
+    return 0.2126 * linearChannel(c.r) + 0.7152 * linearChannel(c.g) + 0.0722 * linearChannel(c.b)
+}
+
+function contrastRatio(a, b) {
+    var la = relativeLuminance(a)
+    var lb = relativeLuminance(b)
+    var lighter = Math.max(la, lb)
+    var darker = Math.min(la, lb)
+    return (lighter + 0.05) / (darker + 0.05)
+}
+
 function blendOver(fg, bg) {
     var a = fg.a
     return Qt.rgba(fg.r * a + bg.r * (1 - a), fg.g * a + bg.g * (1 - a), fg.b * a + bg.b * (1 - a), 1)
@@ -17,6 +33,126 @@ function toHex2(v) {
 
 function toHex(c) {
     return "#" + toHex2(c.r) + toHex2(c.g) + toHex2(c.b)
+}
+
+function rgbToHsl(c) {
+    var max = Math.max(c.r, c.g, c.b)
+    var min = Math.min(c.r, c.g, c.b)
+    var h = 0
+    var s = 0
+    var l = (max + min) / 2
+    var d = max - min
+
+    if (d !== 0) {
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+        if (max === c.r) {
+            h = ((c.g - c.b) / d + (c.g < c.b ? 6 : 0)) / 6
+        } else if (max === c.g) {
+            h = ((c.b - c.r) / d + 2) / 6
+        } else {
+            h = ((c.r - c.g) / d + 4) / 6
+        }
+    }
+
+    return { h: h, s: s, l: l, a: c.a }
+}
+
+function hueToRgb(p, q, t) {
+    if (t < 0) t += 1
+    if (t > 1) t -= 1
+    if (t < 1 / 6) return p + (q - p) * 6 * t
+    if (t < 1 / 2) return q
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6
+    return p
+}
+
+function hslToColor(hsl) {
+    var r
+    var g
+    var b
+    if (hsl.s === 0) {
+        r = hsl.l
+        g = hsl.l
+        b = hsl.l
+    } else {
+        var q = hsl.l < 0.5 ? hsl.l * (1 + hsl.s) : hsl.l + hsl.s - hsl.l * hsl.s
+        var p = 2 * hsl.l - q
+        r = hueToRgb(p, q, hsl.h + 1 / 3)
+        g = hueToRgb(p, q, hsl.h)
+        b = hueToRgb(p, q, hsl.h - 1 / 3)
+    }
+    return Qt.rgba(r, g, b, hsl.a)
+}
+
+function bestBlackOrWhite(bg) {
+    var black = Qt.rgba(0.06, 0.06, 0.06, 1)
+    var white = Qt.rgba(1, 1, 1, 1)
+    return contrastRatio(white, bg) >= contrastRatio(black, bg) ? white : black
+}
+
+// Preserve the foreground's hue/saturation when possible, but move its HSL
+// lightness away from the background. If that still cannot clear the target
+// contrast, fall back to softened black or white.
+function naturalContrastColor(fg, bg, minimumRatio) {
+    var target = minimumRatio !== undefined ? minimumRatio : 4.5
+    if (contrastRatio(fg, bg) >= target) {
+        return fg
+    }
+
+    var f = rgbToHsl(fg)
+    var b = rgbToHsl(bg)
+    var minLightnessGap = 0.45
+    if (b.l < 0.5) {
+        f.l = Math.max(f.l, Math.min(0.96, b.l + minLightnessGap))
+    } else {
+        f.l = Math.min(f.l, Math.max(0.08, b.l - minLightnessGap))
+    }
+
+    var adjusted = hslToColor(f)
+    if (contrastRatio(adjusted, bg) >= target) {
+        return adjusted
+    }
+
+    return bestBlackOrWhite(bg)
+}
+
+function averageGradientColor(gradient, fallback) {
+    if (!gradient || gradient.stops === undefined || gradient.stops.length === 0) {
+        return fallback
+    }
+
+    var r = 0
+    var g = 0
+    var b = 0
+    var a = 0
+    for (var i = 0; i < gradient.stops.length; ++i) {
+        var c = gradient.stops[i].color
+        r += c.r
+        g += c.g
+        b += c.b
+        a += c.a
+    }
+    var count = gradient.stops.length
+    return Qt.rgba(r / count, g / count, b / count, a / count)
+}
+
+function styleBackgroundColor(style, cssTheme, fallback) {
+    if (!style || !cssTheme || !cssTheme.loaded) {
+        return fallback
+    }
+    if (style["background-color"]) {
+        return cssTheme.parseColor(style["background-color"])
+    }
+
+    var bgValue = style["background"] ? style["background"] : (style["background-image"] ? style["background-image"] : "")
+    if (!bgValue) {
+        return fallback
+    }
+    if (bgValue.indexOf("gradient") < 0) {
+        return cssTheme.parseColor(bgValue)
+    }
+
+    return averageGradientColor(cssTheme.parseGradient(bgValue), fallback)
 }
 
 // window#waybar background-color, falling back when the CSS theme has none loaded

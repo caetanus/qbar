@@ -1,6 +1,7 @@
 import QtQuick
 import QBar 1.0
 import "qrc:/qbar" as Chrome
+import "qrc:/qbar/Contrast.js" as Contrast
 
 Item {
     id: root
@@ -30,9 +31,18 @@ Item {
     readonly property bool cssAvailable: typeof cssTheme !== "undefined" && cssTheme && cssTheme.loaded
     readonly property var popupStyle: cssAvailable ? cssTheme.resolve("popup") : ({})
     readonly property var cpuPopupStyle: cssAvailable ? cssTheme.resolve("cpu-popup") : ({})
-    readonly property color popupForeground: cssAvailable && cpuPopupStyle["color"]
+    readonly property color fallbackPopupBackground: "#1c1d24"
+    readonly property color popupBackground: cssAvailable
+        ? Contrast.styleBackgroundColor(popupStyle, cssTheme, fallbackPopupBackground)
+        : fallbackPopupBackground
+    readonly property color panelEffectiveBackground: Contrast.blendOver(panelBackground, popupBackground)
+    readonly property bool hasCssPopupForeground: cssAvailable && (cpuPopupStyle["color"] || popupStyle["color"])
+    readonly property color cssPopupForeground: cssAvailable && cpuPopupStyle["color"]
         ? cssTheme.parseColor(cpuPopupStyle["color"])
         : (cssAvailable && popupStyle["color"] ? cssTheme.parseColor(popupStyle["color"]) : "#eef2f7")
+    readonly property color fallbackPopupForeground: Contrast.naturalContrastColor(
+        colorValue(theme.foreground, "#eef2f7"), panelEffectiveBackground, 4.5)
+    readonly property color popupForeground: hasCssPopupForeground ? cssPopupForeground : fallbackPopupForeground
     readonly property color panelText: popupForeground
     readonly property color panelTextSoft: Qt.rgba(popupForeground.r, popupForeground.g, popupForeground.b, 0.92)
     readonly property var labelTextShadow: cssAvailable
@@ -41,6 +51,20 @@ Item {
     component PopupText: Text {
         layer.enabled: root.labelTextShadow.color !== undefined
         layer.effect: Chrome.CssDropShadow { shadow: root.labelTextShadow }
+    }
+
+    function colorValue(value, fallback) {
+        if (value === undefined || value === null) {
+            return Qt.color(fallback)
+        }
+        if (typeof value === "string") {
+            return Qt.color(value)
+        }
+        return value
+    }
+
+    function naturalAccent(color) {
+        return Contrast.naturalContrastColor(root.colorValue(color, "#ffffff"), root.panelEffectiveBackground, 3.0)
     }
 
     function clamp01(value) {
@@ -134,15 +158,15 @@ Item {
     function usageColor(value) {
         var percent = Number(value)
         if (isNaN(percent)) {
-            return cpuBlue
+            return naturalAccent(cpuBlue)
         }
         if (percent >= 80) {
-            return root.cpuHot
+            return naturalAccent(root.cpuHot)
         }
         if (percent >= 55) {
-            return root.loadAmber
+            return naturalAccent(root.loadAmber)
         }
-        return cpuBlue
+        return naturalAccent(cpuBlue)
     }
 
     Rectangle {
