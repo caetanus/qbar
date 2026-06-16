@@ -90,6 +90,8 @@ private:
     void createPopup(xdg_surface *parentSurface);
     struct xdg_positioner *createPositioner();
     QPoint parentOrigin();
+    bool popupBarIsBottom();
+    int popupBarHeight();
     QPoint globalPosition();
     void reposition();
 

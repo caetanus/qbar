@@ -464,6 +464,34 @@ void QBarXdgPopupSurface::createPopup(xdg_surface *parentSurface)
     xdg_popup_add_listener(m_xdgPopup, &xdgPopupListener, this);
 }
 
+bool QBarXdgPopupSurface::popupBarIsBottom()
+{
+    // The bar edge is authoritative on the window property (set by BarWindow /
+    // QBarPopupService); the QBAR_LAYER_POSITION env is only a fallback for the
+    // standalone popup process. Reading the env alone misreads a config-driven
+    // bottom bar as top, which sends tooltips to the wrong edge.
+    const QWindow *win = window() != nullptr ? window()->window() : nullptr;
+    QVariant prop = win != nullptr ? win->property("qbarBarPosition") : QVariant();
+    if (!prop.isValid() && win != nullptr && win->transientParent() != nullptr) {
+        prop = win->transientParent()->property("qbarBarPosition");
+    }
+    if (prop.isValid()) {
+        return prop.toString() == QLatin1String("bottom");
+    }
+    return isBottom();
+}
+
+int QBarXdgPopupSurface::popupBarHeight()
+{
+    const QWindow *win = window() != nullptr ? window()->window() : nullptr;
+    QVariant prop = win != nullptr ? win->property("qbarBarHeight") : QVariant();
+    if (!prop.isValid() && win != nullptr && win->transientParent() != nullptr) {
+        prop = win->transientParent()->property("qbarBarHeight");
+    }
+    const int height = prop.isValid() ? prop.toInt() : envInt("QBAR_LAYER_HEIGHT", 28);
+    return height > 0 ? height : 28;
+}
+
 xdg_positioner *QBarXdgPopupSurface::createPositioner()
 {
     xdg_positioner *positioner = xdg_wm_base_create_positioner(m_integration->xdgWmBase());
@@ -491,9 +519,13 @@ xdg_positioner *QBarXdgPopupSurface::createPositioner()
         xdg_positioner_set_anchor(positioner, isBottom() ? XDG_POSITIONER_ANCHOR_TOP_RIGHT : XDG_POSITIONER_ANCHOR_BOTTOM_RIGHT);
         xdg_positioner_set_gravity(positioner, isBottom() ? XDG_POSITIONER_GRAVITY_TOP_LEFT : XDG_POSITIONER_GRAVITY_BOTTOM_LEFT);
     } else {
+        // Tooltips/menus anchor at a point and grow away from the bar's edge: a
+        // top bar grows down, a bottom bar grows up — so a tooltip is never left
+        // below the cursor at the screen's bottom edge.
+        const bool bottom = popupBarIsBottom();
         xdg_positioner_set_anchor_rect(positioner, relativePosition.x(), relativePosition.y(), 1, 1);
-        xdg_positioner_set_anchor(positioner, XDG_POSITIONER_ANCHOR_TOP_LEFT);
-        xdg_positioner_set_gravity(positioner, XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT);
+        xdg_positioner_set_anchor(positioner, bottom ? XDG_POSITIONER_ANCHOR_BOTTOM_LEFT : XDG_POSITIONER_ANCHOR_TOP_LEFT);
+        xdg_positioner_set_gravity(positioner, bottom ? XDG_POSITIONER_GRAVITY_TOP_RIGHT : XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT);
     }
     xdg_positioner_set_constraint_adjustment(
         positioner,
@@ -527,8 +559,8 @@ QPoint QBarXdgPopupSurface::parentOrigin()
         screen = QGuiApplication::primaryScreen();
     }
     const QRect screenGeometry = screen != nullptr ? screen->geometry() : QRect();
-    const int height = envInt("QBAR_LAYER_HEIGHT", 28);
-    return QPoint(screenGeometry.x(), isBottom() ? screenGeometry.bottom() + 1 - height : screenGeometry.y());
+    const int height = popupBarHeight();
+    return QPoint(screenGeometry.x(), popupBarIsBottom() ? screenGeometry.bottom() + 1 - height : screenGeometry.y());
 }
 
 QPoint QBarXdgPopupSurface::globalPosition()

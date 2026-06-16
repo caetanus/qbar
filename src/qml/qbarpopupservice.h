@@ -86,6 +86,7 @@ private:
     void forceCloseTooltip(const QString &id);
     void ensureDismissOverlay();
     void destroyDismissOverlay();
+    void refreshBarGeometry();
     QUrl popupShellSource() const;
     QQuickView *createPopupView(const QUrl &source,
                                 const QVariantMap &properties,

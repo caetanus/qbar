@@ -181,6 +181,23 @@ QString QBarPopupService::openTooltip(const QUrl &source,
         x = position.x();
         y = position.y();
     }
+
+    // A tooltip must never sit below the mouse. With a bottom bar the QML anchor
+    // places it below the bar — off the usable area, under the cursor — and the
+    // bar window has no reliable global Y on Wayland anyway. When it cannot be
+    // pushed down, flip it up: anchor it to the bar's top edge and let the popup
+    // grow upward (the Wayland positioner flips its gravity for a bottom bar).
+    refreshBarGeometry();
+    // The Wayland positioner reads these off the popup window to decide which way
+    // to grow (a bottom bar grows up); the env alone misreads a config-driven bar.
+    view->setProperty("qbarBarPosition", QString::fromLatin1(m_barBottom ? "bottom" : "top"));
+    view->setProperty("qbarBarHeight", m_barHeight);
+    if (m_barBottom && m_barWindow != nullptr && m_barWindow->screen() != nullptr) {
+        const QRect screenGeom = m_barWindow->screen()->geometry();
+        const int barTop = screenGeom.y() + screenGeom.height() - m_barHeight;
+        y = barTop;
+    }
+
     view->setPosition(x, y);
 
     m_tooltips.insert(id, Popup{view});
@@ -429,6 +446,22 @@ void QBarPopupService::forceCloseTooltip(const QString &id)
     }
 }
 
+void QBarPopupService::refreshBarGeometry()
+{
+    // Read the owning bar's edge/height (multi-monitor, top+bottom), falling back
+    // to the QBAR_LAYER_* env when there is no bar window. Tooltips need this too,
+    // and they never open the dismiss overlay, so keep it standalone.
+    const QVariant heightProp = m_barWindow != nullptr ? m_barWindow->property("qbarBarHeight") : QVariant();
+    const QVariant positionProp = m_barWindow != nullptr ? m_barWindow->property("qbarBarPosition") : QVariant();
+    m_barBottom = positionProp.isValid()
+        ? positionProp.toString() == QLatin1String("bottom")
+        : qgetenv("QBAR_LAYER_POSITION") == "bottom";
+    const int rawBarHeight = heightProp.isValid()
+        ? heightProp.toInt()
+        : qEnvironmentVariableIntValue("QBAR_LAYER_HEIGHT");
+    m_barHeight = rawBarHeight > 0 ? rawBarHeight : 28;
+}
+
 void QBarPopupService::ensureDismissOverlay()
 {
     if (m_dismissOverlay != nullptr || m_engine == nullptr) {
@@ -449,21 +482,13 @@ void QBarPopupService::ensureDismissOverlay()
     // Mirror the owning bar's geometry onto the overlay so the layer-shell
     // integration sizes/anchors the backdrop per-bar (multi-monitor, top+bottom),
     // falling back to the QBAR_LAYER_* env when there is no bar window.
-    const QVariant heightProp = m_barWindow != nullptr ? m_barWindow->property("qbarBarHeight") : QVariant();
-    const QVariant positionProp = m_barWindow != nullptr ? m_barWindow->property("qbarBarPosition") : QVariant();
+    refreshBarGeometry();
     const QVariant exclusiveProp = m_barWindow != nullptr ? m_barWindow->property("qbarBarExclusive") : QVariant();
-    const bool bottomBar = positionProp.isValid()
-        ? positionProp.toString() == QLatin1String("bottom")
-        : qgetenv("QBAR_LAYER_POSITION") == "bottom";
+    const bool bottomBar = m_barBottom;
     const bool exclusive = exclusiveProp.isValid()
         ? exclusiveProp.toBool()
         : qgetenv("QBAR_LAYER_EXCLUSIVE") != "0";
-    const int rawBarHeight = heightProp.isValid()
-        ? heightProp.toInt()
-        : qEnvironmentVariableIntValue("QBAR_LAYER_HEIGHT");
-    const int barHeight = rawBarHeight > 0 ? rawBarHeight : 28;
-    m_barBottom = bottomBar;
-    m_barHeight = barHeight;
+    const int barHeight = m_barHeight;
     view->setProperty("qbarBarHeight", barHeight);
     view->setProperty("qbarBarPosition", QString::fromLatin1(bottomBar ? "bottom" : "top"));
     view->setProperty("qbarBarExclusive", exclusive);
