@@ -17,9 +17,10 @@ TestCase {
     QtObject {
         id: diskModel
         property var mounts: [
-            { "path": "/", "percent": 42 },
+            { "path": "/var/lib/containers", "percent": 81 },
             { "path": "/home", "percent": 67 },
-            { "path": "/mnt/archive", "percent": 81 }
+            { "path": "/", "percent": 42 },
+            { "path": "/mnt/archive", "percent": 54 }
         ]
     }
 
@@ -28,9 +29,12 @@ TestCase {
         compare(component.status, Component.Ready, component.errorString())
         var item = component.createObject(testCase, { "disk": diskModel, "columns": 2 })
         verify(item !== null, component.errorString())
-        compare(item.mounts.length, 3)
+        compare(item.mounts.length, 4)
+        compare(item.implicitHeight, 300)
         compare(item.columns, 2)
-        verify(item.implicitHeight > 0)
+        compare(item.sortedMounts[0].path, "/")
+        compare(item.sortedMounts[1].path, "/home")
+        compare(item.sortedMounts[3].path, "/var/lib/containers")
         item.destroy()
     }
 }
