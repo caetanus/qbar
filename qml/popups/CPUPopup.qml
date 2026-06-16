@@ -68,10 +68,6 @@ Item {
         return value
     }
 
-    function naturalAccent(color) {
-        return Contrast.naturalContrastColor(root.colorValue(color, "#ffffff"), root.panelEffectiveBackground, 3.0)
-    }
-
     function clamp01(value) {
         var number = Number(value)
         if (isNaN(number)) {
@@ -163,15 +159,15 @@ Item {
     function usageColor(value) {
         var percent = Number(value)
         if (isNaN(percent)) {
-            return naturalAccent(cpuBlue)
+            return cpuBlue
         }
         if (percent >= 80) {
-            return naturalAccent(root.cpuHot)
+            return root.cpuHot
         }
         if (percent >= 55) {
-            return naturalAccent(root.loadAmber)
+            return root.loadAmber
         }
-        return naturalAccent(cpuBlue)
+        return cpuBlue
     }
 
     Rectangle {
