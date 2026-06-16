@@ -70,6 +70,19 @@ TestCase {
     }
 
     QtObject {
+        id: diskModel
+        property bool available: true
+        property int percent: 48
+        property string path: "/"
+        property string displayText: "48%"
+        property string tooltipText: "/\n52 GB free of 100 GB"
+        property var mounts: [
+            { "path": "/", "percent": 48 },
+            { "path": "/home", "percent": 71 }
+        ]
+    }
+
+    QtObject {
         id: batteryModel
         property int capacity: 82
         property bool charging: false
@@ -166,7 +179,7 @@ TestCase {
     Item {
         id: harness
         width: 900
-        height: 530
+        height: 560
 
         Applets.Workspaces { id: workspaces; y: 0 }
         Applets.I3Mode { id: i3Mode; y: 32 }
@@ -181,9 +194,10 @@ TestCase {
         Applets.Temperature { id: temperature; y: 320 }
         Applets.Sound { id: sound; y: 352 }
         Applets.Battery { id: battery; y: 384 }
-        Applets.Clock { id: clock; y: 416 }
-        Applets.Tray { id: tray; y: 448 }
-        Applets.CustomTool { id: customTool; y: 480; toolId: "custom/test" }
+        Applets.Disk { id: disk; y: 416 }
+        Applets.Clock { id: clock; y: 448 }
+        Applets.Tray { id: tray; y: 480 }
+        Applets.CustomTool { id: customTool; y: 512; toolId: "custom/test" }
     }
 
     function assertApplet(item, name) {
@@ -205,6 +219,7 @@ TestCase {
         assertApplet(temperature, "Temperature")
         assertApplet(sound, "Sound")
         assertApplet(battery, "Battery")
+        assertApplet(disk, "Disk")
         assertApplet(clock, "Clock")
         assertApplet(tray, "Tray")
         assertApplet(customTool, "CustomTool")

@@ -13,6 +13,10 @@ Item {
     property string displayText: diskModel ? diskModel.displayText : ""
     property string tooltipText: diskModel ? diskModel.tooltipText : "disk unavailable"
     property bool tooltipHovered: false
+    property int mountCount: diskModel ? diskModel.mounts.length : 0
+    property int popupColumns: mountCount > 1 ? 2 : 1
+    property int popupRows: Math.max(1, Math.ceil(Math.max(1, mountCount) / popupColumns))
+    property int popupHeight: 24 + 18 + 10 + (popupRows * 86) + Math.max(0, popupRows - 1) * 8
     property int preferredWidth: available ? Math.ceil(contentRow.implicitWidth + 12) : 0
 
     signal preferredWidthUpdated(int width)
@@ -30,6 +34,18 @@ Item {
         hovered: root.tooltipHovered
         text: root.tooltipText
         side: "auto"
+    }
+
+    QBar.Popup {
+        id: diskPopup
+        anchorItem: root
+        source: "qrc:/popups/DiskPopup.qml"
+        payload: ({ disk: diskModel, columns: root.popupColumns })
+        popupWidth: 420
+        popupHeight: root.popupHeight
+        gap: 2
+        placement: "below"
+        horizontalAlignment: "left"
     }
 
     Rectangle {
@@ -96,8 +112,9 @@ Item {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
-        acceptedButtons: Qt.NoButton
+        acceptedButtons: Qt.LeftButton
         cursorShape: Qt.PointingHandCursor
         onContainsMouseChanged: root.tooltipHovered = containsMouse
+        onClicked: diskPopup.toggle()
     }
 }

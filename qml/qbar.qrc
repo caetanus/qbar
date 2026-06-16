@@ -35,6 +35,7 @@
     <file>popups/BatteryPopup.qml</file>
     <file>popups/CalendarPopup.qml</file>
     <file>popups/CPUPopup.qml</file>
+    <file>popups/DiskPopup.qml</file>
     <file>popups/MediaPopup.qml</file>
     <file>popups/CPUTooltip.qml</file>
     <file>popups/TooltipPopup.qml</file>

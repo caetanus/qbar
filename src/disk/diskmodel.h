@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QString>
 #include <QTimer>
+#include <QVariantList>
 
 // Disk usage of a single mount point (waybar's "disk" module). Reads QStorageInfo
 // (statvfs) on a slow timer — disk fill changes gradually, so polling is cheap.
@@ -13,6 +14,7 @@ class DiskModel final : public QObject {
     Q_PROPERTY(QString path READ path WRITE setPath NOTIFY pathChanged)
     Q_PROPERTY(QString displayText READ displayText NOTIFY changed)
     Q_PROPERTY(QString tooltipText READ tooltipText NOTIFY changed)
+    Q_PROPERTY(QVariantList mounts READ mounts NOTIFY changed)
 
 public:
     explicit DiskModel(QObject *parent = nullptr);
@@ -23,6 +25,7 @@ public:
     void setPath(const QString &path);
     QString displayText() const { return m_displayText; }
     QString tooltipText() const { return m_tooltipText; }
+    QVariantList mounts() const { return m_mounts; }
 
 signals:
     void changed();
@@ -37,5 +40,6 @@ private:
     int m_percent = 0;
     QString m_displayText;
     QString m_tooltipText;
+    QVariantList m_mounts;
     QTimer m_timer;
 };
