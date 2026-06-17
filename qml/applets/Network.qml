@@ -1,7 +1,9 @@
 import QtQuick
 import QBar 1.0
+import Qt.labs.settings
 import "qrc:/qbar" as Chrome
 import "qrc:/qbar/Contrast.js" as Contrast
+import "qrc:/qbar/Format.js" as Format
 
 Item {
     id: root
@@ -16,6 +18,8 @@ Item {
         ? cssTheme.parseColor(cssStyle["graph-background"])
         : "transparent"
     readonly property color effectiveGraphBackground: Contrast.effectiveBackground(graphBackground, cssTheme, theme.background)
+    readonly property color labelBackground: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#3a3410"
+    readonly property color labelColor: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
 
     readonly property color downloadLineColor: cssStyle["download-color"]
         ? cssTheme.parseColor(cssStyle["download-color"]) : Contrast.contrastColor(root.effectiveGraphBackground)
@@ -37,12 +41,22 @@ Item {
     property int graphWidth: cssPixels(cssStyle["graph-width"], 22)
     property int arrowWidth: cssPixels(cssStyle["arrow-width"], 8)
     property int labelPadding: cssPixels(cssStyle["label-padding"], 10)
-    // Reserve at least the width of "00.0 M/s" so the label doesn't jitter as the
-    // rate changes; wider values (e.g. "100 M/s") still grow past it.
-    property real labelWidth: Math.max(rateLabel.implicitWidth, rateMetrics.implicitWidth)
-    property int preferredWidth: configuredWidth > 0
-        ? configuredWidth
-        : Math.ceil(labelWidth + labelPadding + (arrowWidth * 2) + graphWidth)
+    readonly property var parts: networkConfig && networkConfig.format ? networkConfig.format : ["cycle"]
+    // The graph (with its direction arrows) is always shown; `format` lists only
+    // the value parts beside it.
+    readonly property var valueParts: root.parts.filter(function(part) { return part !== "graph" })
+    readonly property string labelText: networkConfig && networkConfig.text ? networkConfig.text : "net"
+    readonly property var cycleModes: ["text", "absolute", "none"]
+    property int cycleIndex: 0
+
+    // Persist the wheel-cycled mode across restarts (like the Clock's format).
+    Settings {
+        id: cycleSettings
+        category: "Network"
+        property int cycleIndex: 0
+    }
+    onCycleIndexChanged: cycleSettings.cycleIndex = cycleIndex
+    property int preferredWidth: configuredWidth > 0 ? configuredWidth : Math.ceil(contentRow.implicitWidth)
     property bool tooltipHovered: false
 
     Text {
@@ -61,7 +75,10 @@ Item {
     }
 
     onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
-    Component.onCompleted: preferredWidthUpdated(preferredWidth)
+    Component.onCompleted: {
+        cycleIndex = ((cycleSettings.cycleIndex % cycleModes.length) + cycleModes.length) % cycleModes.length
+        preferredWidthUpdated(preferredWidth)
+    }
 
     function formatRate(bytesPerSecond) {
         var value = Number(bytesPerSecond)
@@ -78,6 +95,16 @@ Item {
         return mib.toFixed(1).replace(/\.0$/, "") + " M/s"
     }
 
+    function valueForMode(mode) {
+        if (mode === "text") return root.labelText
+        if (mode === "absolute") return root.formatRate(root.totalRateBytesPerSecond)
+        return ""
+    }
+
+    function valueForPart(part) {
+        if (part === "cycle") return root.valueForMode(root.cycleModes[root.cycleIndex])
+        return root.valueForMode(part)
+    }
 
     Chrome.Tooltip {
         anchorItem: root
@@ -86,87 +113,108 @@ Item {
         side: "auto"
     }
 
+    Component {
+        id: textCell
+        Rectangle {
+            readonly property string cellText: parent ? parent.cellText : ""
+            // Reserve at least "00.0 M/s" so the label doesn't jitter as the rate changes.
+            implicitWidth: Math.max(1, Math.max(cellLabel.implicitWidth, rateMetrics.implicitWidth) + root.labelPadding)
+            height: root.height
+            color: root.labelBackground
+
+            Text {
+                id: cellLabel
+                anchors.centerIn: parent
+                color: root.labelColor
+                font.family: cssStyle["font-family"] || theme.fontFamily
+                font.pointSize: theme.fontSize
+                text: cellText
+            }
+        }
+    }
+
+    Component {
+        id: graphCell
+        Row {
+            height: root.height
+            spacing: 0
+
+            Rectangle {
+                width: root.arrowWidth
+                height: root.height
+                color: root.graphBackground
+                Text {
+                    anchors.centerIn: parent
+                    color: root.downloadRateBytesPerSecond >= root.uploadRateBytesPerSecond
+                        ? (cssStyle["download-color"] || Contrast.contrastColor(root.effectiveGraphBackground))
+                        : (cssStyle["inactive-color"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.4))
+                    font.family: theme.fontFamily
+                    font.pointSize: theme.fontSize
+                    font.bold: true
+                    text: "↓"
+                }
+            }
+
+            Rectangle {
+                width: root.arrowWidth
+                height: root.height
+                color: root.graphBackground
+                Text {
+                    anchors.centerIn: parent
+                    color: root.uploadRateBytesPerSecond > root.downloadRateBytesPerSecond
+                        ? (cssStyle["upload-color"] || Contrast.contrastColor(root.effectiveGraphBackground))
+                        : (cssStyle["inactive-color"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.4))
+                    font.family: theme.fontFamily
+                    font.pointSize: theme.fontSize
+                    font.bold: true
+                    text: "↑"
+                }
+            }
+
+            Rectangle {
+                width: root.graphWidth
+                height: root.height
+                color: root.graphBackground
+
+                Sparkline {
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    values: root.downloadHistory
+                    lineWidth: 1.5
+                    lineColor: root.downloadLineColor
+                    fillColor: root.downloadFillColor
+                }
+                Sparkline {
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    values: root.uploadHistory
+                    lineWidth: 1.5
+                    lineColor: root.uploadLineColor
+                    fillColor: root.uploadFillColor
+                }
+            }
+        }
+    }
+
     Row {
+        id: contentRow
         height: theme.height
         spacing: 0
 
-        Rectangle {
-            width: Math.max(1, root.preferredWidth - root.graphWidth - (root.arrowWidth * 2))
-            height: theme.height
-            radius: 0
-            color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#3a3410"
-
-            Text {
-                id: rateLabel
-                anchors.centerIn: parent
-                color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
-                font.family: cssStyle["font-family"] || theme.fontFamily
-                font.pointSize: theme.fontSize
-                text: root.formatRate(root.totalRateBytesPerSecond)
+        Repeater {
+            model: root.valueParts
+            delegate: Loader {
+                required property var modelData
+                readonly property string cellText: root.valueForPart(modelData)
+                height: root.height
+                visible: cellText.length > 0
+                sourceComponent: textCell
             }
         }
 
-        Rectangle {
-            width: root.arrowWidth
-            height: theme.height
-            radius: 0
-            color: "transparent"
-
-            Text {
-                anchors.centerIn: parent
-                color: root.downloadRateBytesPerSecond >= root.uploadRateBytesPerSecond
-                    ? (cssStyle["download-color"] || Contrast.contrastColor(root.barBackground))
-                    : (cssStyle["inactive-color"] || Contrast.contrastFill(root.barBackground, 0.4))
-                font.family: theme.fontFamily
-                font.pointSize: theme.fontSize
-                font.bold: true
-                text: "↓"
-            }
-        }
-
-        Rectangle {
-            width: root.arrowWidth
-            height: theme.height
-            radius: 0
-            color: "transparent"
-
-            Text {
-                anchors.centerIn: parent
-                color: root.uploadRateBytesPerSecond > root.downloadRateBytesPerSecond
-                    ? (cssStyle["upload-color"] || Contrast.contrastColor(root.barBackground))
-                    : (cssStyle["inactive-color"] || Contrast.contrastFill(root.barBackground, 0.4))
-                font.family: theme.fontFamily
-                font.pointSize: theme.fontSize
-                font.bold: true
-                text: "↑"
-            }
-        }
-
-        Rectangle {
-            width: root.graphWidth
-            height: theme.height
-            radius: 0
-            color: root.graphBackground
-
-            // GPU scene-graph graphs (Sparkline) — no Canvas raster/texture upload
-            // per tick. Two overlaid series: download and upload.
-            Sparkline {
-                anchors.fill: parent
-                anchors.margins: 4
-                values: root.downloadHistory
-                lineWidth: 1.5
-                lineColor: root.downloadLineColor
-                fillColor: root.downloadFillColor
-            }
-
-            Sparkline {
-                anchors.fill: parent
-                anchors.margins: 4
-                values: root.uploadHistory
-                lineWidth: 1.5
-                lineColor: root.uploadLineColor
-                fillColor: root.uploadFillColor
-            }
+        Loader {
+            height: root.height
+            sourceComponent: graphCell
         }
     }
 
@@ -175,5 +223,9 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onContainsMouseChanged: root.tooltipHovered = containsMouse
+        onWheel: function(wheel) {
+            var n = root.cycleModes.length
+            root.cycleIndex = (root.cycleIndex + (wheel.angleDelta.y > 0 ? -1 : 1) + n) % n
+        }
     }
 }

@@ -27,12 +27,17 @@ public:
                                                             const QByteArray &monitorsJson);
     static QString parseActiveWindowTitle(const QByteArray &activeWindowJson);
     static QString parseActiveKeyboardLayout(const QByteArray &devicesJson);
+    static QList<WindowModel::Window> parseClients(const QByteArray &clientsJson,
+                                                   const QByteArray &monitorsJson,
+                                                   qint64 focusedAddress);
 
 public slots:
     void start() override;
     void runCommand(const QString &command) override;
     void activateWorkspace(const QString &workspaceName) override;
     void activateRelativeWorkspace(int direction) override;
+    void activateWindow(qint64 id) override;
+    void closeWindow(qint64 id) override;
     void cycleKeyboardLayout() override;
     void requestTreeSnapshot() override;
 
@@ -46,6 +51,7 @@ private:
     void connectEventSocket();
     void refreshWorkspaces();
     void refreshActiveWindow();
+    void refreshWindows();
     void refreshKeyboardLayout();
     void handleEventLine(const QByteArray &line);
     void setCurrentWindowTitle(const QString &title);

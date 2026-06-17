@@ -1,11 +1,39 @@
 #include "bspwmbackend.h"
 
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
 #include <QSet>
 #include <QTimer>
+
+namespace {
+
+// Walk a bspwm desktop node tree, collecting leaf clients for the taskbar.
+// bspwm does not track window titles, so the class name is the best label.
+void collectBspwmNodes(const QJsonObject &node, const QString &monitor, const QString &desktop,
+                       qint64 focusedNodeId, QList<WindowModel::Window> &out)
+{
+    if (node.isEmpty()) {
+        return;
+    }
+    const QJsonObject client = node.value(QStringLiteral("client")).toObject();
+    if (!client.isEmpty()) {
+        WindowModel::Window window;
+        window.id = node.value(QStringLiteral("id")).toInteger(-1);
+        window.appId = client.value(QStringLiteral("className")).toString();
+        window.title = window.appId;
+        window.workspaceName = desktop;
+        window.monitor = monitor;
+        window.focused = (window.id == focusedNodeId);
+        out.append(window);
+    }
+    collectBspwmNodes(node.value(QStringLiteral("firstChild")).toObject(), monitor, desktop, focusedNodeId, out);
+    collectBspwmNodes(node.value(QStringLiteral("secondChild")).toObject(), monitor, desktop, focusedNodeId, out);
+}
+
+} // namespace
 
 BspwmBackend::BspwmBackend(QObject *parent)
     : WindowManagerBackend(parent)
@@ -96,10 +124,47 @@ QString BspwmBackend::parseFocusedNodeTitle(const QByteArray &nodeJson)
     return root.value(QStringLiteral("name")).toString();
 }
 
+QList<WindowModel::Window> BspwmBackend::parseWindows(const QByteArray &wmJson)
+{
+    QList<WindowModel::Window> windows;
+    const QJsonObject root = QJsonDocument::fromJson(wmJson).object();
+    const QJsonArray monitors = root.value(QStringLiteral("monitors")).toArray();
+
+    // Resolve the globally focused node: focused monitor → focused desktop →
+    // focusedNodeId, so the taskbar can highlight it.
+    const qint64 focusedMonitorId = root.value(QStringLiteral("focusedMonitorId")).toInteger(-1);
+    qint64 focusedNodeId = -1;
+    for (const auto &monitorValue : monitors) {
+        const QJsonObject monitor = monitorValue.toObject();
+        if (monitor.value(QStringLiteral("id")).toInteger(-1) != focusedMonitorId) {
+            continue;
+        }
+        const qint64 focusedDesktopId = monitor.value(QStringLiteral("focusedDesktopId")).toInteger(-1);
+        for (const auto &desktopValue : monitor.value(QStringLiteral("desktops")).toArray()) {
+            const QJsonObject desktop = desktopValue.toObject();
+            if (desktop.value(QStringLiteral("id")).toInteger(-1) == focusedDesktopId) {
+                focusedNodeId = desktop.value(QStringLiteral("focusedNodeId")).toInteger(-1);
+            }
+        }
+    }
+
+    for (const auto &monitorValue : monitors) {
+        const QJsonObject monitor = monitorValue.toObject();
+        const QString monitorName = monitor.value(QStringLiteral("name")).toString();
+        for (const auto &desktopValue : monitor.value(QStringLiteral("desktops")).toArray()) {
+            const QJsonObject desktop = desktopValue.toObject();
+            collectBspwmNodes(desktop.value(QStringLiteral("root")).toObject(), monitorName,
+                              desktop.value(QStringLiteral("name")).toString(), focusedNodeId, windows);
+        }
+    }
+    return windows;
+}
+
 void BspwmBackend::start()
 {
     refreshWorkspaces();
     refreshActiveWindow();
+    refreshWindows();
     startSubscription();
 }
 
@@ -132,10 +197,32 @@ void BspwmBackend::cycleKeyboardLayout()
 {
 }
 
+void BspwmBackend::activateWindow(qint64 id)
+{
+    if (id < 0) {
+        return;
+    }
+    runBspc({QStringLiteral("node"), QStringLiteral("0x%1").arg(id, 0, 16), QStringLiteral("-f")});
+}
+
+void BspwmBackend::closeWindow(qint64 id)
+{
+    if (id < 0) {
+        return;
+    }
+    runBspc({QStringLiteral("node"), QStringLiteral("0x%1").arg(id, 0, 16), QStringLiteral("-c")});
+}
+
 void BspwmBackend::requestTreeSnapshot()
 {
     refreshWorkspaces();
     refreshActiveWindow();
+    refreshWindows();
+}
+
+void BspwmBackend::refreshWindows()
+{
+    m_windows.replace(parseWindows(runBspc({QStringLiteral("wm"), QStringLiteral("-d")})));
 }
 
 void BspwmBackend::readSubscriptionEvents()
@@ -147,6 +234,7 @@ void BspwmBackend::readSubscriptionEvents()
 
     bool workspaceChanged = false;
     bool titleChanged = false;
+    bool windowsChanged = false;
     for (const QString &event : events) {
         workspaceChanged = workspaceChanged
             || event.startsWith(QStringLiteral("desktop_"))
@@ -155,6 +243,8 @@ void BspwmBackend::readSubscriptionEvents()
         titleChanged = titleChanged
             || event.startsWith(QStringLiteral("node_focus"))
             || event.startsWith(QStringLiteral("node_title"));
+        windowsChanged = windowsChanged || event.startsWith(QStringLiteral("node_"))
+            || event.startsWith(QStringLiteral("desktop_"));
     }
 
     if (workspaceChanged) {
@@ -163,6 +253,9 @@ void BspwmBackend::readSubscriptionEvents()
     }
     if (titleChanged) {
         refreshActiveWindow();
+    }
+    if (windowsChanged) {
+        refreshWindows();
     }
 }
 
@@ -220,6 +313,8 @@ void BspwmBackend::startSubscription()
         QStringLiteral("node_focus"),
         QStringLiteral("node_title"),
         QStringLiteral("node_flag"),
+        QStringLiteral("node_add"),
+        QStringLiteral("node_remove"),
     });
 }
 

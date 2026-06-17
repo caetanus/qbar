@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -246,6 +247,7 @@ void HyprlandBackend::requestTreeSnapshot()
 {
     refreshWorkspaces();
     refreshActiveWindow();
+    refreshWindows();
 }
 
 void HyprlandBackend::reconnect()
@@ -325,6 +327,72 @@ void HyprlandBackend::refreshActiveWindow()
     setCurrentWindowTitle(parseActiveWindowTitle(request(QByteArrayLiteral("j/activewindow"))));
 }
 
+void HyprlandBackend::refreshWindows()
+{
+    const QByteArray clients = request(QByteArrayLiteral("j/clients"));
+    const QByteArray monitors = request(QByteArrayLiteral("j/monitors"));
+    m_windows.replace(parseClients(clients, monitors, m_focusedContainerId));
+}
+
+QList<WindowModel::Window> HyprlandBackend::parseClients(const QByteArray &clientsJson,
+                                                        const QByteArray &monitorsJson,
+                                                        qint64 focusedAddress)
+{
+    // Hyprland reports a client's monitor as a numeric id; map it to the monitor
+    // name so the taskbar can filter by output.
+    QHash<int, QString> monitorNames;
+    const QJsonDocument monitorsDoc = QJsonDocument::fromJson(monitorsJson);
+    for (const auto &value : monitorsDoc.array()) {
+        const QJsonObject monitor = value.toObject();
+        monitorNames.insert(monitor.value(QStringLiteral("id")).toInt(-1),
+                            monitor.value(QStringLiteral("name")).toString());
+    }
+
+    QList<WindowModel::Window> windows;
+    const QJsonDocument clientsDoc = QJsonDocument::fromJson(clientsJson);
+    for (const auto &value : clientsDoc.array()) {
+        const QJsonObject client = value.toObject();
+        if (!client.value(QStringLiteral("mapped")).toBool(true)) {
+            continue;
+        }
+        const QString address = client.value(QStringLiteral("address")).toString();
+        bool ok = false;
+        const qint64 id = address.startsWith(QStringLiteral("0x"))
+            ? address.mid(2).toLongLong(&ok, 16)
+            : address.toLongLong(&ok, 16);
+        if (!ok || id == 0) {
+            continue;
+        }
+
+        WindowModel::Window window;
+        window.id = id;
+        window.title = client.value(QStringLiteral("title")).toString();
+        window.appId = client.value(QStringLiteral("class")).toString();
+        window.workspaceName = client.value(QStringLiteral("workspace")).toObject()
+                                   .value(QStringLiteral("name")).toString();
+        window.monitor = monitorNames.value(client.value(QStringLiteral("monitor")).toInt(-1));
+        window.focused = (id == focusedAddress);
+        windows.append(window);
+    }
+    return windows;
+}
+
+void HyprlandBackend::activateWindow(qint64 id)
+{
+    if (id == 0) {
+        return;
+    }
+    runCommand(QStringLiteral("dispatch focuswindow address:0x%1").arg(id, 0, 16));
+}
+
+void HyprlandBackend::closeWindow(qint64 id)
+{
+    if (id == 0) {
+        return;
+    }
+    runCommand(QStringLiteral("dispatch closewindow address:0x%1").arg(id, 0, 16));
+}
+
 void HyprlandBackend::refreshKeyboardLayout()
 {
     setCurrentKeyboardLayout(parseActiveKeyboardLayout(request(QByteArrayLiteral("j/devices"))));
@@ -346,6 +414,7 @@ void HyprlandBackend::handleEventLine(const QByteArray &line)
         || event == "closewindow" || event == "movewindow" || event == "movewindowv2") {
         emit workspaceFocusEvent();
         refreshWorkspaces();
+        refreshWindows();
         return;
     }
 
@@ -364,11 +433,13 @@ void HyprlandBackend::handleEventLine(const QByteArray &line)
             setFocusedContainerId(id);
         }
         refreshActiveWindow();
+        refreshWindows();
         return;
     }
 
     if (event == "windowtitle" || event == "windowtitlev2") {
         refreshActiveWindow();
+        refreshWindows();
         return;
     }
 

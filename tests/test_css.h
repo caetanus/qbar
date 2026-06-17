@@ -11,4 +11,5 @@ private slots:
     void exactResolveIgnoresUniversalRules();
     void stripsCommentsAndAtRules();
     void parsesColors();
+    void parsesCssDurationsAndEasings();
 };

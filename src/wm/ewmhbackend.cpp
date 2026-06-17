@@ -92,6 +92,67 @@ QString windowTitle(xcb_connection_t *connection, xcb_window_t window)
     return title;
 }
 
+QList<xcb_window_t> windowList(xcb_connection_t *connection, xcb_window_t root, xcb_atom_t clientListAtom)
+{
+    const QByteArray bytes = propertyBytes(connection, root, clientListAtom, XCB_ATOM_WINDOW);
+    QList<xcb_window_t> windows;
+    const int count = bytes.size() / static_cast<int>(sizeof(xcb_window_t));
+    const auto *data = reinterpret_cast<const xcb_window_t *>(bytes.constData());
+    windows.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        windows.append(data[i]);
+    }
+    return windows;
+}
+
+// WM_CLASS is "instance\0class\0"; use the class (second field) as the app id,
+// falling back to the instance.
+QString windowClass(xcb_connection_t *connection, xcb_window_t window)
+{
+    const QByteArray bytes = propertyBytes(connection, window, XCB_ATOM_WM_CLASS, XCB_ATOM_STRING);
+    if (bytes.isEmpty()) {
+        return {};
+    }
+    const int nul = bytes.indexOf('\0');
+    if (nul < 0) {
+        return QString::fromUtf8(bytes);
+    }
+    const QByteArray klass = bytes.mid(nul + 1);
+    const int end = klass.indexOf('\0');
+    const QByteArray value = end < 0 ? klass : klass.left(end);
+    return QString::fromUtf8(value.isEmpty() ? bytes.left(nul) : value);
+}
+
+bool windowDemandsAttention(xcb_connection_t *connection, xcb_window_t window, xcb_atom_t demandsAttentionAtom)
+{
+    const xcb_atom_t stateAtom = internAtom(connection, QByteArrayLiteral("_NET_WM_STATE"));
+    const QByteArray bytes = propertyBytes(connection, window, stateAtom, XCB_ATOM_ATOM);
+    const int count = bytes.size() / static_cast<int>(sizeof(xcb_atom_t));
+    const auto *data = reinterpret_cast<const xcb_atom_t *>(bytes.constData());
+    for (int i = 0; i < count; ++i) {
+        if (data[i] == demandsAttentionAtom) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void sendWindowClientMessage(xcb_connection_t *connection, xcb_window_t root, xcb_window_t window,
+                             xcb_atom_t messageType, quint32 firstData)
+{
+    xcb_client_message_event_t event {};
+    event.response_type = XCB_CLIENT_MESSAGE;
+    event.format = 32;
+    event.window = window;
+    event.type = messageType;
+    event.data.data32[0] = firstData;
+    event.data.data32[1] = XCB_CURRENT_TIME;
+    xcb_send_event(connection, false, root,
+                   XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY,
+                   reinterpret_cast<const char *>(&event));
+    xcb_flush(connection);
+}
+
 #endif
 
 } // namespace
@@ -255,5 +316,75 @@ void EwmhBackend::requestTreeSnapshot()
         m_currentWindowTitle = title;
         emit currentWindowTitleChanged();
     }
+
+    // Window list for the taskbar from _NET_CLIENT_LIST.
+    const xcb_atom_t clientListAtom = internAtom(connection, QByteArrayLiteral("_NET_CLIENT_LIST"));
+    const xcb_atom_t wmDesktopAtom = internAtom(connection, QByteArrayLiteral("_NET_WM_DESKTOP"));
+    const xcb_atom_t demandsAttentionAtom = internAtom(connection, QByteArrayLiteral("_NET_WM_STATE_DEMANDS_ATTENTION"));
+    QList<WindowModel::Window> windows;
+    for (const xcb_window_t window : windowList(connection, root, clientListAtom)) {
+        WindowModel::Window entry;
+        entry.id = static_cast<qint64>(window);
+        entry.title = windowTitle(connection, window);
+        entry.appId = windowClass(connection, window);
+        const quint32 desktop = cardinalProperty(connection, window, wmDesktopAtom, 0xffffffff);
+        entry.workspaceName = (desktop != 0xffffffff && static_cast<int>(desktop) < names.size())
+            ? names.at(static_cast<int>(desktop))
+            : QString();
+        entry.focused = (window == activeWindow);
+        entry.urgent = windowDemandsAttention(connection, window, demandsAttentionAtom);
+        windows.append(entry);
+    }
+    m_windows.replace(std::move(windows));
+#endif
+}
+
+void EwmhBackend::activateWindow(qint64 id)
+{
+#ifdef QBAR_HAVE_X11
+    if (id <= 0) {
+        return;
+    }
+    xcb_connection_t *connection = xcb_connect(nullptr, nullptr);
+    if (connection == nullptr || xcb_connection_has_error(connection)) {
+        return;
+    }
+    const auto guard = qScopeGuard([connection]() { xcb_disconnect(connection); });
+    const xcb_setup_t *setup = xcb_get_setup(connection);
+    xcb_screen_iterator_t iterator = xcb_setup_roots_iterator(setup);
+    if (iterator.rem == 0) {
+        return;
+    }
+    const xcb_window_t root = iterator.data->root;
+    const xcb_atom_t activeWindowAtom = internAtom(connection, QByteArrayLiteral("_NET_ACTIVE_WINDOW"));
+    // Source indication 2 = pager (per EWMH), which WMs honour without focus-steal
+    // prevention getting in the way.
+    sendWindowClientMessage(connection, root, static_cast<xcb_window_t>(id), activeWindowAtom, 2);
+#else
+    Q_UNUSED(id)
+#endif
+}
+
+void EwmhBackend::closeWindow(qint64 id)
+{
+#ifdef QBAR_HAVE_X11
+    if (id <= 0) {
+        return;
+    }
+    xcb_connection_t *connection = xcb_connect(nullptr, nullptr);
+    if (connection == nullptr || xcb_connection_has_error(connection)) {
+        return;
+    }
+    const auto guard = qScopeGuard([connection]() { xcb_disconnect(connection); });
+    const xcb_setup_t *setup = xcb_get_setup(connection);
+    xcb_screen_iterator_t iterator = xcb_setup_roots_iterator(setup);
+    if (iterator.rem == 0) {
+        return;
+    }
+    const xcb_window_t root = iterator.data->root;
+    const xcb_atom_t closeWindowAtom = internAtom(connection, QByteArrayLiteral("_NET_CLOSE_WINDOW"));
+    sendWindowClientMessage(connection, root, static_cast<xcb_window_t>(id), closeWindowAtom, 2);
+#else
+    Q_UNUSED(id)
 #endif
 }

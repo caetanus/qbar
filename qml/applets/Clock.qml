@@ -4,7 +4,7 @@ import "qrc:/qbar" as QBar
 
 Item {
     id: root
-    width: preferredWidth > 0 ? preferredWidth : (clockText.implicitWidth + 20)
+    width: preferredWidth > 0 ? preferredWidth : (clockText.implicitWidth + paddingLeft + paddingRight)
     height: theme.height
 
     // Tooltip text: time on the first line, full date on the second.
@@ -14,6 +14,10 @@ Item {
 
     readonly property string cssId: "clock"
     readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    readonly property real paddingTop: cssLengthFromList("padding", 0, 0)
+    readonly property real paddingRight: cssLengthFromList("padding", 1, 10)
+    readonly property real paddingBottom: cssLengthFromList("padding", 2, 0)
+    readonly property real paddingLeft: cssLengthFromList("padding", 3, 10)
 
     Behavior on width {
         NumberAnimation { duration: 200; easing.type: Easing.InOutQuad }
@@ -23,6 +27,27 @@ Item {
     signal preferredWidthUpdated(int width)
 
     property int preferredWidth: 0
+
+    function cssBoxParts(name) {
+        var raw = cssStyle[name] || ""
+        return raw.toString().trim().split(/\s+/).filter(function(part) { return part.length > 0 })
+    }
+
+    function cssLengthFromList(name, index, fallback) {
+        var parts = cssBoxParts(name)
+        if (parts.length === 0) {
+            return fallback
+        }
+        var value = parts[0]
+        if (parts.length === 2) {
+            value = index % 2 === 0 ? parts[0] : parts[1]
+        } else if (parts.length === 3) {
+            value = index === 3 ? parts[1] : parts[index]
+        } else if (parts.length >= 4) {
+            value = parts[index]
+        }
+        return cssTheme.parseLength(value, fallback)
+    }
 
     Settings {
         id: clockSettings
@@ -43,7 +68,7 @@ Item {
     }
 
     function syncPreferredWidth() {
-        preferredWidth = clockText.implicitWidth + 20
+        preferredWidth = clockText.implicitWidth + paddingLeft + paddingRight
         preferredWidthUpdated(preferredWidth)
     }
 
@@ -67,14 +92,25 @@ Item {
         clockSettings.formatIndex = formatIndex
     }
 
-    Rectangle {
+    onPaddingLeftChanged: syncPreferredWidth()
+    onPaddingRightChanged: syncPreferredWidth()
+
+    QBar.CssFill {
         anchors.fill: parent
-        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#805f7182"
+        style: root.cssStyle
+        radius: root.cssStyle["border-radius"] ? cssTheme.parseLength(root.cssStyle["border-radius"], 0) : 0
+        defaultColor: root.cssStyle["background-color"] || root.cssStyle["background"] ? "transparent" : "#805f7182"
     }
 
     Text {
         id: clockText
-        anchors.centerIn: parent
+        anchors.fill: parent
+        anchors.leftMargin: root.paddingLeft
+        anchors.rightMargin: root.paddingRight
+        anchors.topMargin: root.paddingTop
+        anchors.bottomMargin: root.paddingBottom
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
 
         readonly property var dropShadow: cssTheme && cssTheme.loaded
             ? cssTheme.parseBoxShadow(root.cssStyle["text-shadow"] || "") : ({})

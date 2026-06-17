@@ -13,7 +13,8 @@ Item {
     property var sortedMounts: sortMounts(mounts)
     property int columns: mounts.length > 1 ? 2 : 1
     property int tileHeight: 86
-    property color textColor: theme.foreground
+    readonly property var popupStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("popup") : ({})
+    property color textColor: popupStyle["color"] ? cssTheme.parseColor(popupStyle["color"]) : theme.foreground
     property color textSoft: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.78)
     property color panelBackground: Qt.rgba(1, 1, 1, 0.07)
     property color panelBorder: Qt.rgba(1, 1, 1, 0.14)

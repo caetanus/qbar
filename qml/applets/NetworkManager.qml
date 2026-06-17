@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 import "qrc:/qbar" as QBar
 import "qrc:/qbar/Contrast.js" as Contrast
 
@@ -76,28 +75,18 @@ Item {
         anchors.left: parent.left
         anchors.leftMargin: 5
 
-        Image {
-            id: iconImage
+        QBar.CssIcon {
+            id: cssIcon
             anchors.fill: parent
-            source: "image://themeicon/" + root.iconName
-            fillMode: Image.PreserveAspectFit
-            smooth: true
-            mipmap: true
-            visible: false
-        }
-
-        MultiEffect {
-            anchors.fill: iconImage
-            source: iconImage
-            visible: iconImage.status === Image.Ready
-            colorization: 1.0
-            colorizationColor: root.iconColor
+            style: root.cssStyle
+            fallbackIconName: root.iconName
+            color: root.iconColor
         }
 
         Canvas {
             id: iconFallback
             anchors.fill: parent
-            visible: iconImage.status !== Image.Ready
+            visible: !cssIcon.ready
 
             onPaint: {
                 var ctx = getContext("2d")

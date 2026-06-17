@@ -1,4 +1,5 @@
 import QtQuick
+import "qrc:/qbar" as QBar
 
 Item {
     id: root
@@ -10,6 +11,45 @@ Item {
     property var battery: null
     property bool lowBattery: battery ? (!battery.charging && !battery.full && battery.capacity <= 20) : false
     property real alertPulse: 0
+    readonly property var popupStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("popup") : ({})
+    readonly property var batteryPopupStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("battery-popup") : ({})
+    readonly property color popupForeground: popupStyle["color"] ? cssTheme.parseColor(popupStyle["color"]) : theme.foreground
+    readonly property color popupForegroundSoft: Qt.rgba(popupForeground.r, popupForeground.g, popupForeground.b, 0.76)
+    readonly property color trackColor: Qt.rgba(popupForeground.r, popupForeground.g, popupForeground.b, 0.13)
+    readonly property color dividerColor: Qt.rgba(popupForeground.r, popupForeground.g, popupForeground.b, 0.16)
+    readonly property var popupTextShadow: cssTheme && cssTheme.loaded
+        ? cssTheme.parseBoxShadow((batteryPopupStyle["text-shadow"] || popupStyle["text-shadow"] || "")) : ({})
+
+    function hasBatteryPopupChrome() {
+        return batteryPopupStyle["background"] || batteryPopupStyle["background-color"]
+            || batteryPopupStyle["background-image"] || batteryPopupStyle["border-color"]
+            || batteryPopupStyle["box-shadow"]
+    }
+
+    component PopupText: Text {
+        color: root.popupForeground
+        font.family: theme.fontFamily
+        font.pointSize: theme.fontSize
+        layer.enabled: root.popupTextShadow.color !== undefined
+        layer.effect: QBar.CssDropShadow { shadow: root.popupTextShadow }
+    }
+
+    component DetailRow: Row {
+        property string label: ""
+        property string value: ""
+        anchors.left: parent.left
+        anchors.right: parent.right
+        spacing: 4
+
+        PopupText {
+            text: parent.label
+            color: root.popupForegroundSoft
+        }
+
+        PopupText {
+            text: parent.value
+        }
+    }
 
     function formatDuration(seconds) {
         if (!seconds || seconds <= 0) {
@@ -53,16 +93,16 @@ Item {
 
     function statusColor() {
         if (!battery) {
-            return "#ffffff"
+            return root.popupForeground
         }
         if (lowBattery) {
-            return mixColor(Qt.rgba(0.90, 0.16, 0.16, 1.0), Qt.rgba(1.0, 1.0, 1.0, 1.0), alertPulse)
+            return mixColor(Qt.rgba(0.90, 0.16, 0.16, 1.0), root.popupForeground, alertPulse * 0.28)
         }
         if (battery.charging) {
-            return "#218f4f"
+            return "#22c55e"
         }
         if (battery.full) {
-            return "#ffffff"
+            return root.popupForeground
         }
         return "#cbd5e1"
     }
@@ -93,10 +133,15 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(theme.background.r, theme.background.g, theme.background.b, 0.92)
-        border.color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.15)
-        border.width: 1
-        radius: 4
+        color: "transparent"
+    }
+
+    QBar.CssFill {
+        anchors.fill: parent
+        visible: root.hasBatteryPopupChrome()
+        style: root.batteryPopupStyle
+        radius: batteryPopupStyle["border-radius"] ? parseFloat(batteryPopupStyle["border-radius"]) : 4
+        defaultColor: "transparent"
     }
 
     Column {
@@ -112,18 +157,15 @@ Item {
             anchors.right: parent.right
             spacing: 8
 
-            Text {
+            PopupText {
                 text: root.statusLabel()
                 color: root.statusColor()
-                font.family: theme.fontFamily
                 font.pointSize: theme.fontSize + 1
                 font.bold: true
             }
 
-            Text {
+            PopupText {
                 text: battery ? battery.capacity + "%" : ""
-                color: "#ffffff"
-                font.family: theme.fontFamily
                 font.pointSize: theme.fontSize + 1
                 font.bold: true
             }
@@ -134,7 +176,7 @@ Item {
             anchors.right: parent.right
             height: 8
             radius: 4
-            color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.08)
+            color: root.trackColor
 
             Rectangle {
                 anchors.left: parent.left
@@ -156,7 +198,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             height: 1
-            color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.1)
+            color: root.dividerColor
         }
 
         Column {
@@ -164,88 +206,28 @@ Item {
             anchors.right: parent.right
             spacing: 6
 
-            Row {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                spacing: 4
+            DetailRow {
                 visible: battery ? battery.timeRemainingAvailable && battery.timeRemaining > 0 : false
-
-                Text {
-                    text: root.timeLabel()
-                    color: "#ffffff"
-                    font.family: theme.fontFamily
-                    font.pointSize: theme.fontSize
-                }
-
-                Text {
-                    text: root.formatDuration(battery ? battery.timeRemaining : 0)
-                    color: "#ffffff"
-                    font.family: theme.fontFamily
-                    font.pointSize: theme.fontSize
-                }
+                label: root.timeLabel()
+                value: root.formatDuration(battery ? battery.timeRemaining : 0)
             }
 
-            Row {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                spacing: 4
+            DetailRow {
                 visible: battery ? battery.cyclesAvailable : false
-
-                Text {
-                    text: "Cycles:"
-                    color: "#ffffff"
-                    font.family: theme.fontFamily
-                    font.pointSize: theme.fontSize
-                }
-
-                Text {
-                    text: battery ? battery.cycles : ""
-                    color: "#ffffff"
-                    font.family: theme.fontFamily
-                    font.pointSize: theme.fontSize
-                }
+                label: "Cycles:"
+                value: battery ? battery.cycles : ""
             }
 
-            Row {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                spacing: 4
+            DetailRow {
                 visible: battery ? battery.healthAvailable : false
-
-                Text {
-                    text: "Health:"
-                    color: "#ffffff"
-                    font.family: theme.fontFamily
-                    font.pointSize: theme.fontSize
-                }
-
-                Text {
-                    text: battery ? battery.health + "%" : ""
-                    color: "#ffffff"
-                    font.family: theme.fontFamily
-                    font.pointSize: theme.fontSize
-                }
+                label: "Health:"
+                value: battery ? battery.health + "%" : ""
             }
 
-            Row {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                spacing: 4
+            DetailRow {
                 visible: battery ? battery.energyRateAvailable : false
-
-                Text {
-                    text: "Power draw:"
-                    color: "#ffffff"
-                    font.family: theme.fontFamily
-                    font.pointSize: theme.fontSize
-                }
-
-                Text {
-                    text: battery ? battery.energyRate.toFixed(1) + " W" : ""
-                    color: "#ffffff"
-                    font.family: theme.fontFamily
-                    font.pointSize: theme.fontSize
-                }
+                label: "Power draw:"
+                value: battery ? battery.energyRate.toFixed(1) + " W" : ""
             }
         }
     }

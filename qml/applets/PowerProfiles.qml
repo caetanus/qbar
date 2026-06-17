@@ -54,9 +54,18 @@ Item {
             height: 15
             anchors.verticalCenter: parent.verticalCenter
 
+            QBar.CssIcon {
+                id: cssIcon
+                anchors.fill: parent
+                style: root.cssStyle
+                color: root.iconColor
+                visible: hasCustomIcon
+            }
+
             Canvas {
                 id: icon
                 anchors.fill: parent
+                visible: !cssIcon.hasCustomIcon
                 onPaint: {
                     var ctx = getContext("2d")
                     ctx.clearRect(0, 0, width, height)

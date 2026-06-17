@@ -35,6 +35,53 @@ Item {
         side: "auto"
     }
 
+    // Right-click menu: toggle power and connect/disconnect paired devices.
+    function buildMenu() {
+        var items = []
+        items.push({ text: root.powered ? "Turn Bluetooth off" : "Turn Bluetooth on", action: "power" })
+
+        if (root.powered) {
+            items.push({ separator: true })
+            var devices = bluetoothModel ? bluetoothModel.devices : []
+            if (devices.length === 0) {
+                items.push({ text: "No paired devices", enabled: false })
+            } else {
+                for (var i = 0; i < devices.length; i++) {
+                    var d = devices[i]
+                    items.push({
+                        text: d.name,
+                        iconName: d.iconName,
+                        checkable: true,
+                        checked: d.connected,
+                        action: "device",
+                        path: d.path
+                    })
+                }
+            }
+        }
+        return items
+    }
+
+    QBar.MenuPopup {
+        id: btMenu
+        anchorItem: root
+        gap: 4
+        onTriggered: function(index, item) {
+            if (!bluetoothModel) {
+                return
+            }
+            if (item.action === "power") {
+                bluetoothModel.togglePower()
+            } else if (item.action === "device") {
+                if (item.checked) {
+                    bluetoothModel.disconnectDevice(item.path)
+                } else {
+                    bluetoothModel.connectDevice(item.path)
+                }
+            }
+        }
+    }
+
     Rectangle {
         anchors.fill: parent
         visible: root.available
@@ -54,9 +101,18 @@ Item {
             height: 16
             anchors.verticalCenter: parent.verticalCenter
 
+            QBar.CssIcon {
+                id: cssIcon
+                anchors.fill: parent
+                style: root.cssStyle
+                color: root.iconColor
+                visible: hasCustomIcon
+            }
+
             Canvas {
                 id: icon
                 anchors.fill: parent
+                visible: !cssIcon.hasCustomIcon
                 onPaint: {
                     var ctx = getContext("2d")
                     ctx.clearRect(0, 0, width, height)
@@ -98,9 +154,16 @@ Item {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
-        acceptedButtons: Qt.LeftButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
         onContainsMouseChanged: root.tooltipHovered = containsMouse
-        onClicked: if (bluetoothModel) bluetoothModel.togglePower()
+        onClicked: function(mouse) {
+            if (mouse.button === Qt.RightButton) {
+                btMenu.model = root.buildMenu()
+                btMenu.toggle()
+            } else if (bluetoothModel) {
+                bluetoothModel.togglePower()
+            }
+        }
     }
 }

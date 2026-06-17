@@ -34,6 +34,17 @@ struct BarConfig {
     QEasingCurve animationEasing = QEasingCurve::InOutQuad;
     QString windowManagerBackend = QStringLiteral("auto");
     QVariantMap customTools;
+    // Taskbar applet options: scope ("workspace"|"all"|"monitor"),
+    // middleClickClose (bool), rightClickMenu (bool). Defaults set in config.cpp.
+    QVariantMap taskbar;
+    // CPU/Memory/Network display: { "format": [parts...], "text": "<label>" }.
+    // Parts (composable, ordered): "text" (the literal label), "percentage",
+    // "clock" (cpu), "absolute" (mem used/total, net rate), "graph", and "cycle"
+    // (a value slot the mouse wheel cycles through the applet's modes + none).
+    // Defaults in config.cpp.
+    QVariantMap cpu;
+    QVariantMap memory;
+    QVariantMap network;
     QString styleSheet;
     QString output;          // target monitor name (waybar: "output")
     int marginTop    = -1;   // -1 = inherit from margin
@@ -65,6 +76,7 @@ struct BarConfig {
         QStringLiteral("Tray"),
     };
     QString configFilePath;
+    int configIndex = 0;
     QStringList applets = {
         QStringLiteral("Workspaces"),
         QStringLiteral("I3Mode"),

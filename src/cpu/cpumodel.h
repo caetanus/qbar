@@ -11,6 +11,7 @@ class CpuModel final : public QObject {
     Q_OBJECT
     Q_PROPERTY(int usage READ usage NOTIFY usageChanged)
     Q_PROPERTY(QVariantList usageHistory READ usageHistory NOTIFY usageHistoryChanged)
+    Q_PROPERTY(double clockMhz READ clockMhz NOTIFY clockChanged)
     Q_PROPERTY(double loadAverage1 READ loadAverage1 NOTIFY loadAverageChanged)
     Q_PROPERTY(double loadAverage5 READ loadAverage5 NOTIFY loadAverageChanged)
     Q_PROPERTY(double loadAverage15 READ loadAverage15 NOTIFY loadAverageChanged)
@@ -20,6 +21,8 @@ class CpuModel final : public QObject {
     Q_PROPERTY(QVariantList topProcesses READ topProcesses NOTIFY processStatsChanged)
     Q_PROPERTY(QVariantList topMemoryProcesses READ topMemoryProcesses NOTIFY processStatsChanged)
     Q_PROPERTY(int memoryUsage READ memoryUsage NOTIFY memoryStatsChanged)
+    Q_PROPERTY(qint64 memoryUsedBytes READ memoryUsedBytes NOTIFY memoryStatsChanged)
+    Q_PROPERTY(qint64 memoryTotalBytes READ memoryTotalBytes NOTIFY memoryStatsChanged)
     Q_PROPERTY(QVariantList memoryUsageHistory READ memoryUsageHistory NOTIFY memoryStatsChanged)
     Q_PROPERTY(int swapUsage READ swapUsage NOTIFY memoryStatsChanged)
     Q_PROPERTY(QVariantList swapUsageHistory READ swapUsageHistory NOTIFY memoryStatsChanged)
@@ -33,6 +36,7 @@ public:
 
     int usage() const;
     QVariantList usageHistory() const;
+    double clockMhz() const;
     double loadAverage1() const;
     double loadAverage5() const;
     double loadAverage15() const;
@@ -42,6 +46,8 @@ public:
     QVariantList topProcesses() const;
     QVariantList topMemoryProcesses() const;
     int memoryUsage() const;
+    qint64 memoryUsedBytes() const;
+    qint64 memoryTotalBytes() const;
     QVariantList memoryUsageHistory() const;
     int swapUsage() const;
     QVariantList swapUsageHistory() const;
@@ -57,6 +63,7 @@ public:
 signals:
     void usageChanged();
     void usageHistoryChanged();
+    void clockChanged();
     void loadAverageChanged();
     void loadAverageHistoryChanged();
     void processStatsChanged();
@@ -99,8 +106,9 @@ private:
     LoadAverageSample readLoadAverage() const;
     QVector<ProcessSample> readProcessSamples() const;
     int readRunningProcesses() const;
-    int readMemoryUsage() const;
+    int readMemoryUsage(qint64 *usedKb = nullptr, qint64 *totalKb = nullptr) const;
     int readSwapUsage() const;
+    double readClockMhz() const;
     void refresh();
     void appendUsage(int usage);
     void appendLoadAverage(double loadAverage);
@@ -112,6 +120,7 @@ private:
     qint64 readProcessRssKb(int pid) const;
 
     int m_usage = 0;
+    double m_clockMhz = 0.0;
     QVariantList m_usageHistory;
     double m_loadAverage1 = 0.0;
     double m_loadAverage5 = 0.0;
@@ -122,6 +131,8 @@ private:
     QVariantList m_topProcesses;
     QVariantList m_topMemoryProcesses;
     int m_memoryUsage = 0;
+    qint64 m_memoryUsedKb = 0;
+    qint64 m_memoryTotalKb = 0;
     QVariantList m_memoryUsageHistory;
     int m_swapUsage = 0;
     QVariantList m_swapUsageHistory;

@@ -17,6 +17,7 @@
     <file>applets/NetworkManager.qml</file>
     <file>applets/Temperature.qml</file>
     <file>applets/Sound.qml</file>
+    <file>applets/Taskbar.qml</file>
     <file>applets/Title.qml</file>
     <file>applets/Tray.qml</file>
     <file>applets/Workspaces.qml</file>
@@ -26,10 +27,12 @@
     <file>qbar/DismissOverlay.qml</file>
     <file>qbar/PopupShell.qml</file>
     <file>qbar/CssFill.qml</file>
+    <file>qbar/CssIcon.qml</file>
     <file>qbar/CssDropShadow.qml</file>
     <file>qbar/MarqueeText.qml</file>
     <file>qbar/Tooltip.qml</file>
     <file>qbar/Contrast.js</file>
+    <file>qbar/Format.js</file>
     <file>icons/caffeine-cup-empty-white.svg</file>
     <file>icons/caffeine-cup-full-black.svg</file>
     <file>popups/BatteryPopup.qml</file>

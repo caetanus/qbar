@@ -1,6 +1,8 @@
 import QtQuick
+import Qt.labs.settings
 import "qrc:/qbar" as QBar
 import "qrc:/qbar/Contrast.js" as Contrast
+import "qrc:/qbar/Format.js" as Format
 
 Item {
     id: root
@@ -14,15 +16,33 @@ Item {
         ? cssTheme.parseColor(cssStyle["graph-background"])
         : "transparent"
     readonly property color effectiveGraphBackground: Contrast.effectiveBackground(graphBackground, cssTheme, theme.background)
+    readonly property color labelBackground: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#35414a"
+    readonly property color labelColor: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
 
     property int usage: cpuModel ? cpuModel.usage : 0
     property var history: cpuModel ? cpuModel.usageHistory : []
     property int configuredWidth: cssPixels(cssStyle["width"], 0)
     property int graphWidth: cssPixels(cssStyle["graph-width"], 22)
     property int labelPadding: cssPixels(cssStyle["label-padding"], 10)
-    property int preferredWidth: configuredWidth > 0
-        ? configuredWidth
-        : Math.ceil(usageLabel.implicitWidth + labelPadding + graphWidth)
+    // Composable display parts (config: cpu.format / cpu.text). Default keeps the
+    // historical "percentage + graph" look.
+    readonly property var parts: cpuConfig && cpuConfig.format ? cpuConfig.format : ["cycle"]
+    // The graph is always shown; `format` lists only the value parts beside it
+    // ("graph" in the list is ignored). An empty list = graph only.
+    readonly property var valueParts: root.parts.filter(function(part) { return part !== "graph" })
+    readonly property string labelText: cpuConfig && cpuConfig.text ? cpuConfig.text : "cpu"
+    // The "cycle" part steps through these modes on each wheel tick.
+    readonly property var cycleModes: ["text", "percentage", "clock", "none"]
+    property int cycleIndex: 0
+
+    // Persist the wheel-cycled mode across restarts (like the Clock's format).
+    Settings {
+        id: cycleSettings
+        category: "CPU"
+        property int cycleIndex: 0
+    }
+    onCycleIndexChanged: cycleSettings.cycleIndex = cycleIndex
+    property int preferredWidth: configuredWidth > 0 ? configuredWidth : Math.ceil(contentRow.implicitWidth)
     property bool tooltipHovered: false
     property int popupColumns: cpuModel ? (cpuModel.coreCount > 24 ? 6 : (cpuModel.coreCount > 4 ? 4 : 2)) : 2
     property int popupHeaderHeight: 188
@@ -46,8 +66,23 @@ Item {
         return isNaN(parsed) ? fallback : parsed
     }
 
+    function valueForMode(mode) {
+        if (mode === "text") return root.labelText
+        if (mode === "percentage") return root.usage + "%"
+        if (mode === "clock") return Format.humanizeClock(cpuModel ? cpuModel.clockMhz : 0)
+        return ""
+    }
+
+    function valueForPart(part) {
+        if (part === "cycle") return root.valueForMode(root.cycleModes[root.cycleIndex])
+        return root.valueForMode(part)
+    }
+
     onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
-    Component.onCompleted: preferredWidthUpdated(preferredWidth)
+    Component.onCompleted: {
+        cycleIndex = ((cycleSettings.cycleIndex % cycleModes.length) + cycleModes.length) % cycleModes.length
+        preferredWidthUpdated(preferredWidth)
+    }
 
     QBar.Popup {
         id: cpuPopup
@@ -65,35 +100,35 @@ Item {
         anchorItem: root
         hovered: root.tooltipHovered
         text: root.usage + "% cpu usage, load avg " + (cpuModel ? cpuModel.loadAverage1.toFixed(2) : "0.00")
+            + (cpuModel && cpuModel.clockMhz > 0 ? ", " + Format.humanizeClock(cpuModel.clockMhz) : "")
         side: "auto"
     }
 
-    Row {
-        id: contentRow
-        height: theme.height
-        spacing: 0
-
+    Component {
+        id: textCell
         Rectangle {
-            width: Math.max(1, root.preferredWidth - graphBlock.width)
-            height: theme.height
-            radius: 0
-            color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#35414a"
+            // `parent` is the Loader; read the resolved text from it.
+            readonly property string cellText: parent ? parent.cellText : ""
+            implicitWidth: Math.max(1, cellLabel.implicitWidth + root.labelPadding)
+            height: root.height
+            color: root.labelBackground
 
             Text {
-                id: usageLabel
+                id: cellLabel
                 anchors.centerIn: parent
-                color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
+                color: root.labelColor
                 font.family: cssStyle["font-family"] || theme.fontFamily
                 font.pointSize: theme.fontSize
-                text: root.usage + "%"
+                text: cellText
             }
         }
+    }
 
+    Component {
+        id: graphCell
         Rectangle {
-            id: graphBlock
-            width: root.graphWidth
-            height: theme.height
-            radius: 0
+            implicitWidth: root.graphWidth
+            height: root.height
             color: root.graphBackground
 
             Canvas {
@@ -149,20 +184,40 @@ Item {
                     ctx.lineCap = "round"
                     ctx.stroke()
                 }
-            }
 
-            Connections {
-                target: cpuModel
-                function onUsageChanged() { graph.requestPaint() }
-                function onUsageHistoryChanged() { graph.requestPaint() }
+                Connections {
+                    target: cpuModel
+                    function onUsageChanged() { graph.requestPaint() }
+                    function onUsageHistoryChanged() { graph.requestPaint() }
+                }
+                Connections {
+                    target: root
+                    function onCssStyleChanged() { graph.requestPaint() }
+                }
+                Component.onCompleted: graph.requestPaint()
             }
+        }
+    }
 
-            Connections {
-                target: root
-                function onCssStyleChanged() { graph.requestPaint() }
+    Row {
+        id: contentRow
+        height: theme.height
+        spacing: 0
+
+        Repeater {
+            model: root.valueParts
+            delegate: Loader {
+                required property var modelData
+                readonly property string cellText: root.valueForPart(modelData)
+                height: root.height
+                visible: cellText.length > 0
+                sourceComponent: textCell
             }
+        }
 
-            Component.onCompleted: graph.requestPaint()
+        Loader {
+            height: root.height
+            sourceComponent: graphCell
         }
     }
 
@@ -172,5 +227,9 @@ Item {
         cursorShape: Qt.PointingHandCursor
         onContainsMouseChanged: root.tooltipHovered = containsMouse
         onClicked: cpuPopup.toggle()
+        onWheel: function(wheel) {
+            var n = root.cycleModes.length
+            root.cycleIndex = (root.cycleIndex + (wheel.angleDelta.y > 0 ? -1 : 1) + n) % n
+        }
     }
 }

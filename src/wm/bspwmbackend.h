@@ -24,12 +24,15 @@ public:
                                                               const QStringList &occupiedDesktops,
                                                               const QStringList &urgentDesktops);
     static QString parseFocusedNodeTitle(const QByteArray &nodeJson);
+    static QList<WindowModel::Window> parseWindows(const QByteArray &wmJson);
 
 public slots:
     void start() override;
     void runCommand(const QString &command) override;
     void activateWorkspace(const QString &workspaceName) override;
     void activateRelativeWorkspace(int direction) override;
+    void activateWindow(qint64 id) override;
+    void closeWindow(qint64 id) override;
     void cycleKeyboardLayout() override;
     void requestTreeSnapshot() override;
 
@@ -43,6 +46,7 @@ private:
 
     void refreshWorkspaces();
     void refreshActiveWindow();
+    void refreshWindows();
     void startSubscription();
     void setCurrentWindowTitle(const QString &title);
 

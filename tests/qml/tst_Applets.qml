@@ -163,6 +163,17 @@ TestCase {
     }
 
     property var workspaceModel: null
+    property var windowModel: null
+    property var taskbarConfig: ({ "scope": "all", "middleClickClose": true, "rightClickMenu": true })
+    property var cpuConfig: ({ "format": ["text", "percentage", "clock", "graph"], "text": "cpu" })
+    property var memoryConfig: ({ "format": ["text", "percentage", "absolute", "graph"], "text": "mem" })
+    property var networkConfig: ({ "format": ["text", "absolute", "graph"], "text": "net" })
+    property var barWindow: null
+    QtObject {
+        id: wm
+        function activateWindow(id) {}
+        function closeWindow(id) {}
+    }
     property var customTools: ({
         "custom/test": {
             "command": "",
@@ -198,6 +209,7 @@ TestCase {
         Applets.Clock { id: clock; y: 448 }
         Applets.Tray { id: tray; y: 480 }
         Applets.CustomTool { id: customTool; y: 512; toolId: "custom/test" }
+        Applets.Taskbar { id: taskbar; y: 544 }
     }
 
     function assertApplet(item, name) {
@@ -223,6 +235,8 @@ TestCase {
         assertApplet(clock, "Clock")
         assertApplet(tray, "Tray")
         assertApplet(customTool, "CustomTool")
+        verify(taskbar !== null, "Taskbar should exist")
+        compare(taskbar.height, theme.height, "Taskbar should use bar height")
     }
 
     function test_key_interactions_do_not_throw() {

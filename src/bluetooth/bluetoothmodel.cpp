@@ -10,6 +10,8 @@
 #include <QDBusServiceWatcher>
 #include <QDBusVariant>
 
+#include <algorithm>
+
 namespace {
 constexpr auto kService = "org.bluez";
 constexpr auto kObjectManagerInterface = "org.freedesktop.DBus.ObjectManager";
@@ -146,6 +148,16 @@ void BluetoothModel::refresh()
         bool powered = false;
         QString adapterPath;
         QStringList connected;
+        // Collect device entries to sort before exposing: connected first, then
+        // by name, so the menu shows the most relevant devices on top.
+        struct Device {
+            QString path;
+            QString name;
+            QString iconName;
+            bool connected;
+            bool paired;
+        };
+        std::vector<Device> deviceList;
 
         for (auto it = objects.constBegin(); it != objects.constEnd(); ++it) {
             const BluezInterfaceMap &interfaces = it.value();
@@ -159,28 +171,55 @@ void BluetoothModel::refresh()
             }
             if (interfaces.contains(QString::fromLatin1(kDeviceInterface))) {
                 const QVariantMap props = interfaces.value(QString::fromLatin1(kDeviceInterface));
-                if (props.value(QStringLiteral("Connected")).toBool()) {
-                    QString name = props.value(QStringLiteral("Alias")).toString();
-                    if (name.isEmpty()) {
-                        name = props.value(QStringLiteral("Name")).toString();
-                    }
-                    if (name.isEmpty()) {
-                        name = props.value(QStringLiteral("Address")).toString();
-                    }
+                const bool isConnected = props.value(QStringLiteral("Connected")).toBool();
+                const bool isPaired = props.value(QStringLiteral("Paired")).toBool();
+                QString name = props.value(QStringLiteral("Alias")).toString();
+                if (name.isEmpty()) {
+                    name = props.value(QStringLiteral("Name")).toString();
+                }
+                if (name.isEmpty()) {
+                    name = props.value(QStringLiteral("Address")).toString();
+                }
+                if (isConnected) {
                     connected.append(name);
+                }
+                // Only paired/connected devices are actionable from the menu;
+                // skip the transient discovery noise.
+                if (isPaired || isConnected) {
+                    deviceList.push_back({it.key().path(), name,
+                                          props.value(QStringLiteral("Icon")).toString(),
+                                          isConnected, isPaired});
                 }
             }
         }
         connected.sort(Qt::CaseInsensitive);
+        std::sort(deviceList.begin(), deviceList.end(), [](const Device &a, const Device &b) {
+            if (a.connected != b.connected) {
+                return a.connected;
+            }
+            return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
+        });
+
+        QVariantList devices;
+        for (const Device &device : deviceList) {
+            devices.append(QVariantMap{
+                {QStringLiteral("path"), device.path},
+                {QStringLiteral("name"), device.name},
+                {QStringLiteral("iconName"), device.iconName},
+                {QStringLiteral("connected"), device.connected},
+                {QStringLiteral("paired"), device.paired},
+            });
+        }
 
         if (available == m_available && powered == m_powered && adapterPath == m_adapterPath
-            && connected == m_connectedDevices) {
+            && connected == m_connectedDevices && devices == m_devices) {
             return;
         }
         m_available = available;
         m_powered = powered;
         m_adapterPath = adapterPath;
         m_connectedDevices = connected;
+        m_devices = devices;
         emit changed();
     });
 }
@@ -194,6 +233,28 @@ void BluetoothModel::togglePower()
                                                QString::fromLatin1(kPropsInterface), QStringLiteral("Set"));
     call << QString::fromLatin1(kAdapterInterface) << QStringLiteral("Powered")
          << QVariant::fromValue(QDBusVariant(!m_powered));
+    QDBusConnection::systemBus().asyncCall(call);
+}
+
+void BluetoothModel::connectDevice(const QString &path)
+{
+    if (path.isEmpty()) {
+        return;
+    }
+    auto call = QDBusMessage::createMethodCall(QString::fromLatin1(kService), path,
+                                               QString::fromLatin1(kDeviceInterface),
+                                               QStringLiteral("Connect"));
+    QDBusConnection::systemBus().asyncCall(call);
+}
+
+void BluetoothModel::disconnectDevice(const QString &path)
+{
+    if (path.isEmpty()) {
+        return;
+    }
+    auto call = QDBusMessage::createMethodCall(QString::fromLatin1(kService), path,
+                                               QString::fromLatin1(kDeviceInterface),
+                                               QStringLiteral("Disconnect"));
     QDBusConnection::systemBus().asyncCall(call);
 }
 

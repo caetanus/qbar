@@ -117,7 +117,33 @@ const char *kConfigSchema = R"JSON({
       "type": "object",
       "description": "Map of \"custom/<name>\" to a tool definition.",
       "additionalProperties": { "$ref": "#/$defs/customTool" }
-    }
+    },
+    "taskbar": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Taskbar applet options.",
+      "properties": {
+        "scope": { "type": "string", "enum": ["workspace", "all", "monitor"], "description": "Which windows to list." },
+        "middleClickClose": { "type": "boolean", "description": "Middle-click closes a window." },
+        "rightClickMenu": { "type": "boolean", "description": "Right-click opens a focus/close menu." }
+      }
+    },
+    "cpu": { "$ref": "#/$defs/display" },
+    "memory": { "$ref": "#/$defs/display" },
+    "network": { "$ref": "#/$defs/display" }
+      }
+    },
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Composable display for the CPU/Memory/Network applets.",
+      "properties": {
+        "format": {
+          "type": "array",
+          "description": "Value parts shown beside the always-present graph. \"cycle\" is a slot the mouse wheel cycles. Empty list = graph only.",
+          "items": { "type": "string", "enum": ["text", "percentage", "clock", "absolute", "used", "cycle"] }
+        },
+        "text": { "type": "string", "description": "Literal label shown by the \"text\"/\"cycle\" parts." }
       }
     },
     "moduleList": {
@@ -241,6 +267,50 @@ QVariantMap parseCustomTools(const QJsonObject &root)
     return customTools;
 }
 
+// Per-applet display config: { "format": [parts...], "text": "<label>" }.
+// `defaultFormat` reproduces the applet's current visuals when unconfigured;
+// `defaultText` is the literal label for the "text"/"cycle" parts.
+QVariantMap parseDisplay(const QJsonObject &root, const QString &key,
+                         const QStringList &defaultFormat, const QString &defaultText)
+{
+    QVariantMap result{
+        {QStringLiteral("format"), QVariant(defaultFormat)},
+        {QStringLiteral("text"), defaultText},
+    };
+    if (root.contains(key) && root.value(key).isObject()) {
+        const QJsonObject object = root.value(key).toObject();
+        if (object.value(QStringLiteral("format")).isArray()) {
+            QStringList parts;
+            for (const auto &value : object.value(QStringLiteral("format")).toArray()) {
+                if (value.isString()) {
+                    parts.append(value.toString());
+                }
+            }
+            result.insert(QStringLiteral("format"), QVariant(parts));
+        }
+        if (object.contains(QStringLiteral("text"))) {
+            result.insert(QStringLiteral("text"), object.value(QStringLiteral("text")).toString());
+        }
+    }
+    return result;
+}
+
+QVariantMap parseTaskbar(const QJsonObject &root)
+{
+    QVariantMap taskbar{
+        {QStringLiteral("scope"), QStringLiteral("workspace")},
+        {QStringLiteral("middleClickClose"), true},
+        {QStringLiteral("rightClickMenu"), true},
+    };
+    if (root.contains(QStringLiteral("taskbar")) && root.value(QStringLiteral("taskbar")).isObject()) {
+        const QVariantMap overrides = root.value(QStringLiteral("taskbar")).toObject().toVariantMap();
+        for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
+            taskbar.insert(it.key(), it.value());
+        }
+    }
+    return taskbar;
+}
+
 static BarConfig parseBarObject(const QJsonObject &root)
 {
     BarConfig config;
@@ -275,6 +345,12 @@ static BarConfig parseBarObject(const QJsonObject &root)
         config.windowManagerBackend = wm.value(QStringLiteral("backend")).toString(config.windowManagerBackend);
     }
     config.customTools = parseCustomTools(root);
+    config.taskbar = parseTaskbar(root);
+    // The graph is always rendered; these defaults list only the value part shown
+    // beside it, reproducing the historical look.
+    config.cpu = parseDisplay(root, QStringLiteral("cpu"), {QStringLiteral("cycle")}, QStringLiteral("cpu"));
+    config.memory = parseDisplay(root, QStringLiteral("memory"), {QStringLiteral("cycle")}, QStringLiteral("mem"));
+    config.network = parseDisplay(root, QStringLiteral("network"), {QStringLiteral("cycle")}, QStringLiteral("net"));
 
     const bool hasModuleSections = root.contains(QStringLiteral("modules-left"))
         || root.contains(QStringLiteral("modules-center"))
@@ -311,8 +387,9 @@ QList<BarConfig> loadConfigs()
     const QString path = configPath();
     ensureConfigSchema(path);
 
-    const auto withDefaults = [&](BarConfig config) {
+    const auto withDefaults = [&](BarConfig config, int index = 0) {
         config.configFilePath = path;
+        config.configIndex = index;
         applyCommandLineOverrides(&config);
         return config;
     };
@@ -346,8 +423,8 @@ QList<BarConfig> loadConfigs()
 
     QList<BarConfig> configs;
     configs.reserve(barObjects.size());
-    for (const QJsonObject &object : barObjects) {
-        configs.append(withDefaults(parseBarObject(object)));
+    for (qsizetype i = 0; i < barObjects.size(); ++i) {
+        configs.append(withDefaults(parseBarObject(barObjects.at(i)), static_cast<int>(i)));
     }
     return configs;
 }

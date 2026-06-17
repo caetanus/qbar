@@ -46,6 +46,9 @@ public:
     // Parse a CSS color string to a QColor
     Q_INVOKABLE QColor parseColor(const QString &cssColor) const;
 
+    // Parse a CSS length ("11px", "8") to pixels, or `fallback` when unparseable.
+    Q_INVOKABLE qreal parseLength(const QString &value, qreal fallback) const;
+
     // Parse `linear-gradient(<angle|to side>, <color> [<pos%>], ...)`.
     // Returns { "type": "linear", "angle": <deg, CSS convention>,
     //           "stops": [ { "position": <0..1>, "color": <QColor> }, ... ] }
@@ -56,6 +59,12 @@ public:
     // Returns { "x","y","blur","spread" (px), "color" (QColor), "inset" (bool) }
     // or an empty map when unset/none.
     Q_INVOKABLE QVariantMap parseBoxShadow(const QString &cssValue) const;
+
+    // Parse CSS-ish duration values: "180ms", "0.76s", or bare milliseconds.
+    Q_INVOKABLE int parseDuration(const QString &cssValue, int fallbackMs) const;
+
+    // Parse CSS/QML easing names into QEasingCurve::Type integer values.
+    Q_INVOKABLE int parseEasing(const QString &cssValue, int fallbackType) const;
 
 signals:
     void loadedChanged();

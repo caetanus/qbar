@@ -11,7 +11,7 @@
 #include "disk/diskmodel.h"
 #include "bluetooth/bluetoothmodel.h"
 #include "powerprofiles/powerprofilesmodel.h"
-#include "sound/soundmodel.h"
+#include "sound/audiobackend.h"
 #include "mpris/mprismodel.h"
 #include "platform/capslockmonitor.h"
 #include "calendar/calendarmodel.h"
@@ -76,7 +76,7 @@ private:
     NetworkManagerModel *m_networkManagerModel = nullptr;
     BrightnessModel *m_brightnessModel = nullptr;
     CaffeineModel *m_caffeineModel = nullptr;
-    SoundModel *m_soundModel = nullptr;
+    AudioBackend *m_soundModel = nullptr;
     MprisModel *m_mprisModel = nullptr;
     CapsLockMonitor *m_capsLockMonitor = nullptr;
     CalendarModel *m_calendarModel = nullptr;

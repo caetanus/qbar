@@ -11,6 +11,9 @@ Item {
     property int brightnessValue: brightnessModel ? brightnessModel.percent : 0
     property bool available: brightnessModel ? brightnessModel.available : false
     property real illumination: root.available ? root.brightnessValue / 100.0 : 0.0
+    readonly property color cutColor: cssStyle["background-color"]
+        ? cssTheme.parseColor(cssStyle["background-color"])
+        : "#4b5563"
 
     Rectangle {
         anchors.fill: parent
@@ -28,7 +31,6 @@ Item {
 
         onPaint: {
             const ctx = getContext("2d")
-            const bg = cssStyle["background-color"] || "#4b5563"
             const cx = width / 2
             const cy = height / 2
             const radius = Math.min(width, height) / 2 - 1
@@ -42,10 +44,17 @@ Item {
             ctx.arc(cx, cy, radius, 0, Math.PI * 2)
             ctx.fill()
 
-            ctx.fillStyle = bg
             ctx.beginPath()
             ctx.arc(cutX, cy, cutRadius, 0, Math.PI * 2)
-            ctx.fill()
+            if (root.cutColor.a <= 0.01) {
+                ctx.globalCompositeOperation = "destination-out"
+                ctx.fillStyle = "#000000"
+                ctx.fill()
+                ctx.globalCompositeOperation = "source-over"
+            } else {
+                ctx.fillStyle = root.cutColor
+                ctx.fill()
+            }
         }
 
         onVisibleChanged: if (visible) requestPaint()

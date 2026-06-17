@@ -1,6 +1,7 @@
 #include "barwindow.h"
 
 #include "qml/qbarpopupservice.h"
+#include "json/jsonc.h"
 #include "cpu/cpumodel.h"
 #include "temperature/temperaturemodel.h"
 #include "brightness/brightnessmodel.h"
@@ -11,7 +12,7 @@
 #include "disk/diskmodel.h"
 #include "bluetooth/bluetoothmodel.h"
 #include "powerprofiles/powerprofilesmodel.h"
-#include "sound/soundmodel.h"
+#include "sound/audiobackendfactory.h"
 #include "mpris/mprismodel.h"
 #include "platform/capslockmonitor.h"
 #include "calendar/calendarmodel.h"
@@ -288,7 +289,7 @@ BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
     m_networkManagerModel = new NetworkManagerModel(this);
     m_brightnessModel = new BrightnessModel(this);
     m_caffeineModel = new CaffeineModel(this, this);
-    m_soundModel = new SoundModel(this);
+    m_soundModel = createAudioBackend(this);
     m_mprisModel = new MprisModel(this);
     m_capsLockMonitor = new CapsLockMonitor(this);
     m_calendarModel = new CalendarModel(this);
@@ -387,12 +388,25 @@ void BarWindow::onConfigFileChanged(const QString &path)
         return; // touch with no content change
     m_configHash = hash;
 
-    const auto doc = QJsonDocument::fromJson(data);
-    if (!doc.isObject()) {
-        qWarning() << "qbar: config.json is broken (invalid JSON), ignoring reload";
+    QString jsonError;
+    const auto doc = Jsonc::parse(QString::fromUtf8(data), &jsonError);
+    QJsonObject root;
+    bool foundRoot = false;
+    if (doc.isArray()) {
+        const QJsonArray bars = doc.array();
+        if (m_config.configIndex >= 0 && m_config.configIndex < bars.size() && bars.at(m_config.configIndex).isObject()) {
+            root = bars.at(m_config.configIndex).toObject();
+            foundRoot = true;
+        }
+    } else if (doc.isObject()) {
+        root = doc.object();
+        foundRoot = true;
+    }
+
+    if (!foundRoot) {
+        qWarning() << "qbar: config.json is broken (invalid JSONC), ignoring reload" << jsonError;
         return;
     }
-    const QJsonObject root = doc.object();
 
     const QString newStyleSheet = root.value(QStringLiteral("styleSheet")).toString();
     if (newStyleSheet != m_config.styleSheet) {
@@ -457,6 +471,11 @@ void BarWindow::buildLayout()
     );
     rootContext()->setContextProperty(QStringLiteral("qbarPopups"), m_popupService);
     rootContext()->setContextProperty(QStringLiteral("workspaceModel"), m_wm->workspaceModel());
+    rootContext()->setContextProperty(QStringLiteral("windowModel"), m_wm->windowModel());
+    rootContext()->setContextProperty(QStringLiteral("taskbarConfig"), m_config.taskbar);
+    rootContext()->setContextProperty(QStringLiteral("cpuConfig"), m_config.cpu);
+    rootContext()->setContextProperty(QStringLiteral("memoryConfig"), m_config.memory);
+    rootContext()->setContextProperty(QStringLiteral("networkConfig"), m_config.network);
     rootContext()->setContextProperty(QStringLiteral("cpuModel"), m_cpuModel);
     rootContext()->setContextProperty(QStringLiteral("temperatureModel"), m_temperatureModel);
     rootContext()->setContextProperty(QStringLiteral("networkModel"), m_networkModel);

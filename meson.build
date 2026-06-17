@@ -177,12 +177,15 @@ sources = files(
   'src/ipc/i3ipcclient.cpp',
   'src/platform/platformbarintegration.cpp',
   'src/css/csstheme.cpp',
+  'src/css/valueparser.cpp',
   'src/json/jsonc.cpp',
   'src/dbus/dbusservice.cpp',
   'src/qml/qbarpopupservice.cpp',
   'src/tray/statusnotifiermodel.cpp',
   'src/cpu/cpumodel.cpp',
   'src/temperature/temperaturemodel.cpp',
+  'src/sound/audiobackend.cpp',
+  'src/sound/audiobackendfactory.cpp',
   'src/sound/soundmodel.cpp',
   'src/mpris/mprismodel.cpp',
   'src/graphics/sparkline.cpp',
@@ -196,6 +199,7 @@ sources = files(
   'src/calendar/calendarmodel.cpp',
   'src/wm/windowmanagerbackend.cpp',
   'src/wm/workspacemodel.cpp',
+  'src/wm/windowmodel.cpp',
   'src/wm/nullbackend.cpp',
   'src/wm/hyprlandbackend.cpp',
   'src/wm/bspwmbackend.cpp',
@@ -216,6 +220,7 @@ headers = files(
   'src/tray/statusnotifiermodel.h',
   'src/cpu/cpumodel.h',
   'src/temperature/temperaturemodel.h',
+  'src/sound/audiobackend.h',
   'src/sound/soundmodel.h',
   'src/mpris/mprismodel.h',
   'src/graphics/sparkline.h',
@@ -229,11 +234,24 @@ headers = files(
   'src/calendar/calendarmodel.h',
   'src/wm/windowmanagerbackend.h',
   'src/wm/workspacemodel.h',
+  'src/wm/windowmodel.h',
   'src/wm/nullbackend.h',
   'src/wm/hyprlandbackend.h',
   'src/wm/bspwmbackend.h',
   'src/wm/ewmhbackend.h',
 )
+
+# Native WirePlumber audio backend (optional). When wireplumber-0.5 is present
+# it is compiled and selected at build time instead of the libpulse SoundModel;
+# the libpulse path stays the default fallback. Mirrors the x11/wayland feature
+# pattern (-DQBAR_HAVE_* + conditional sources/deps).
+wireplumber_dep = dependency('wireplumber-0.5', required: get_option('wireplumber'))
+if wireplumber_dep.found()
+  sources += files('src/sound/wireplumberbackend.cpp')
+  headers += files('src/sound/wireplumberbackend.h')
+  platform_deps += [wireplumber_dep]
+  platform_args += ['-DQBAR_HAVE_WIREPLUMBER=1']
+endif
 
 qresources = [files('qml/qbar.qrc')]
 if popup_emboss_shader_enabled
@@ -277,6 +295,7 @@ wm_test_exe = executable(
     'tests/test_wm.cpp',
     'src/wm/windowmanagerbackend.cpp',
     'src/wm/workspacemodel.cpp',
+    'src/wm/windowmodel.cpp',
     'src/wm/nullbackend.cpp',
     'src/wm/hyprlandbackend.cpp',
     'src/wm/bspwmbackend.cpp',
@@ -288,6 +307,7 @@ wm_test_exe = executable(
   qt6.preprocess(moc_headers: files(
     'src/wm/windowmanagerbackend.h',
     'src/wm/workspacemodel.h',
+    'src/wm/windowmodel.h',
     'src/wm/nullbackend.h',
     'src/wm/hyprlandbackend.h',
     'src/wm/bspwmbackend.h',
@@ -308,6 +328,7 @@ css_test_exe = executable(
   files(
     'tests/test_css.cpp',
     'src/css/csstheme.cpp',
+    'src/css/valueparser.cpp',
   ),
   css_test_moc,
   qt6.preprocess(moc_headers: files('src/css/csstheme.h')),

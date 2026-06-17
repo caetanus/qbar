@@ -159,6 +159,47 @@ qint64 containerId(const QJsonObject &node)
     return node.value(QStringLiteral("id")).toInteger(-1);
 }
 
+// Walk the i3/sway tree collecting leaf windows for the taskbar, threading the
+// enclosing output (monitor) and workspace name down the recursion.
+void collectWindows(const QJsonObject &node, const QString &output, const QString &workspace,
+                    QList<WindowModel::Window> &out)
+{
+    QString currentOutput = output;
+    QString currentWorkspace = workspace;
+    const QString type = node.value(QStringLiteral("type")).toString();
+    if (type == QStringLiteral("output")) {
+        currentOutput = node.value(QStringLiteral("name")).toString();
+    } else if (type == QStringLiteral("workspace")) {
+        currentWorkspace = node.value(QStringLiteral("name")).toString();
+    }
+
+    if (isWindowNode(node) && !isQbarWindowNode(node)) {
+        WindowModel::Window window;
+        window.id = node.value(QStringLiteral("id")).toInteger(-1);
+        window.title = nodeTitle(node);
+        window.appId = node.value(QStringLiteral("app_id")).toString();
+        if (window.appId.isEmpty()) {
+            // X11 clients under sway expose WM_CLASS instead of app_id.
+            window.appId = node.value(QStringLiteral("window_properties")).toObject()
+                               .value(QStringLiteral("class")).toString();
+        }
+        window.workspaceName = currentWorkspace;
+        window.monitor = currentOutput;
+        window.focused = node.value(QStringLiteral("focused")).toBool(false);
+        window.urgent = node.value(QStringLiteral("urgent")).toBool(false);
+        out.append(window);
+    }
+
+    const auto nodes = node.value(QStringLiteral("nodes")).toArray();
+    for (const auto &child : nodes) {
+        collectWindows(child.toObject(), currentOutput, currentWorkspace, out);
+    }
+    const auto floatingNodes = node.value(QStringLiteral("floating_nodes")).toArray();
+    for (const auto &child : floatingNodes) {
+        collectWindows(child.toObject(), currentOutput, currentWorkspace, out);
+    }
+}
+
 QString normalizedLayoutCode(const QString &layout)
 {
     QString value = layout.trimmed().toLower();
@@ -351,6 +392,22 @@ void I3IpcClient::activateWindowByPid(qint64 pid)
     runCommand(QStringLiteral("[pid=%1] focus").arg(pid));
 }
 
+void I3IpcClient::activateWindow(qint64 id)
+{
+    if (id < 0) {
+        return;
+    }
+    runCommand(QStringLiteral("[con_id=%1] focus").arg(id));
+}
+
+void I3IpcClient::closeWindow(qint64 id)
+{
+    if (id < 0) {
+        return;
+    }
+    runCommand(QStringLiteral("[con_id=%1] kill").arg(id));
+}
+
 void I3IpcClient::cycleKeyboardLayout()
 {
     if (supportsSwayInputs()) {
@@ -513,9 +570,10 @@ void I3IpcClient::handleMessage(quint32 type, const QByteArray &payload, bool ev
             const QString title = nodeTitle(container);
             if (!title.isEmpty()) {
                 setCurrentWindowTitle(title);
-            } else {
-                requestTreeSnapshot();
             }
+            // Any window event (new/close/move/title/focus/urgent) can change the
+            // taskbar list, so refresh the tree snapshot to repopulate it.
+            requestTreeSnapshot();
         } else if (type == inputEvent) {
             requestInputs();
         }
@@ -528,6 +586,9 @@ void I3IpcClient::handleMessage(quint32 type, const QByteArray &payload, bool ev
             const QJsonObject tree = document.object();
             setCurrentWindowTitle(focusedWindowTitle(tree));
             setFocusedContainerId(focusedContainerNodeId(tree));
+            QList<WindowModel::Window> windows;
+            collectWindows(tree, {}, {}, windows);
+            m_windows.replace(std::move(windows));
             const qint64 id = findQbarNode(tree, QCoreApplication::applicationPid());
             if (id >= 0) {
                 qWarning() << "QBar sway node id:" << id;

@@ -34,6 +34,11 @@ QVariantList CpuModel::usageHistory() const
     return m_usageHistory;
 }
 
+double CpuModel::clockMhz() const
+{
+    return m_clockMhz;
+}
+
 double CpuModel::loadAverage1() const
 {
     return m_loadAverage1;
@@ -77,6 +82,16 @@ QVariantList CpuModel::topMemoryProcesses() const
 int CpuModel::memoryUsage() const
 {
     return m_memoryUsage;
+}
+
+qint64 CpuModel::memoryUsedBytes() const
+{
+    return m_memoryUsedKb * 1024;
+}
+
+qint64 CpuModel::memoryTotalBytes() const
+{
+    return m_memoryTotalKb * 1024;
 }
 
 QVariantList CpuModel::memoryUsageHistory() const
@@ -334,7 +349,7 @@ int CpuModel::readRunningProcesses() const
     return 0;
 }
 
-int CpuModel::readMemoryUsage() const
+int CpuModel::readMemoryUsage(qint64 *usedKb, qint64 *totalKb) const
 {
     QFile file(QStringLiteral("/proc/meminfo"));
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -379,7 +394,44 @@ int CpuModel::readMemoryUsage() const
 
     const qint64 available = memAvailable >= 0 ? memAvailable : (memFree + buffers + cached);
     const qint64 used = qMax<qint64>(0, memTotal - available);
+    if (usedKb != nullptr) {
+        *usedKb = used;
+    }
+    if (totalKb != nullptr) {
+        *totalKb = memTotal;
+    }
     return qBound(0, static_cast<int>((used * 100.0) / memTotal), 100);
+}
+
+double CpuModel::readClockMhz() const
+{
+    // Average the per-core "cpu MHz" lines from /proc/cpuinfo (current frequency
+    // on most kernels). Returns 0 when unavailable.
+    QFile file(QStringLiteral("/proc/cpuinfo"));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return 0.0;
+    }
+
+    double sum = 0.0;
+    int count = 0;
+    const QString content = QString::fromUtf8(file.readAll());
+    const QStringList lines = content.split(QChar::LineFeed, Qt::SkipEmptyParts);
+    for (const QString &line : lines) {
+        if (!line.startsWith(QStringLiteral("cpu MHz"))) {
+            continue;
+        }
+        const int colon = line.indexOf(QChar::fromLatin1(':'));
+        if (colon < 0) {
+            continue;
+        }
+        bool ok = false;
+        const double value = line.mid(colon + 1).trimmed().toDouble(&ok);
+        if (ok) {
+            sum += value;
+            count += 1;
+        }
+    }
+    return count > 0 ? sum / count : 0.0;
 }
 
 int CpuModel::readSwapUsage() const
@@ -600,8 +652,21 @@ void CpuModel::refresh()
         }
     }
 
+    const double clock = readClockMhz();
+    if (!qFuzzyCompare(m_clockMhz + 1.0, clock + 1.0)) {
+        m_clockMhz = clock;
+        emit clockChanged();
+    }
+
     const QVector<ProcessSample> processes = readProcessSamples();
-    const int memoryUsage = readMemoryUsage();
+    qint64 memUsedKb = 0;
+    qint64 memTotalKb = 0;
+    const int memoryUsage = readMemoryUsage(&memUsedKb, &memTotalKb);
+    if (memUsedKb != m_memoryUsedKb || memTotalKb != m_memoryTotalKb) {
+        m_memoryUsedKb = memUsedKb;
+        m_memoryTotalKb = memTotalKb;
+        emit memoryStatsChanged();
+    }
     const int swapUsage = readSwapUsage();
     const QVector<Sample> samples = readSamples();
 

@@ -27,6 +27,8 @@ public slots:
     void activateWorkspace(const QString &workspaceName) override;
     void activateRelativeWorkspace(int direction) override;
     void activateWindowByPid(qint64 pid) override;
+    void activateWindow(qint64 id) override;
+    void closeWindow(qint64 id) override;
     void cycleKeyboardLayout() override;
     void requestTreeSnapshot() override;
 

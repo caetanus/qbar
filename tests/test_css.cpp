@@ -2,6 +2,7 @@
 
 #include "src/css/csstheme.h"
 
+#include <QEasingCurve>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -107,6 +108,25 @@ void CssThemeTests::parsesColors()
     QCOMPARE(rgba.green(), 20);
     QCOMPARE(rgba.blue(), 30);
     QVERIFY(rgba.alpha() >= 127 && rgba.alpha() <= 128);
+}
+
+void CssThemeTests::parsesCssDurationsAndEasings()
+{
+    CssTheme theme;
+
+    QCOMPARE(theme.parseDuration(QStringLiteral("180ms"), 1), 180);
+    QCOMPARE(theme.parseDuration(QStringLiteral("0.76s"), 1), 760);
+    QCOMPARE(theme.parseDuration(QStringLiteral("240"), 1), 240);
+    QCOMPARE(theme.parseDuration(QStringLiteral("nope"), 321), 321);
+
+    QCOMPARE(theme.parseEasing(QStringLiteral("linear"), static_cast<int>(QEasingCurve::InQuad)),
+             static_cast<int>(QEasingCurve::Linear));
+    QCOMPARE(theme.parseEasing(QStringLiteral("ease-in-out"), static_cast<int>(QEasingCurve::Linear)),
+             static_cast<int>(QEasingCurve::InOutQuad));
+    QCOMPARE(theme.parseEasing(QStringLiteral("out-cubic"), static_cast<int>(QEasingCurve::Linear)),
+             static_cast<int>(QEasingCurve::OutCubic));
+    QCOMPARE(theme.parseEasing(QStringLiteral("unknown"), static_cast<int>(QEasingCurve::OutBack)),
+             static_cast<int>(QEasingCurve::OutBack));
 }
 
 QTEST_GUILESS_MAIN(CssThemeTests)

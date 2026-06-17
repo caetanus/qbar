@@ -5,7 +5,8 @@ Item {
     implicitWidth: 340
     implicitHeight: 136
 
-    readonly property string fg: theme.foreground
+    readonly property var popupStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("popup") : ({})
+    readonly property color fg: popupStyle["color"] ? cssTheme.parseColor(popupStyle["color"]) : theme.foreground
 
     Row {
         anchors.fill: parent

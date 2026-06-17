@@ -1,4 +1,5 @@
 import QtQuick
+import "qrc:/qbar" as QBar
 
 Item {
     id: root
@@ -41,12 +42,42 @@ Item {
         if (!shorthand) return 0
         var parts = shorthand.trim().split(/\s+/)
         if (parts.length === 1) return parseFloat(parts[0])
-        if (parts.length === 2) return parseFloat(parts[1]) // vertical horizontal
-        if (parts.length === 3) return parseFloat(parts[1]) // top horizontal bottom
-        return side === "left" ? parseFloat(parts[3]) : parseFloat(parts[1]) // top right bottom left
+        if (parts.length === 2) return (side === "top" || side === "bottom") ? parseFloat(parts[0]) : parseFloat(parts[1])
+        if (parts.length === 3) {
+            if (side === "top") return parseFloat(parts[0])
+            if (side === "bottom") return parseFloat(parts[2])
+            return parseFloat(parts[1])
+        }
+        if (side === "top") return parseFloat(parts[0])
+        if (side === "right") return parseFloat(parts[1])
+        if (side === "bottom") return parseFloat(parts[2])
+        return parseFloat(parts[3])
     }
     readonly property real barPaddingLeft: root.paddingSide(barStyle, "left")
     readonly property real barPaddingRight: root.paddingSide(barStyle, "right")
+    readonly property var leftStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("left") : ({})
+    readonly property var centerStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("center") : ({})
+    readonly property var rightStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("right") : ({})
+
+    function cssPixels(value, fallback) {
+        if (value === undefined || value === null || value === "") {
+            return fallback
+        }
+        var n = parseFloat(value)
+        return isNaN(n) ? fallback : n
+    }
+
+    function styleRadius(style) {
+        return root.cssPixels(style ? style["border-radius"] : undefined, 0)
+    }
+
+    function stylePadding(style, side) {
+        return root.paddingSide(style || ({}), side)
+    }
+
+    function styleMargin(style, side) {
+        return root.cssPixels(style ? style["margin-" + side] : undefined, 0)
+    }
 
     function appletUrl(name) {
         if (name.indexOf("CustomTool:") === 0) {
@@ -134,10 +165,18 @@ Item {
     Item {
         id: leftPane
         anchors.left: parent.left
-        anchors.leftMargin: root.barMarginLeft + root.barPaddingLeft
+        anchors.leftMargin: root.barMarginLeft + root.barPaddingLeft + root.styleMargin(root.leftStyle, "left")
         anchors.top: parent.top
+        anchors.topMargin: root.styleMargin(root.leftStyle, "top")
         anchors.bottom: parent.bottom
-        width: leftRow.implicitWidth
+        anchors.bottomMargin: root.styleMargin(root.leftStyle, "bottom")
+        width: leftRow.implicitWidth + root.stylePadding(root.leftStyle, "left") + root.stylePadding(root.leftStyle, "right")
+
+        QBar.CssFill {
+            anchors.fill: parent
+            style: root.leftStyle
+            radius: root.styleRadius(root.leftStyle)
+        }
 
         Behavior on width {
             NumberAnimation {
@@ -148,8 +187,12 @@ Item {
 
         Row {
             id: leftRow
+            anchors.left: parent.left
+            anchors.leftMargin: root.stylePadding(root.leftStyle, "left")
             anchors.top: parent.top
+            anchors.topMargin: root.stylePadding(root.leftStyle, "top")
             anchors.bottom: parent.bottom
+            anchors.bottomMargin: root.stylePadding(root.leftStyle, "bottom")
             spacing: theme.spacing
 
             Repeater {
@@ -160,7 +203,9 @@ Item {
                     property string appletName: modelData
                     property int preferredWidth: 0
                     width: preferredWidth > 0 ? preferredWidth : root.appletWidth(loader.item)
-                    height: root.appletHeight(loader.item)
+                    // Fill the group's inner height so applets stay inside a
+                    // vertically-inset/rounded container instead of overflowing it.
+                    height: parent.height
                     onXChanged: root.bindTitleWidth(slot)
 
                     Behavior on width {
@@ -224,10 +269,20 @@ Item {
     Item {
         id: centerPane
         anchors.left: leftPane.right
+        anchors.leftMargin: root.styleMargin(root.centerStyle, "left")
         anchors.right: rightPane.left
+        anchors.rightMargin: root.styleMargin(root.centerStyle, "right")
         anchors.top: parent.top
+        anchors.topMargin: root.styleMargin(root.centerStyle, "top")
         anchors.bottom: parent.bottom
+        anchors.bottomMargin: root.styleMargin(root.centerStyle, "bottom")
         clip: true
+
+        QBar.CssFill {
+            anchors.fill: parent
+            style: root.centerStyle
+            radius: root.styleRadius(root.centerStyle)
+        }
 
         Row {
             id: centerRow
@@ -311,10 +366,18 @@ Item {
     Item {
         id: rightPane
         anchors.right: parent.right
-        anchors.rightMargin: root.barMarginRight + root.barPaddingRight
+        anchors.rightMargin: root.barMarginRight + root.barPaddingRight + root.styleMargin(root.rightStyle, "right")
         anchors.top: parent.top
+        anchors.topMargin: root.styleMargin(root.rightStyle, "top")
         anchors.bottom: parent.bottom
-        width: rightRow.implicitWidth
+        anchors.bottomMargin: root.styleMargin(root.rightStyle, "bottom")
+        width: rightRow.implicitWidth + root.stylePadding(root.rightStyle, "left") + root.stylePadding(root.rightStyle, "right")
+
+        QBar.CssFill {
+            anchors.fill: parent
+            style: root.rightStyle
+            radius: root.styleRadius(root.rightStyle)
+        }
 
         Behavior on width {
             NumberAnimation {
@@ -325,8 +388,12 @@ Item {
 
         Row {
             id: rightRow
+            anchors.left: parent.left
+            anchors.leftMargin: root.stylePadding(root.rightStyle, "left")
             anchors.top: parent.top
+            anchors.topMargin: root.stylePadding(root.rightStyle, "top")
             anchors.bottom: parent.bottom
+            anchors.bottomMargin: root.stylePadding(root.rightStyle, "bottom")
             spacing: theme.spacing
 
             Repeater {
@@ -336,8 +403,18 @@ Item {
                     id: slot
                     property string appletName: modelData
                     property int preferredWidth: 0
-                    width: preferredWidth > 0 ? preferredWidth : root.appletWidth(loader.item)
-                    height: root.appletHeight(loader.item)
+                    // Per-applet horizontal margins (CSS margin-left/right). Negative
+                    // values pull a module toward its neighbour, letting adjacent
+                    // panels (e.g. Clock + Tray) read as a single unit despite the
+                    // bar's global spacing.
+                    readonly property var appletStyle: (cssTheme && cssTheme.loaded && loader.item && loader.item.cssId)
+                        ? cssTheme.resolve(loader.item.cssId) : ({})
+                    readonly property int marginLeft: root.styleMargin(appletStyle, "left")
+                    readonly property int marginRight: root.styleMargin(appletStyle, "right")
+                    width: (preferredWidth > 0 ? preferredWidth : root.appletWidth(loader.item)) + marginLeft + marginRight
+                    // Fill the group's inner height so applets stay inside a
+                    // vertically-inset/rounded container instead of overflowing it.
+                    height: parent.height
 
                     Behavior on width {
                         NumberAnimation {
@@ -349,6 +426,8 @@ Item {
                     Loader {
                         id: loader
                         anchors.fill: parent
+                        anchors.leftMargin: slot.marginLeft
+                        anchors.rightMargin: slot.marginRight
                         source: appletName === "Temperature" && temperatureModel && !temperatureModel.available ? "" : root.appletUrl(appletName)
                         asynchronous: false
 

@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 import "qrc:/qbar" as QBar
 import "qrc:/qbar/Contrast.js" as Contrast
 
@@ -34,25 +33,15 @@ Item {
         color: root.backgroundColor
     }
 
-    Image {
-        id: cupIcon
+    QBar.CssIcon {
         anchors.centerIn: parent
         width: 23
         height: 23
-        source: root.active
+        style: root.cssStyle
+        fallbackSource: root.active
             ? "qrc:/icons/caffeine-cup-full-black.svg"
             : "qrc:/icons/caffeine-cup-empty-white.svg"
-        fillMode: Image.PreserveAspectFit
-        smooth: true
-        mipmap: true
-        visible: false
-    }
-
-    MultiEffect {
-        anchors.fill: cupIcon
-        source: cupIcon
-        colorization: 1.0
-        colorizationColor: root.iconColor
+        color: root.iconColor
     }
 
     MouseArea {

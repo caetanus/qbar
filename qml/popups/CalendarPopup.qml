@@ -7,6 +7,8 @@ Item {
     // #popup text-shadow, applied to the popup's prominent labels.
     readonly property var popupTextShadow: cssTheme && cssTheme.loaded
         ? cssTheme.parseBoxShadow(cssTheme.resolve("popup")["text-shadow"] || "") : ({})
+    readonly property var popupStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("popup") : ({})
+    readonly property color popupForeground: popupStyle["color"] ? cssTheme.parseColor(popupStyle["color"]) : theme.foreground
 
     property date selectedDate: new Date()
     property date displayedDate: new Date()
@@ -151,7 +153,7 @@ Item {
                         width: 24
                         height: parent.height
                         text: "\u2039"
-                        color: theme.foreground
+                        color: root.popupForeground
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize + 1
                         font.bold: true
@@ -169,7 +171,7 @@ Item {
                         width: parent.width - 56
                         height: parent.height
                         text: Qt.formatDate(root.monthTransitioning ? root.transitionDate : root.displayedDate, "MMMM yyyy")
-                        color: theme.foreground
+                        color: root.popupForeground
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize
                         font.bold: true
@@ -184,7 +186,7 @@ Item {
                         width: 24
                         height: parent.height
                         text: "\u203A"
-                        color: theme.foreground
+                        color: root.popupForeground
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize + 1
                         font.bold: true
@@ -211,7 +213,7 @@ Item {
                             width: 38
                             height: parent.height
                             text: modelData
-                            color: theme.foreground
+                            color: root.popupForeground
                             opacity: 0.86
                             font.family: theme.fontFamily
                             font.pointSize: theme.fontSize - 1
@@ -288,7 +290,7 @@ Item {
                                         Text {
                                             anchors.centerIn: parent
                                             text: validDay ? cellDate.getDate() : ""
-                                            color: selected ? theme.accentForeground : theme.foreground
+                                            color: selected ? theme.accentForeground : root.popupForeground
                                             opacity: validDay ? 1.0 : 0.0
                                             font.family: theme.fontFamily
                                             font.pointSize: theme.fontSize
@@ -323,7 +325,7 @@ Item {
                 Text {
                     width: parent.width
                     text: calendarModel ? calendarModel.statusText : ""
-                    color: theme.foreground
+                    color: root.popupForeground
                     opacity: 0.82
                     font.family: theme.fontFamily
                     font.pointSize: theme.fontSize - 1
@@ -344,7 +346,7 @@ Item {
                 Text {
                     width: parent.width
                     text: Qt.formatDate(root.selectedDate, "dddd, d MMM yyyy")
-                    color: theme.foreground
+                    color: root.popupForeground
                     font.family: theme.fontFamily
                     font.pointSize: theme.fontSize + 1
                     font.bold: true
@@ -356,7 +358,7 @@ Item {
                 Text {
                     width: parent.width
                     text: "Selected day"
-                    color: theme.foreground
+                    color: root.popupForeground
                     opacity: 0.85
                     font.family: theme.fontFamily
                     font.pointSize: theme.fontSize - 1
@@ -403,7 +405,7 @@ Item {
                             Text {
                                 width: parent.width
                                 text: modelData.title
-                                color: theme.foreground
+                                color: root.popupForeground
                                 opacity: 0.98
                                 font.family: theme.fontFamily
                                 font.pointSize: theme.fontSize
@@ -414,7 +416,7 @@ Item {
                             Text {
                                 width: parent.width
                                 text: (modelData.cancelled ? "Cancelled | " : "") + modelData.rangeText + (modelData.location !== "" ? " | " + modelData.location : "") + (modelData.sourceLabel !== "" ? " | " + modelData.sourceLabel : "")
-                                color: theme.foreground
+                                color: root.popupForeground
                                 opacity: 0.88
                                 font.family: theme.fontFamily
                                 font.pointSize: theme.fontSize - 1
@@ -424,7 +426,7 @@ Item {
                             Text {
                                 width: parent.width
                                 text: modelData.dayText + (modelData.url !== "" ? " | link available" : "")
-                                color: modelData.cancelled ? "#fda4af" : theme.foreground
+                                color: modelData.cancelled ? "#fda4af" : root.popupForeground
                                 opacity: 0.82
                                 font.family: theme.fontFamily
                                 font.pointSize: theme.fontSize - 1
@@ -435,7 +437,7 @@ Item {
                             Text {
                                 width: parent.width
                                 text: modelData.sourceLabel
-                                color: theme.foreground
+                                color: root.popupForeground
                                 opacity: 0.72
                                 font.family: theme.fontFamily
                                 font.pointSize: theme.fontSize - 1
@@ -446,7 +448,7 @@ Item {
                             Text {
                                 width: parent.width
                                 text: modelData.location
-                                color: theme.foreground
+                                color: root.popupForeground
                                 opacity: 0.72
                                 font.family: theme.fontFamily
                                 font.pointSize: theme.fontSize - 1
@@ -488,7 +490,7 @@ Item {
                         Text {
                             anchors.centerIn: parent
                             text: calendarModel && calendarModel.loading ? "Loading..." : "No events"
-                            color: theme.foreground
+                            color: root.popupForeground
                             opacity: 0.8
                             font.family: theme.fontFamily
                             font.pointSize: theme.fontSize
@@ -500,7 +502,7 @@ Item {
                 Text {
                     width: parent.width
                     text: "Next"
-                    color: theme.foreground
+                    color: root.popupForeground
                     opacity: 0.85
                     font.family: theme.fontFamily
                     font.pointSize: theme.fontSize - 1
@@ -516,7 +518,7 @@ Item {
                     delegate: Text {
                         width: ListView.view.width
                         text: modelData.dayText + " | " + modelData.startText + "  " + modelData.title + (modelData.cancelled ? " | Cancelled" : "")
-                        color: theme.foreground
+                        color: root.popupForeground
                         opacity: 0.98
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize - 1
@@ -540,7 +542,7 @@ Item {
                     Text {
                         anchors.centerIn: parent
                         text: "abrir calendário"
-                        color: theme.foreground
+                        color: root.popupForeground
                         opacity: 0.96
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize - 1

@@ -8,6 +8,7 @@ Item {
 
     readonly property string cssId: "title"
     readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    readonly property var centerStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("center") : ({})
 
     property real barWidth: 380
     property real leftOccupiedWidth: 0
@@ -26,11 +27,18 @@ Item {
 
     signal activated()
 
-    Rectangle {
+    QBar.CssFill {
         x: root.boxX
         width: root.boxWidth
         height: root.height
-        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#665b6978"
+        style: root.centerStyle["background"] || root.centerStyle["background-color"] || root.centerStyle["border-color"]
+            || root.centerStyle["box-shadow"] ? root.centerStyle : root.cssStyle
+        radius: {
+            var style = centerStyle["background"] || centerStyle["background-color"] || centerStyle["border-color"]
+                || centerStyle["box-shadow"] ? centerStyle : cssStyle
+            return style["border-radius"] ? parseFloat(style["border-radius"]) : 0
+        }
+        defaultColor: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#665b6978"
     }
 
     Text {

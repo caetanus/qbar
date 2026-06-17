@@ -5,6 +5,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTimer>
+#include <QVariantList>
 
 class QDBusServiceWatcher;
 
@@ -19,6 +20,9 @@ class BluetoothModel final : public QObject {
     Q_PROPERTY(bool powered READ powered NOTIFY changed)
     Q_PROPERTY(int connectedCount READ connectedCount NOTIFY changed)
     Q_PROPERTY(QStringList connectedDevices READ connectedDevices NOTIFY changed)
+    // Paired (and any connected) devices, each a map with name/path/connected/
+    // paired/iconName — drives the right-click connect menu.
+    Q_PROPERTY(QVariantList devices READ devices NOTIFY changed)
     Q_PROPERTY(QString displayText READ displayText NOTIFY changed)
     Q_PROPERTY(QString tooltipText READ tooltipText NOTIFY changed)
 
@@ -29,11 +33,15 @@ public:
     bool powered() const { return m_powered; }
     int connectedCount() const { return static_cast<int>(m_connectedDevices.size()); }
     QStringList connectedDevices() const { return m_connectedDevices; }
+    QVariantList devices() const { return m_devices; }
     QString displayText() const;
     QString tooltipText() const;
 
     // Toggle the first adapter's Powered property.
     Q_INVOKABLE void togglePower();
+    // Connect/disconnect a device by its BlueZ object path (org.bluez.Device1).
+    Q_INVOKABLE void connectDevice(const QString &path);
+    Q_INVOKABLE void disconnectDevice(const QString &path);
 
 signals:
     void changed();
@@ -56,6 +64,7 @@ private:
     bool m_powered = false;
     QString m_adapterPath;
     QStringList m_connectedDevices;
+    QVariantList m_devices;
     QDBusServiceWatcher *m_watcher = nullptr;
     QTimer m_refreshTimer;
 };
