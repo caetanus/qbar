@@ -1,12 +1,14 @@
 import QtQuick
+import "qrc:/qbar" as QBar
 
-Item {
+QBar.CssRect {
     id: root
+    cssId: "backlight"
+    defaultColor: "#4b5563"
     height: theme.height
     width: 58
 
-    readonly property string cssId: "backlight"
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    readonly property var cssStyle: root.style
 
     property int brightnessValue: brightnessModel ? brightnessModel.percent : 0
     property bool available: brightnessModel ? brightnessModel.available : false
@@ -15,10 +17,8 @@ Item {
         ? cssTheme.parseColor(cssStyle["background-color"])
         : "#4b5563"
 
-    Rectangle {
-        anchors.fill: parent
-        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#4b5563"
-    }
+    // Background painted by the CssRect base (defaultColor fallback); the moon's cut uses
+    // the same cutColor so it blends with that background.
 
     Canvas {
         id: moonCanvas

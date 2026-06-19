@@ -1,0 +1,85 @@
+/* Circuit Bloom - mystical forest wallpaper, neon telemetry */
+
+@define-color bg #0b0d18;
+@define-color panel #16182a;
+@define-color text #f2efff;
+@define-color muted #aaa2c8;
+@define-color violet #a78bfa;
+@define-color magenta #ff5ea8;
+@define-color cyan #48e0e4;
+@define-color leaf #8bdc7f;
+@define-color flame #ff7a5c;
+@define-color amber #ffd166;
+
+* { border: none; border-radius: 0; }
+window#waybar { background-color: rgba(11, 13, 24, 0.84); border-radius: 8px; border-left: 76px; border-right: 76px; padding: 0 6px; }
+
+#left {
+    background: linear-gradient(135deg, rgba(72, 224, 228, 0.18), rgba(139, 220, 127, 0.12));
+    border-color: rgba(72, 224, 228, 0.34);
+    border-width: 1px;
+    border-radius: 14px;
+    padding: 0 9px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    box-shadow: 0px 5px 16px rgba(72, 224, 228, 0.12);
+}
+
+#center {
+    background-color: rgba(255, 94, 168, 0.07);
+    border-color: rgba(255, 94, 168, 0.50);
+    border-width: 1px;
+    border-radius: 2px;
+    padding: 0 14px;
+    margin-left: 18px;
+    margin-right: 18px;
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+#right {
+    background-color: rgba(22, 24, 42, 0.72);
+    border-color: rgba(167, 139, 250, 0.36);
+    border-width: 1px;
+    border-radius: 7px;
+    padding: 0 8px;
+    margin-top: 1px;
+    margin-bottom: 1px;
+}
+
+#clock, #title { color: @text; background-color: transparent; text-shadow: 0px 1px 2px rgba(4, 3, 10, 0.74); }
+#cpu { color: @cyan; background-color: rgba(72, 224, 228, 0.10); }
+#cpu.graph { background-color: rgba(8, 17, 25, 0.74); color: @cyan; fill: rgba(72, 224, 228, 0.22); width: 34px; }
+#memory { color: @magenta; background-color: rgba(255, 94, 168, 0.11); }
+#memory.graph { background-color: rgba(28, 10, 24, 0.72); color: @magenta; fill: rgba(255, 94, 168, 0.21); width: 34px; }
+#memory.swap { color: @amber; }
+#nm-applet { color: @leaf; background-color: rgba(139, 220, 127, 0.10); }
+#network-io { color: @leaf; background-color: transparent; }
+#network-io.download { color: @leaf; fill: rgba(139, 220, 127, 0.22); }
+#network-io.upload { color: @violet; fill: rgba(167, 139, 250, 0.24); }
+#network-io.arrowDown { color: @leaf; }
+#network-io.arrowUp { color: @violet; }
+#battery, #battery.charging, #battery.full { color: @leaf; background-color: transparent; }
+#battery.critical { color: #0b0d18; background-color: @flame; }
+#pulseaudio, #backlight, #temperature, #disk, #bluetooth, #power-profiles-daemon, #keyboard, #tray, #taskbar, #custom-dollar, #custom-btc { background-color: transparent; }
+#pulseaudio, #bluetooth { color: @cyan; } #pulseaudio.muted { color: rgba(170, 162, 200, 0.58); }
+#backlight, #custom-btc { color: @amber; } #temperature { color: @flame; } #disk { color: @violet; } #power-profiles-daemon, #custom-dollar { color: @leaf; } #keyboard, #taskbar { color: @muted; }
+#caffeine { color: @muted; background-color: transparent; } #caffeine.active { color: @amber; background-color: rgba(255, 209, 102, 0.14); }
+
+#workspaces button { color: rgba(242, 239, 255, 0.42); background-color: transparent; }
+#workspaces button.focused { color: #080812; background-color: @magenta; }
+#workspaces button.visible { color: @violet; background-color: rgba(167, 139, 250, 0.14); }
+#workspaces button.urgent { color: #0b0d18; background-color: @flame; }
+
+#overlay { background-color: rgba(4, 3, 10, 0.30); }
+#popup {
+    color: @text;
+    background: linear-gradient(135deg, rgba(11, 13, 24, 0.97), rgba(24, 20, 45, 0.95), rgba(50, 18, 52, 0.90));
+    border-color: rgba(255, 94, 168, 0.46);
+    border-width: 1px;
+    border-radius: 10px;
+    box-shadow: 0px 10px 26px rgba(0, 0, 0, 0.46);
+    text-shadow: 0px 1px 2px rgba(4, 3, 10, 0.64);
+    opacity: 0.97;
+}
+#cpu-popup { color: @text; text-shadow: 0px 1px 2px rgba(4, 3, 10, 0.58); }

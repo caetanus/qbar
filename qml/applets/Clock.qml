@@ -2,8 +2,11 @@ import QtQuick
 import Qt.labs.settings
 import "qrc:/qbar" as QBar
 
-Item {
+QBar.CssRect {
     id: root
+    cssId: "clock"
+    // Fallback fill when the theme leaves #clock unstyled (used only then).
+    defaultColor: "#805f7182"
     width: preferredWidth > 0 ? preferredWidth : (clockText.implicitWidth + paddingLeft + paddingRight)
     height: theme.height
 
@@ -12,8 +15,9 @@ Item {
         + Qt.formatDateTime(new Date(), "dddd, d MMMM yyyy")
     property bool tooltipHovered: false
 
-    readonly property string cssId: "clock"
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    // The engine (CssTheme::loadCss) PUSHES the resolved #clock rules into CssRect's
+    // `style` sink. Expose it under the name the rest of this applet reads.
+    readonly property var cssStyle: root.style
     readonly property real paddingTop: cssLengthFromList("padding", 0, 0)
     readonly property real paddingRight: cssLengthFromList("padding", 1, 10)
     readonly property real paddingBottom: cssLengthFromList("padding", 2, 0)
@@ -95,31 +99,20 @@ Item {
     onPaddingLeftChanged: syncPreferredWidth()
     onPaddingRightChanged: syncPreferredWidth()
 
-    QBar.CssFill {
-        anchors.fill: parent
-        style: root.cssStyle
-        radius: root.cssStyle["border-radius"] ? cssTheme.parseLength(root.cssStyle["border-radius"], 0) : 0
-        defaultColor: root.cssStyle["background-color"] || root.cssStyle["background"] ? "transparent" : "#805f7182"
-    }
+    // Background is painted by the CssQmlItem base (Shape-backed CssFill); no explicit
+    // fill here. Content below sits in the base's content slot, above that background.
 
-    Text {
+    // CssText resolves #clock colour / font / text-shadow itself (self-registers with the
+    // engine); it self-styles via the pushed `style`, so no manual colour/font here.
+    QBar.CssText {
         id: clockText
+        cssId: "clock"
         anchors.fill: parent
         anchors.leftMargin: root.paddingLeft
         anchors.rightMargin: root.paddingRight
         anchors.topMargin: root.paddingTop
         anchors.bottomMargin: root.paddingBottom
         horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-
-        readonly property var dropShadow: cssTheme && cssTheme.loaded
-            ? cssTheme.parseBoxShadow(root.cssStyle["text-shadow"] || "") : ({})
-        layer.enabled: dropShadow.color !== undefined
-        layer.effect: QBar.CssDropShadow { shadow: clockText.dropShadow }
-
-        color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
-        font.family: cssStyle["font-family"] || theme.fontFamily
-        font.pointSize: theme.fontSize
         text: Qt.formatDateTime(new Date(), root.currentFormat())
         onImplicitWidthChanged: root.syncPreferredWidth()
     }

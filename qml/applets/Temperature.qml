@@ -1,13 +1,14 @@
 import QtQuick
 import "qrc:/qbar" as QBar
 
-Item {
+QBar.CssRect {
     id: root
+    cssId: "temperature"
+    defaultColor: "#f28d26"
     height: theme.height
     width: Math.max(1, preferredWidth)
 
-    readonly property string cssId: "temperature"
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    readonly property var cssStyle: root.style
 
     property string displayText: temperatureModel ? temperatureModel.displayText : "--/--"
     property string tooltipText: temperatureModel ? temperatureModel.tooltipText : "temperature unavailable"
@@ -27,10 +28,7 @@ Item {
         side: "auto"
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#f28d26"
-    }
+    // Background painted by the CssRect base (defaultColor fallback).
 
     Row {
         id: contentRow

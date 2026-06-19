@@ -1,13 +1,13 @@
 import QtQuick
 import "qrc:/qbar" as QBar
 
-Item {
+QBar.CssRect {
     id: root
+    cssId: "power-profiles-daemon"
     height: theme.height
     width: Math.max(1, preferredWidth)
 
-    readonly property string cssId: "power-profiles-daemon"
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    readonly property var cssStyle: root.style
 
     property bool available: powerProfilesModel ? powerProfilesModel.available : false
     property string activeProfile: powerProfilesModel ? powerProfilesModel.activeProfile : ""
@@ -35,11 +35,7 @@ Item {
         side: "auto"
     }
 
-    Rectangle {
-        anchors.fill: parent
-        visible: root.available
-        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "transparent"
-    }
+    // Background painted by the CssRect base.
 
     Row {
         id: contentRow

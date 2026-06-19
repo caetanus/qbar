@@ -1,0 +1,30 @@
+/* Catppuccin Macchiato — https://github.com/catppuccin/catppuccin */
+
+* { border: none; border-radius: 0; }
+window#waybar    { background-color: rgba(36, 39, 58, 0.85); border-radius: 8px; }
+
+#clock         { color: #cad3f5; background-color: #24273a; }
+#battery       { color: #a6da95; background-color: #24273a; }
+#battery.charging  { color: #a6da95; background-color: #24273a; }
+#battery.full      { color: #a6da95; background-color: #24273a; }
+#battery.critical  { color: #ed8796; background-color: #24273a; }
+#cpu           { color: #8aadf4; background-color: #24273a; }
+#memory        { color: #c6a0f6; background-color: #24273a; }
+#nm-applet       { color: #7dc4e4; background-color: #24273a; }
+#network-io    { color: #91d7e3; background-color: #24273a; }
+#pulseaudio    { color: #8bd5ca; background-color: #24273a; }
+#pulseaudio.muted  { color: #5b6078; background-color: #24273a; }
+#backlight     { color: #eed49f; background-color: #24273a; }
+#temperature   { color: #f5a97f; background-color: #24273a; }
+#keyboard      { color: #b7bdf8; background-color: #24273a; }
+#tray          { background-color: #24273a; }
+#title         { color: #cad3f5; background-color: transparent; }
+#caffeine      { color: #5b6078; background-color: #24273a; }
+#caffeine.active { color: #eed49f; background-color: #24273a; }
+#custom-dollar { color: #a6da95; background-color: #24273a; }
+#custom-btc    { color: #f5a97f; background-color: #24273a; }
+
+#workspaces button          { color: #6e738d; background-color: #1e2030; }
+#workspaces button.focused  { color: #cad3f5; background-color: #363a4f; }
+#workspaces button.visible  { color: #b8c0e0; background-color: #2a2d3e; }
+#workspaces button.urgent   { color: #1e2030; background-color: #ed8796; }

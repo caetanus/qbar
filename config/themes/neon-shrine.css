@@ -1,0 +1,81 @@
+/* Neon Shrine - jade-lit Hyprland night market rice */
+
+@define-color bg #071411;
+@define-color bg2 #0d211b;
+@define-color panel #102820;
+@define-color text #d9fff2;
+@define-color muted #8cc7b4;
+@define-color jade #00e6a7;
+@define-color mint #80ffd7;
+@define-color gold #f6d365;
+@define-color coral #ff6b8a;
+@define-color violet #b18cff;
+@define-color cyan #39d7ff;
+
+* { border: none; border-radius: 0; }
+window#waybar { background-color: rgba(7, 20, 17, 0.84); border-radius: 8px; border-left: 72px; border-right: 72px; padding: 0 6px; }
+
+#left {
+    background: linear-gradient(90deg, rgba(0, 230, 167, 0.28), rgba(0, 86, 68, 0.10));
+    border-color: rgba(0, 230, 167, 0.38);
+    border-width: 1px;
+    border-radius: 9px;
+    padding: 0 8px;
+    margin-left: 0px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+#center {
+    background-color: transparent;
+    border-width: 0px;
+    padding: 0 0px;
+}
+
+#right {
+    background: linear-gradient(270deg, rgba(177, 140, 255, 0.22), rgba(57, 215, 255, 0.10), rgba(7, 20, 17, 0.0));
+    border-color: rgba(177, 140, 255, 0.30);
+    border-width: 1px;
+    border-radius: 4px;
+    padding: 0 10px;
+    margin-top: 1px;
+    margin-bottom: 1px;
+    box-shadow: 0px 4px 14px rgba(0, 0, 0, 0.22);
+}
+
+#clock, #title { color: @text; background-color: transparent; text-shadow: 0px 1px 2px rgba(0, 10, 8, 0.70); }
+#cpu { color: @mint; background-color: rgba(0, 230, 167, 0.10); }
+#cpu.graph { background-color: rgba(4, 24, 20, 0.72); color: @jade; fill: rgba(0, 230, 167, 0.24); width: 34px; }
+#memory { color: @violet; background-color: rgba(177, 140, 255, 0.10); }
+#memory.graph { background-color: rgba(14, 12, 28, 0.70); color: @violet; fill: rgba(177, 140, 255, 0.22); width: 34px; }
+#memory.swap { color: @coral; }
+#nm-applet { color: @cyan; background-color: rgba(57, 215, 255, 0.10); }
+#network-io { color: @cyan; background-color: transparent; }
+#network-io.download { color: @cyan; fill: rgba(57, 215, 255, 0.22); }
+#network-io.upload { color: @gold; fill: rgba(246, 211, 101, 0.24); }
+#network-io.arrowDown { color: @cyan; }
+#network-io.arrowUp { color: @gold; }
+#battery, #battery.charging, #battery.full { color: @jade; background-color: transparent; }
+#battery.critical { color: #071411; background-color: @coral; }
+#pulseaudio, #backlight, #temperature, #disk, #bluetooth, #power-profiles-daemon, #keyboard, #tray, #taskbar, #custom-dollar, #custom-btc { background-color: transparent; }
+#pulseaudio { color: @mint; } #pulseaudio.muted { color: rgba(217, 255, 242, 0.42); }
+#backlight, #custom-btc { color: @gold; } #temperature { color: @coral; } #disk { color: @violet; } #bluetooth { color: @cyan; } #power-profiles-daemon, #custom-dollar { color: @jade; } #keyboard, #taskbar { color: @muted; }
+#caffeine { color: @muted; background-color: transparent; } #caffeine.active { color: @gold; background-color: rgba(246, 211, 101, 0.16); }
+
+#workspaces button { color: rgba(217, 255, 242, 0.45); background-color: transparent; }
+#workspaces button.focused { color: #03100c; background-color: @jade; }
+#workspaces button.visible { color: @mint; background-color: rgba(0, 230, 167, 0.12); }
+#workspaces button.urgent { color: #071411; background-color: @coral; }
+
+#overlay { background-color: rgba(2, 7, 6, 0.30); }
+#popup {
+    color: @text;
+    background: linear-gradient(135deg, rgba(7, 20, 17, 0.96), rgba(16, 40, 32, 0.94), rgba(0, 91, 72, 0.88));
+    border-color: rgba(0, 230, 167, 0.55);
+    border-width: 1px;
+    border-radius: 10px;
+    box-shadow: 0px 10px 26px rgba(0, 0, 0, 0.44);
+    text-shadow: 0px 1px 2px rgba(0, 10, 8, 0.62);
+    opacity: 0.96;
+}
+#cpu-popup { color: @text; text-shadow: 0px 1px 2px rgba(0, 10, 8, 0.58); }

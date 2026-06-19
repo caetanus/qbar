@@ -1,0 +1,30 @@
+/* Everforest Dark — https://github.com/sainnhe/everforest */
+
+* { border: none; border-radius: 0; }
+window#waybar    { background-color: rgba(39, 46, 51, 0.90); border-radius: 8px; }
+
+#clock         { color: #d3c6aa; background-color: #272e33; }
+#battery       { color: #a7c080; background-color: #272e33; }
+#battery.charging  { color: #a7c080; background-color: #272e33; }
+#battery.full      { color: #a7c080; background-color: #272e33; }
+#battery.critical  { color: #e67e80; background-color: #272e33; }
+#cpu           { color: #7fbbb3; background-color: #272e33; }
+#memory        { color: #d699b6; background-color: #272e33; }
+#nm-applet       { color: #83c092; background-color: #272e33; }
+#network-io    { color: #83c092; background-color: #272e33; }
+#pulseaudio    { color: #7fbbb3; background-color: #272e33; }
+#pulseaudio.muted  { color: #495156; background-color: #272e33; }
+#backlight     { color: #dbbc7f; background-color: #272e33; }
+#temperature   { color: #e69875; background-color: #272e33; }
+#keyboard      { color: #d699b6; background-color: #272e33; }
+#tray          { background-color: #272e33; }
+#title         { color: #9da9a0; background-color: transparent; }
+#caffeine      { color: #495156; background-color: #272e33; }
+#caffeine.active { color: #dbbc7f; background-color: #272e33; }
+#custom-dollar { color: #a7c080; background-color: #272e33; }
+#custom-btc    { color: #e69875; background-color: #272e33; }
+
+#workspaces button          { color: #495156; background-color: #1e2326; }
+#workspaces button.focused  { color: #d3c6aa; background-color: #374145; }
+#workspaces button.visible  { color: #9da9a0; background-color: #2e383c; }
+#workspaces button.urgent   { color: #1e2326; background-color: #e67e80; }

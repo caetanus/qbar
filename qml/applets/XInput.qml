@@ -1,12 +1,14 @@
 import QtQuick
+import "qrc:/qbar" as QBar
 
-Item {
+QBar.CssRect {
     id: root
+    cssId: "keyboard"
+    defaultColor: "#16c79a"
     width: 36
     height: theme.height
 
-    readonly property string cssId: "keyboard"
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    readonly property var cssStyle: root.style
 
     signal activated()
 
@@ -27,10 +29,7 @@ Item {
         return clean.slice(0, 2).toLowerCase()
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#16c79a"
-    }
+    // Background painted by the CssRect base (defaultColor fallback).
 
     Text {
         anchors.centerIn: parent

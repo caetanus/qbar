@@ -1,13 +1,13 @@
 import QtQuick
 import "qrc:/qbar" as QBar
 
-Item {
+QBar.CssRect {
     id: root
+    cssId: "bluetooth"
     height: theme.height
     width: Math.max(1, preferredWidth)
 
-    readonly property string cssId: "bluetooth"
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    readonly property var cssStyle: root.style
 
     property bool available: bluetoothModel ? bluetoothModel.available : false
     property bool powered: bluetoothModel ? bluetoothModel.powered : false
@@ -17,9 +17,16 @@ Item {
     property bool tooltipHovered: false
     property int preferredWidth: available ? Math.ceil(contentRow.implicitWidth + 12) : 0
 
+    // theme.* colours are HexArgb STRINGS, so `theme.foreground.r` is undefined and
+    // Qt.rgba(undefined,...) renders black. Parse first, then tint.
+    function alphaColor(colorStr, a) {
+        var c = cssTheme.parseColor(colorStr)
+        return Qt.rgba(c.r, c.g, c.b, a)
+    }
+
     readonly property color iconColor: {
         if (cssStyle["color"]) return cssTheme.parseColor(cssStyle["color"])
-        if (!powered) return Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.45)
+        if (!powered) return root.alphaColor(theme.foreground, 0.45)
         return connectedCount > 0 ? theme.accent : theme.foreground
     }
 
@@ -82,11 +89,7 @@ Item {
         }
     }
 
-    Rectangle {
-        anchors.fill: parent
-        visible: root.available
-        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "transparent"
-    }
+    // Background painted by the CssRect base.
 
     Row {
         id: contentRow

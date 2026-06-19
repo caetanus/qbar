@@ -581,6 +581,24 @@ void StatusNotifierModel::syncFromWatcher()
     }
 
     const QStringList addresses = reply.value().toStringList();
+    // Drop the D-Bus signal match rules of the items we are about to discard.
+    // Clearing m_items alone leaks every item's match rules into the session bus;
+    // repeated re-syncs (watcher owner churn) then balloon dbus-daemon memory until
+    // libdbus aborts inside a later QDBusConnection::connect.
+    for (const Item &item : m_items) {
+        QDBusConnection::sessionBus().disconnect(item.service,
+                                                 item.path,
+                                                 QString::fromLatin1(propertiesInterface),
+                                                 QStringLiteral("PropertiesChanged"),
+                                                 this,
+                                                 SLOT(handleItemPropertiesChanged(QString,QVariantMap,QStringList)));
+        QDBusConnection::sessionBus().disconnect(item.service,
+                                                 item.path,
+                                                 QString::fromLatin1(itemInterface),
+                                                 QString(),
+                                                 this,
+                                                 nullptr);
+    }
     beginResetModel();
     m_items.clear();
     endResetModel();

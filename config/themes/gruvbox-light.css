@@ -1,0 +1,33 @@
+/* Gruvbox Light — https://github.com/morhetz/gruvbox */
+
+window#waybar    { background-color: rgba(251, 241, 199, 0.85); border-radius: 8px; border-left: 80px; border-right: 80px; padding: 0 6px; }
+
+#clock         { color: #3c3836; background-color: transparent; }
+#battery       { color: #98971a; background-color: transparent; }
+#battery.charging  { color: #98971a; background-color: transparent; }
+#battery.full      { color: #98971a; background-color: transparent; }
+#battery.critical  { color: #cc241d; background-color: rgba(204, 36, 29, 0.18); }
+#cpu           { color: #458588; background-color: transparent; }
+#memory        { color: #b16286; background-color: transparent; }
+#nm-applet       { color: #689d6a; background-color: transparent; }
+#network-io    { color: #689d6a; background-color: transparent; }
+#network-io.download { color: #b57614; fill: rgba(181, 118, 20, 0.22); }
+#network-io.upload { color: #af3a03; fill: rgba(175, 58, 3, 0.26); }
+#network-io.arrowDown { color: #b57614; }
+#network-io.arrowUp { color: #af3a03; }
+#pulseaudio    { color: #689d6a; background-color: transparent; }
+#pulseaudio.muted  { color: #928374; background-color: transparent; }
+#backlight     { color: #d79921; background-color: transparent; }
+#temperature   { color: #d65d0e; background-color: transparent; }
+#keyboard      { color: #b16286; background-color: transparent; }
+#tray          { background-color: transparent; }
+#title         { color: #3c3836; background-color: transparent; }
+#caffeine      { color: #928374; background-color: transparent; }
+#caffeine.active { color: #d79921; background-color: rgba(215, 153, 33, 0.18); }
+#custom-dollar { color: #98971a; background-color: transparent; }
+#custom-btc    { color: #d65d0e; background-color: transparent; }
+
+#workspaces button          { color: #a89984; background-color: transparent; }
+#workspaces button.focused  { color: #3c3836; background-color: rgba(60, 56, 54, 0.12); }
+#workspaces button.visible  { color: #504945; background-color: rgba(80, 73, 69, 0.06); }
+#workspaces button.urgent   { color: #fbf1c7; background-color: #cc241d; }

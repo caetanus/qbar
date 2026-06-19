@@ -1,0 +1,102 @@
+/* Mojave Drift - macOS Mojave dusk, image-backed center and popup */
+
+@define-color night #191426;
+@define-color ink #231a28;
+@define-color text #fff4e6;
+@define-color orange #f59d55;
+@define-color sand #ffd28a;
+@define-color rose #d56a83;
+@define-color blue #67a9ff;
+@define-color teal #7ad7c4;
+
+* { border: none; border-radius: 0; }
+window#waybar {
+    background: linear-gradient(180deg, rgba(25, 20, 38, 0.88), rgba(66, 36, 62, 0.76));
+    border-radius: 0px;
+    border-left: 80px;
+    border-right: 80px;
+    padding: 0 8px;
+}
+
+#left {
+    background-color: rgba(255, 244, 230, 0.10);
+    border-color: rgba(255, 210, 138, 0.26);
+    border-width: 1px;
+    border-radius: 7px;
+    padding: 0 10px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+}
+
+#center {
+    background-color: rgba(35, 26, 40, 0.70);
+    background-image: url("/home/caetano/.config/qbar/assets/mojave-dunes.svg");
+    background-size: cover;
+    background-image-opacity: 0.68;
+    border-color: rgba(255, 210, 138, 0.38);
+    border-width: 1px;
+    border-radius: 999px;
+    padding: 0 24px;
+    margin-left: 28px;
+    margin-right: 28px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    box-shadow: 0px 9px 24px rgba(0, 0, 0, 0.30);
+}
+
+#right {
+    background: linear-gradient(180deg, rgba(255, 244, 230, 0.18), rgba(255, 244, 230, 0.07));
+    border-color: rgba(255, 244, 230, 0.24);
+    border-width: 1px;
+    border-radius: 999px;
+    padding: 0 12px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+}
+
+#clock, #title, #taskbar { color: @text; background-color: transparent; text-shadow: 0px 1px 2px rgba(25, 12, 20, 0.68); }
+#cpu { color: @sand; background-color: rgba(255, 210, 138, 0.10); }
+#cpu.graph { background-color: rgba(25, 20, 38, 0.66); color: @orange; fill: rgba(245, 157, 85, 0.25); width: 34px; }
+#memory { color: #f6c1d1; background-color: rgba(213, 106, 131, 0.10); }
+#memory.graph { background-color: rgba(25, 20, 38, 0.66); color: @rose; fill: rgba(213, 106, 131, 0.24); width: 34px; }
+#memory.swap { color: @sand; }
+#nm-applet { color: @blue; background-color: rgba(103, 169, 255, 0.10); icon-name: network-wireless-symbolic; }
+#network-io { color: @blue; background-color: transparent; }
+#network-io.download { color: @blue; fill: rgba(103, 169, 255, 0.20); }
+#network-io.upload { color: @teal; fill: rgba(122, 215, 196, 0.22); }
+#network-io.arrowDown { color: @blue; }
+#network-io.arrowUp { color: @teal; }
+
+#disk { color: @sand; background-color: transparent; icon-name: drive-harddisk-symbolic; }
+#bluetooth { color: @blue; background-color: transparent; icon-name: bluetooth-symbolic; }
+#power-profiles-daemon { color: @teal; background-color: transparent; icon-name: power-profile-balanced-symbolic; }
+#temperature { color: @orange; background-color: transparent; icon-name: temperature-symbolic; }
+#caffeine { color: @sand; background-color: transparent; icon-name: weather-clear-night-symbolic; }
+#battery, #battery.charging, #battery.full, #custom-dollar { color: @teal; background-color: transparent; }
+@keyframes battery-pulse { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+#battery.critical { color: @text; background-color: rgba(43, 47, 51, 0.92); }
+#battery.critical::before { background: @rose; animation: battery-pulse 1800ms ease-in-out infinite; }
+#pulseaudio, #backlight, #keyboard, #tray, #custom-btc { background-color: transparent; color: @text; }
+#pulseaudio.muted { color: rgba(255, 244, 230, 0.42); }
+#backlight, #custom-btc { color: @sand; }
+
+#workspaces button { color: rgba(255, 244, 230, 0.48); background-color: transparent; }
+#workspaces button.focused { color: @ink; background-color: @sand; }
+#workspaces button.visible { color: @text; background-color: rgba(255, 244, 230, 0.12); }
+#workspaces button.urgent { color: @text; background-color: @rose; }
+
+#overlay { background-color: rgba(18, 11, 22, 0.30); }
+#popup {
+    color: @text;
+    background-color: rgba(35, 26, 40, 0.92);
+    background-image: url("/home/caetano/.config/qbar/assets/mojave-dunes.svg");
+    background-size: cover;
+    background-image-opacity: 0.34;
+    border-color: rgba(255, 210, 138, 0.44);
+    border-width: 1px;
+    border-radius: 12px;
+    box-shadow: 0px 16px 34px rgba(0, 0, 0, 0.42);
+    text-shadow: 0px 1px 2px rgba(25, 12, 20, 0.70);
+    opacity: 0.98;
+}
+#cpu-popup { color: @text; text-shadow: 0px 1px 2px rgba(25, 12, 20, 0.62); }

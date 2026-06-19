@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import "qrc:/qbar" as QBar
 
 Item {
@@ -83,6 +84,26 @@ Item {
         return cssTheme && cssTheme.loaded ? cssTheme.resolveWith("workspaces", "button", classes) : ({})
     }
 
+    // A `::before`/`::after` decorative overlay of a workspace button, e.g.
+    // `#workspaces button.urgent::before { background: rgba(...) }`.
+    function buttonOverlay(classes, pseudo) {
+        return cssTheme && cssTheme.loaded ? cssTheme.resolveWith("workspaces", "button", classes, pseudo) : ({})
+    }
+
+    // Resolve a fill colour from a style's `background-color` (preferred) or
+    // `background`; returns "" when neither is set.
+    function fillColorOf(style) {
+        if (!style) return ""
+        return style["background-color"] || style["background"] || ""
+    }
+
+    // theme.* colours are HexArgb STRINGS, so `theme.accent.r` is undefined and
+    // Qt.rgba(undefined,...) yields opaque/translucent black. Parse first, then tint.
+    function alphaColor(colorStr, a) {
+        var c = cssTheme.parseColor(colorStr)
+        return Qt.rgba(c.r, c.g, c.b, a)
+    }
+
     function cssDuration(style, key, fallback) {
         return cssTheme && cssTheme.loaded ? cssTheme.parseDuration(style ? (style[key] || "") : "", fallback) : fallback
     }
@@ -91,11 +112,48 @@ Item {
         return cssTheme && cssTheme.loaded ? cssTheme.parseEasing(style ? (style[key] || "") : "", fallback) : fallback
     }
 
+    // Resolve the standard CSS `transition` for a button state: the shorthand
+    // (`transition: <prop> <dur> <timing-function>`) is preferred, else the
+    // longhands (`transition-duration` + `transition-timing-function`). Returns
+    // { ms, easing }; ms 0 means no animation — the bar only animates when the
+    // theme asks for it. `transition` lives on the base `#workspaces button`, so
+    // resolveWith merges it into every state and the fade stays consistent.
+    function transitionOf(style) {
+        if (!style || !(cssTheme && cssTheme.loaded))
+            return { ms: 0, easing: Easing.InOutQuad }
+        if (style["transition"]) {
+            var t = cssTheme.parseTransition(style["transition"])
+            return { ms: t.duration || 0, easing: t.easing }
+        }
+        if (style["transition-duration"]) {
+            return {
+                ms: cssTheme.parseDuration(style["transition-duration"], 0),
+                easing: cssTheme.parseEasing(style["transition-timing-function"] || "", Easing.InOutQuad)
+            }
+        }
+        return { ms: 0, easing: Easing.InOutQuad }
+    }
+
     QBar.CssFill {
         anchors.fill: parent
         style: root.cssStyle
         radius: root.containerRadius
         defaultColor: "transparent"
+    }
+
+    // Rounded clip mask for the tile row (see contentRow.layer below). Hidden;
+    // rendered to a layer texture and sampled by the MultiEffect as the clip shape.
+    Item {
+        id: tileMask
+        anchors.fill: contentRow
+        visible: false
+        layer.enabled: true
+        Rectangle {
+            anchors.fill: parent
+            radius: root.containerRadius
+            antialiasing: true
+            color: "black"
+        }
     }
 
     Row {
@@ -108,6 +166,16 @@ Item {
         anchors.topMargin: root.containerPaddingTop
         anchors.bottom: parent.bottom
         anchors.bottomMargin: root.containerPaddingBottom
+
+        // QML `clip` is rectangular and ignores `radius`, so the square-cornered
+        // tiles spill past the rounded #workspaces corners. Render the tile row to a
+        // layer and mask it to a rounded rectangle matching the container radius.
+        layer.enabled: root.containerRadius > 0
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: tileMask
+            maskThresholdMin: 0.5
+        }
 
         Repeater {
             id: ipcRepeater
@@ -132,14 +200,25 @@ Item {
                 readonly property real tilePaddingX: root.paddingX(cssStyle)
                 readonly property real tileMinWidth: root.cssPixels(cssStyle, "min-width", 0)
                 readonly property real tileRadius: root.cssPixels(cssStyle, "border-radius", 0)
-                readonly property real activeFillOpacity: root.cssPixels(cssStyle, "active-fill-opacity", 0.22)
-                readonly property int transitionDuration: root.cssDuration(cssStyle, "transition-duration", 180)
-                readonly property int transitionEasing: root.cssEasing(cssStyle, "transition-easing", Easing.InOutQuad)
+                // Active-fill overlay: #workspaces button.focused::after { background: rgba(...) }.
+                // Blink overlay: #workspaces button.urgent::before { background: rgba(...) }.
+                // Opacity is the alpha of the colour; the QML animates opacity over it.
+                readonly property var activeFillStyle: root.buttonOverlay(["focused"], "after")
+                readonly property var blinkStyle: root.buttonOverlay(["urgent"], "before")
+                // Standard CSS `transition` (shorthand or longhands) driving the
+                // background fade between states. The CssFill below animates the
+                // fill colour AND opacity with this duration/easing, synced.
+                readonly property var tileTransition: root.transitionOf(cssStyle)
                 readonly property int activeDuration: root.cssDuration(cssStyle, "active-duration", 240)
                 readonly property int activeEasing: root.cssEasing(cssStyle, "active-easing", Easing.InOutCubic)
-                readonly property int animationDuration: root.cssDuration(cssStyle, "animation-duration", 900)
-                readonly property int animationEasing: root.cssEasing(cssStyle, "animation-easing", Easing.InOutSine)
-                readonly property bool urgentBlinkEnabled: attention && cssStyle["urgent-blink-color"]
+                // Urgent-blink via standard CSS `@keyframes` + `animation` on
+                // `#workspaces button.urgent::before` (no `animation-*` quirks).
+                readonly property var blinkAnim: (cssTheme && cssTheme.loaded)
+                    ? cssTheme.parseAnimation(blinkStyle["animation"] || "") : ({})
+                readonly property var blinkFrames: (cssTheme && cssTheme.loaded && blinkAnim.name)
+                    ? cssTheme.keyframes(blinkAnim.name) : []
+                readonly property bool urgentBlinkEnabled: attention
+                    && root.fillColorOf(blinkStyle).length > 0 && blinkFrames.length > 0
                 readonly property color tileBg: cssStyle["background-color"]
                     ? cssTheme.parseColor(cssStyle["background-color"])
                     : (workspaceTile.attention ? "#ff5555" : visible ? "#526171" : "#273847")
@@ -150,18 +229,13 @@ Item {
                 width: Math.max(label.implicitWidth + tilePaddingX * 2, tileMinWidth)
                 color: "transparent"
 
-                Behavior on color {
-                    ColorAnimation {
-                        duration: workspaceTile.transitionDuration
-                        easing.type: workspaceTile.transitionEasing
-                    }
-                }
-
                 QBar.CssFill {
                     anchors.fill: parent
                     style: workspaceTile.cssStyle
                     radius: workspaceTile.tileRadius
                     defaultColor: workspaceTile.tileBg
+                    transitionMs: workspaceTile.tileTransition.ms
+                    transitionEasingType: workspaceTile.tileTransition.easing
                 }
 
                 // Animated hover highlight. The colour comes from the CSS
@@ -196,27 +270,25 @@ Item {
                     id: urgentBlinkFill
                     anchors.fill: parent
                     radius: workspaceTile.tileRadius
-                    color: workspaceTile.cssStyle["urgent-blink-color"]
-                        ? cssTheme.parseColor(workspaceTile.cssStyle["urgent-blink-color"])
-                        : "transparent"
+                    color: {
+                        var bg = root.fillColorOf(workspaceTile.blinkStyle)
+                        return bg.length > 0 ? cssTheme.parseColor(bg) : "#00000000"
+                    }
                     opacity: 0.0
                     visible: workspaceTile.urgentBlinkEnabled
 
-                    SequentialAnimation on opacity {
+                    // The ::before overlay's opacity is driven through the theme's
+                    // `@keyframes` by the `animation` params (name/duration/easing/iters).
+                    QBar.CssKeyframes {
+                        target: urgentBlinkFill
+                        animatedProperty: "opacity"
+                        frames: workspaceTile.blinkFrames
+                        duration: workspaceTile.blinkAnim.duration > 0 ? workspaceTile.blinkAnim.duration : 760
+                        easingType: workspaceTile.blinkAnim.easing !== undefined
+                            ? workspaceTile.blinkAnim.easing : Easing.InOutSine
+                        iterations: workspaceTile.blinkAnim.iterations !== undefined
+                            ? workspaceTile.blinkAnim.iterations : -1
                         running: workspaceTile.urgentBlinkEnabled
-                        loops: Animation.Infinite
-                        NumberAnimation {
-                            from: 0.0
-                            to: root.cssPixels(workspaceTile.cssStyle, "urgent-blink-opacity", 0.85)
-                            duration: Math.max(1, workspaceTile.animationDuration / 2)
-                            easing.type: workspaceTile.animationEasing
-                        }
-                        NumberAnimation {
-                            from: root.cssPixels(workspaceTile.cssStyle, "urgent-blink-opacity", 0.85)
-                            to: 0.0
-                            duration: Math.max(1, workspaceTile.animationDuration / 2)
-                            easing.type: workspaceTile.animationEasing
-                        }
                     }
                 }
 
@@ -233,11 +305,19 @@ Item {
                     y: (parent.height - height) / 2
                     width: parent.width
                     height: Math.max(2, parent.height * workspaceTile.activeProgress)
-                    color: workspaceTile.cssStyle["active-fill-color"]
-                        ? cssTheme.parseColor(workspaceTile.cssStyle["active-fill-color"])
-                        : theme.accent
-                    opacity: workspaceTile.activeProgress * workspaceTile.activeFillOpacity
-                    visible: opacity > 0.0
+                    // Styled via button.focused::after; falls back to a translucent
+                    // accent so themes without an explicit overlay still mark the active
+                    // workspace. The peak opacity is the colour's alpha.
+                    color: {
+                        var bg = root.fillColorOf(workspaceTile.activeFillStyle)
+                        return bg.length > 0 ? cssTheme.parseColor(bg)
+                            : root.alphaColor(theme.accent, 0.22)
+                    }
+                    opacity: workspaceTile.activeProgress
+                    // Skip rendering entirely when the fill is transparent (e.g. a theme
+                    // that marks the active workspace with a top border, not a fill) —
+                    // otherwise the fading overlay flashes black. Mirrors hoverFill.
+                    visible: opacity > 0.0 && color.a > 0.0
                 }
 
                 // Top accent line for the active workspace. Opt-in: themes set
@@ -329,8 +409,7 @@ Item {
                 readonly property real tilePaddingX: root.paddingX(cssStyle)
                 readonly property real tileMinWidth: root.cssPixels(cssStyle, "min-width", 0)
                 readonly property real tileRadius: root.cssPixels(cssStyle, "border-radius", 0)
-                readonly property int transitionDuration: root.cssDuration(cssStyle, "transition-duration", 180)
-                readonly property int transitionEasing: root.cssEasing(cssStyle, "transition-easing", Easing.InOutQuad)
+                readonly property var tileTransition: root.transitionOf(cssStyle)
                 readonly property color tileBg: cssStyle["background-color"]
                     ? cssTheme.parseColor(cssStyle["background-color"])
                     : ["#273847", "#526171", "#ff5555", "#35495c", "#4a596a"][index]
@@ -341,18 +420,13 @@ Item {
                 width: Math.max(label.implicitWidth + tilePaddingX * 2, tileMinWidth)
                 color: "transparent"
 
-                Behavior on color {
-                    ColorAnimation {
-                        duration: fallbackTile.transitionDuration
-                        easing.type: fallbackTile.transitionEasing
-                    }
-                }
-
                 QBar.CssFill {
                     anchors.fill: parent
                     style: fallbackTile.cssStyle
                     radius: fallbackTile.tileRadius
                     defaultColor: fallbackTile.tileBg
+                    transitionMs: fallbackTile.tileTransition.ms
+                    transitionEasingType: fallbackTile.tileTransition.easing
                 }
 
                 Timer {

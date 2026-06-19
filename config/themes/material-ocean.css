@@ -1,0 +1,30 @@
+/* Material Ocean — https://github.com/material-ocean/material-ocean */
+
+* { border: none; border-radius: 0; }
+window#waybar    { background-color: rgba(15, 17, 26, 0.90); border-radius: 8px; }
+
+#clock         { color: #8f93a2; background-color: #0f111a; }
+#battery       { color: #c3e88d; background-color: #0f111a; }
+#battery.charging  { color: #c3e88d; background-color: #0f111a; }
+#battery.full      { color: #c3e88d; background-color: #0f111a; }
+#battery.critical  { color: #f07178; background-color: #0f111a; }
+#cpu           { color: #82aaff; background-color: #0f111a; }
+#memory        { color: #c792ea; background-color: #0f111a; }
+#nm-applet       { color: #89ddff; background-color: #0f111a; }
+#network-io    { color: #89ddff; background-color: #0f111a; }
+#pulseaudio    { color: #89ddff; background-color: #0f111a; }
+#pulseaudio.muted  { color: #464b5d; background-color: #0f111a; }
+#backlight     { color: #ffcb6b; background-color: #0f111a; }
+#temperature   { color: #f78c6c; background-color: #0f111a; }
+#keyboard      { color: #c792ea; background-color: #0f111a; }
+#tray          { background-color: #0f111a; }
+#title         { color: #717cb4; background-color: transparent; }
+#caffeine      { color: #464b5d; background-color: #0f111a; }
+#caffeine.active { color: #ffcb6b; background-color: #0f111a; }
+#custom-dollar { color: #c3e88d; background-color: #0f111a; }
+#custom-btc    { color: #f78c6c; background-color: #0f111a; }
+
+#workspaces button          { color: #4b526d; background-color: #090b10; }
+#workspaces button.focused  { color: #eeffff; background-color: #1a1c25; }
+#workspaces button.visible  { color: #8f93a2; background-color: #0f111a; }
+#workspaces button.urgent   { color: #090b10; background-color: #f07178; }

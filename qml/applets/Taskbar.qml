@@ -2,14 +2,14 @@ import QtQuick
 import QtQml
 import "qrc:/qbar" as QBar
 
-Item {
+QBar.CssRect {
     id: root
+    cssId: "taskbar"
     height: theme.height
     width: Math.max(1, preferredWidth)
     clip: true
 
-    readonly property string cssId: "taskbar"
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    readonly property var cssStyle: root.style
 
     // Hidden (width 0) when there are no matching windows — the qbar pattern.
     property int preferredWidth: row.visibleChildrenWidth > 0 ? Math.ceil(row.visibleChildrenWidth + 8) : 0
@@ -28,6 +28,13 @@ Item {
     signal preferredWidthUpdated(int width)
     onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
     Component.onCompleted: preferredWidthUpdated(preferredWidth)
+
+    // theme.* colours are HexArgb STRINGS, so `theme.foreground.r` is undefined and
+    // Qt.rgba(undefined,...) renders black. Parse first, then tint.
+    function alphaColor(colorStr, a) {
+        var c = cssTheme.parseColor(colorStr)
+        return Qt.rgba(c.r, c.g, c.b, a)
+    }
 
     // Wheel cycles focus through the currently-visible windows in row order.
     // direction +1 = next, -1 = previous.
@@ -78,10 +85,7 @@ Item {
         }
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "transparent"
-    }
+    // Background painted by the CssRect base.
 
     // Catches wheel scrolls over the gaps between items (the item MouseAreas
     // handle wheel over the items themselves). Scroll up = previous, down = next.
@@ -137,8 +141,8 @@ Item {
                     anchors.fill: parent
                     radius: 3
                     color: {
-                        if (entry.urgent) return Qt.rgba(theme.accent.r, theme.accent.g, theme.accent.b, 0.35)
-                        if (entry.focused) return Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.16)
+                        if (entry.urgent) return root.alphaColor(theme.accent, 0.35)
+                        if (entry.focused) return root.alphaColor(theme.foreground, 0.16)
                         return "transparent"
                     }
                 }
@@ -168,7 +172,7 @@ Item {
                         elide: Text.ElideRight
                         text: entry.title.length > 0 ? entry.title : entry.appId
                         color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"])
-                            : (entry.focused ? theme.foreground : Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.75))
+                            : (entry.focused ? theme.foreground : root.alphaColor(theme.foreground, 0.75))
                         font.family: cssStyle["font-family"] || theme.fontFamily
                         font.pointSize: theme.fontSize
                         font.bold: entry.focused

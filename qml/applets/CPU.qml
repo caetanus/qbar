@@ -12,8 +12,12 @@ Item {
     readonly property string cssId: "cpu"
     readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
 
-    readonly property color graphBackground: cssStyle["graph-background"]
-        ? cssTheme.parseColor(cssStyle["graph-background"])
+    // Graph sub-part, styled via the standard-CSS `#cpu.graph { background-color;
+    // color; fill; width }` selector.
+    readonly property var graphStyle: cssTheme && cssTheme.loaded ? cssTheme.resolvePart(cssId, "graph") : ({})
+
+    readonly property color graphBackground: graphStyle["background-color"]
+        ? cssTheme.parseColor(graphStyle["background-color"])
         : "transparent"
     readonly property color effectiveGraphBackground: Contrast.effectiveBackground(graphBackground, cssTheme, theme.background)
     readonly property color labelBackground: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#35414a"
@@ -22,7 +26,7 @@ Item {
     property int usage: cpuModel ? cpuModel.usage : 0
     property var history: cpuModel ? cpuModel.usageHistory : []
     property int configuredWidth: cssPixels(cssStyle["width"], 0)
-    property int graphWidth: cssPixels(cssStyle["graph-width"], 22)
+    property int graphWidth: cssPixels(graphStyle["width"], 22)
     property int labelPadding: cssPixels(cssStyle["label-padding"], 10)
     // Composable display parts (config: cpu.format / cpu.text). Default keeps the
     // historical "percentage + graph" look.
@@ -106,12 +110,13 @@ Item {
 
     Component {
         id: textCell
-        Rectangle {
+        QBar.CssRect {
+            cssId: "cpu"
+            defaultColor: "#35414a"
             // `parent` is the Loader; read the resolved text from it.
             readonly property string cellText: parent ? parent.cellText : ""
             implicitWidth: Math.max(1, cellLabel.implicitWidth + root.labelPadding)
             height: root.height
-            color: root.labelBackground
 
             Text {
                 id: cellLabel
@@ -126,10 +131,11 @@ Item {
 
     Component {
         id: graphCell
-        Rectangle {
+        QBar.CssRect {
+            cssId: "cpu"
+            cssPart: "graph"
             implicitWidth: root.graphWidth
             height: root.height
-            color: root.graphBackground
 
             Canvas {
                 id: graph
@@ -161,7 +167,7 @@ Item {
                     }
                     ctx.lineTo(width - 1, height)
                     ctx.closePath()
-                    ctx.fillStyle = cssStyle["graph-fill"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.22)
+                    ctx.fillStyle = root.graphStyle["fill"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.22)
                     ctx.fill()
 
                     ctx.beginPath()
@@ -178,7 +184,7 @@ Item {
                             ctx.lineTo(px, py)
                         }
                     }
-                    ctx.strokeStyle = cssStyle["graph-color"] || Contrast.contrastColor(root.effectiveGraphBackground)
+                    ctx.strokeStyle = root.graphStyle["color"] || Contrast.contrastColor(root.effectiveGraphBackground)
                     ctx.lineWidth = 1.5
                     ctx.lineJoin = "round"
                     ctx.lineCap = "round"

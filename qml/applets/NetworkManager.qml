@@ -2,13 +2,18 @@ import QtQuick
 import "qrc:/qbar" as QBar
 import "qrc:/qbar/Contrast.js" as Contrast
 
-Item {
+QBar.CssRect {
     id: root
+    // Waybar's network module is `#network`; we keep that id as the waybar alias
+    // (merged underneath by the engine) for drop-in compat, with the clearer qbar
+    // `#nm-applet` winning on conflict. `#network-io` is a separate qbar-only IO graph.
+    cssId: "nm-applet"
+    cssAlternateId: ["network"]
+    defaultColor: "#2f80b8"
     height: theme.height
     width: Math.max(1, preferredWidth)
 
-    readonly property string cssId: "network"
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    readonly property var cssStyle: root.style
 
     readonly property color itemBackground: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#2f80b8"
     readonly property color effectiveBackground: Contrast.effectiveBackground(itemBackground, cssTheme, theme.background)
@@ -61,10 +66,7 @@ Item {
         side: "auto"
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: root.itemBackground
-    }
+    // Background painted by the CssRect base (defaultColor fallback).
 
     Item {
         id: iconBox

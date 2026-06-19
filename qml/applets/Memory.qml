@@ -12,8 +12,13 @@ Item {
     readonly property string cssId: "memory"
     readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
 
-    readonly property color graphBackground: cssStyle["graph-background"]
-        ? cssTheme.parseColor(cssStyle["graph-background"])
+    // Graph/swap sub-parts, styled via standard-CSS `#memory.graph { ... }` /
+    // `#memory.swap { ... }` selectors.
+    readonly property var graphStyle: cssTheme && cssTheme.loaded ? cssTheme.resolvePart(cssId, "graph") : ({})
+    readonly property var swapStyle: cssTheme && cssTheme.loaded ? cssTheme.resolvePart(cssId, "swap") : ({})
+
+    readonly property color graphBackground: graphStyle["background-color"]
+        ? cssTheme.parseColor(graphStyle["background-color"])
         : "transparent"
     readonly property color effectiveGraphBackground: Contrast.effectiveBackground(graphBackground, cssTheme, theme.background)
     readonly property color labelBackground: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#35502e"
@@ -23,7 +28,7 @@ Item {
     property var history: cpuModel ? cpuModel.memoryUsageHistory : []
     property var swapHistory: cpuModel ? cpuModel.swapUsageHistory : []
     property int configuredWidth: cssPixels(cssStyle["width"], 0)
-    property int graphWidth: cssPixels(cssStyle["graph-width"], 22)
+    property int graphWidth: cssPixels(graphStyle["width"], 22)
     property int labelPadding: cssPixels(cssStyle["label-padding"], 10)
     readonly property var parts: memoryConfig && memoryConfig.format ? memoryConfig.format : ["cycle"]
     // The graph is always shown; `format` lists only the value parts beside it.
@@ -111,11 +116,12 @@ Item {
 
     Component {
         id: textCell
-        Rectangle {
+        QBar.CssRect {
+            cssId: "memory"
+            defaultColor: "#35502e"
             readonly property string cellText: parent ? parent.cellText : ""
             implicitWidth: Math.max(1, cellLabel.implicitWidth + root.labelPadding)
             height: root.height
-            color: root.labelBackground
 
             Text {
                 id: cellLabel
@@ -130,10 +136,11 @@ Item {
 
     Component {
         id: graphCell
-        Rectangle {
+        QBar.CssRect {
+            cssId: "memory"
+            cssPart: "graph"
             implicitWidth: root.graphWidth
             height: root.height
-            color: root.graphBackground
 
             Canvas {
                 id: graph
@@ -193,11 +200,11 @@ Item {
                     }
 
                     drawSeries(swapPoints,
-                        cssStyle["swap-fill"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.22),
-                        cssStyle["swap-color"] || Contrast.contrastColor(root.effectiveGraphBackground))
+                        root.swapStyle["fill"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.22),
+                        root.swapStyle["color"] || Contrast.contrastColor(root.effectiveGraphBackground))
                     drawSeries(memPoints,
-                        cssStyle["graph-fill"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.22),
-                        cssStyle["graph-color"] || Contrast.contrastColor(root.effectiveGraphBackground))
+                        root.graphStyle["fill"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.22),
+                        root.graphStyle["color"] || Contrast.contrastColor(root.effectiveGraphBackground))
                 }
 
                 Connections {

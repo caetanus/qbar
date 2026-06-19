@@ -1,0 +1,30 @@
+/* Kanagawa — https://github.com/rebelot/kanagawa.nvim */
+
+* { border: none; border-radius: 0; }
+window#waybar    { background-color: rgba(31, 31, 40, 0.90); border-radius: 8px; }
+
+#clock         { color: #dcd7ba; background-color: #1f1f28; }
+#battery       { color: #76946a; background-color: #1f1f28; }
+#battery.charging  { color: #76946a; background-color: #1f1f28; }
+#battery.full      { color: #76946a; background-color: #1f1f28; }
+#battery.critical  { color: #c34043; background-color: #1f1f28; }
+#cpu           { color: #7e9cd8; background-color: #1f1f28; }
+#memory        { color: #957fb8; background-color: #1f1f28; }
+#nm-applet       { color: #7aa89f; background-color: #1f1f28; }
+#network-io    { color: #7aa89f; background-color: #1f1f28; }
+#pulseaudio    { color: #6a9589; background-color: #1f1f28; }
+#pulseaudio.muted  { color: #54546d; background-color: #1f1f28; }
+#backlight     { color: #c0a36e; background-color: #1f1f28; }
+#temperature   { color: #ffa066; background-color: #1f1f28; }
+#keyboard      { color: #957fb8; background-color: #1f1f28; }
+#tray          { background-color: #1f1f28; }
+#title         { color: #c8c093; background-color: transparent; }
+#caffeine      { color: #54546d; background-color: #1f1f28; }
+#caffeine.active { color: #c0a36e; background-color: #1f1f28; }
+#custom-dollar { color: #76946a; background-color: #1f1f28; }
+#custom-btc    { color: #ffa066; background-color: #1f1f28; }
+
+#workspaces button          { color: #54546d; background-color: #16161d; }
+#workspaces button.focused  { color: #dcd7ba; background-color: #2a2a37; }
+#workspaces button.visible  { color: #c8c093; background-color: #1f1f28; }
+#workspaces button.urgent   { color: #16161d; background-color: #c34043; }

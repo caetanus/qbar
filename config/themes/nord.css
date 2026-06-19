@@ -1,0 +1,30 @@
+/* Nord — https://www.nordtheme.com */
+
+* { border: none; border-radius: 0; }
+window#waybar    { background-color: rgba(46, 52, 64, 0.90); border-radius: 8px; }
+
+#clock         { color: #eceff4; background-color: #2e3440; }
+#battery       { color: #a3be8c; background-color: #2e3440; }
+#battery.charging  { color: #a3be8c; background-color: #2e3440; }
+#battery.full      { color: #a3be8c; background-color: #2e3440; }
+#battery.critical  { color: #bf616a; background-color: #2e3440; }
+#cpu           { color: #81a1c1; background-color: #2e3440; }
+#memory        { color: #b48ead; background-color: #2e3440; }
+#nm-applet       { color: #88c0d0; background-color: #2e3440; }
+#network-io    { color: #8fbcbb; background-color: #2e3440; }
+#pulseaudio    { color: #5e81ac; background-color: #2e3440; }
+#pulseaudio.muted  { color: #4c566a; background-color: #2e3440; }
+#backlight     { color: #ebcb8b; background-color: #2e3440; }
+#temperature   { color: #d08770; background-color: #2e3440; }
+#keyboard      { color: #8fbcbb; background-color: #2e3440; }
+#tray          { background-color: #2e3440; }
+#title         { color: #d8dee9; background-color: transparent; }
+#caffeine      { color: #4c566a; background-color: #2e3440; }
+#caffeine.active { color: #ebcb8b; background-color: #2e3440; }
+#custom-dollar { color: #a3be8c; background-color: #2e3440; }
+#custom-btc    { color: #d08770; background-color: #2e3440; }
+
+#workspaces button          { color: #4c566a; background-color: #242933; }
+#workspaces button.focused  { color: #eceff4; background-color: #3b4252; }
+#workspaces button.visible  { color: #d8dee9; background-color: #2e3440; }
+#workspaces button.urgent   { color: #eceff4; background-color: #bf616a; }

@@ -28,7 +28,6 @@ Item {
     }
 
     function open() {
-        console.warn("[tooltip] open", text, popupWidth, popupHeight)
         if (tooltipId.length > 0) {
             refresh()
             return tooltipId
@@ -43,13 +42,11 @@ Item {
         if (tooltipId.length === 0) {
             return
         }
-        console.warn("[tooltip] close", text)
         tooltipPopup.close()
         tooltipId = ""
     }
 
     function syncVisibility() {
-        console.warn("[tooltip] sync", text, "hovered:", hovered, "open:", tooltipPopup.isOpen)
         if (hovered) {
             hoverTimer.restart()
         } else {
@@ -76,13 +73,11 @@ Item {
         horizontalAlignment: "left"
 
         onPopupOpened: {
-            console.warn("[tooltip] popup opened", text, id)
             root.tooltipId = id
             root.refresh()
             root.opened(id)
         }
         onClosed: {
-            console.warn("[tooltip] popup closed", text)
             root.tooltipId = ""
             root.closed()
         }
@@ -93,7 +88,6 @@ Item {
         interval: root.delay
         repeat: false
         onTriggered: {
-            console.warn("[tooltip] open timer", root.text, root.hovered)
             if (root.hovered) {
                 root.open()
             }

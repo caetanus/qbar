@@ -1,0 +1,30 @@
+/* High Contrast */
+
+* { border: none; border-radius: 0; }
+window#waybar    { background-color: rgba(0, 0, 0, 1.0); border-radius: 8px; }
+
+#clock         { color: #ffffff; background-color: #000000; }
+#battery       { color: #00ff00; background-color: #000000; }
+#battery.charging  { color: #00ff00; background-color: #000000; }
+#battery.full      { color: #00ff00; background-color: #000000; }
+#battery.critical  { color: #ff0000; background-color: #000000; }
+#cpu           { color: #00aaff; background-color: #000000; }
+#memory        { color: #ff00ff; background-color: #000000; }
+#nm-applet       { color: #00ffff; background-color: #000000; }
+#network-io    { color: #00ffff; background-color: #000000; }
+#pulseaudio    { color: #00ffff; background-color: #000000; }
+#pulseaudio.muted  { color: #666666; background-color: #000000; }
+#backlight     { color: #ffff00; background-color: #000000; }
+#temperature   { color: #ff8800; background-color: #000000; }
+#keyboard      { color: #ff00ff; background-color: #000000; }
+#tray          { background-color: #000000; }
+#title         { color: #aaaaaa; background-color: transparent; }
+#caffeine      { color: #444444; background-color: #000000; }
+#caffeine.active { color: #ffff00; background-color: #000000; }
+#custom-dollar { color: #00ff00; background-color: #000000; }
+#custom-btc    { color: #ff8800; background-color: #000000; }
+
+#workspaces button          { color: #666666; background-color: #111111; }
+#workspaces button.focused  { color: #000000; background-color: #ffffff; }
+#workspaces button.visible  { color: #aaaaaa; background-color: #222222; }
+#workspaces button.urgent   { color: #000000; background-color: #ff0000; }

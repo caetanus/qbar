@@ -5,6 +5,10 @@
     <file alias="qbar/DismissOverlay.qml">../../qml/qbar/DismissOverlay.qml</file>
     <file alias="qbar/PopupShell.qml">../../qml/qbar/PopupShell.qml</file>
     <file alias="qbar/CssFill.qml">../../qml/qbar/CssFill.qml</file>
+    <file alias="qbar/CssRect.qml">../../qml/qbar/CssRect.qml</file>
+    <file alias="qbar/CssText.qml">../../qml/qbar/CssText.qml</file>
+    <file alias="qbar/CssEnable.qml">../../qml/qbar/CssEnable.qml</file>
+    <file alias="qbar/CssKeyframes.qml">../../qml/qbar/CssKeyframes.qml</file>
     <file alias="qbar/CssIcon.qml">../../qml/qbar/CssIcon.qml</file>
     <file alias="qbar/CssDropShadow.qml">../../qml/qbar/CssDropShadow.qml</file>
     <file alias="qbar/MarqueeText.qml">../../qml/qbar/MarqueeText.qml</file>

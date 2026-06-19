@@ -1,0 +1,30 @@
+/* One Dark — Atom One Dark palette */
+
+* { border: none; border-radius: 0; }
+window#waybar    { background-color: rgba(40, 44, 52, 0.90); border-radius: 8px; }
+
+#clock         { color: #abb2bf; background-color: #282c34; }
+#battery       { color: #98c379; background-color: #282c34; }
+#battery.charging  { color: #98c379; background-color: #282c34; }
+#battery.full      { color: #98c379; background-color: #282c34; }
+#battery.critical  { color: #e06c75; background-color: #282c34; }
+#cpu           { color: #61afef; background-color: #282c34; }
+#memory        { color: #c678dd; background-color: #282c34; }
+#nm-applet       { color: #56b6c2; background-color: #282c34; }
+#network-io    { color: #56b6c2; background-color: #282c34; }
+#pulseaudio    { color: #56b6c2; background-color: #282c34; }
+#pulseaudio.muted  { color: #3e4451; background-color: #282c34; }
+#backlight     { color: #e5c07b; background-color: #282c34; }
+#temperature   { color: #d19a66; background-color: #282c34; }
+#keyboard      { color: #c678dd; background-color: #282c34; }
+#tray          { background-color: #282c34; }
+#title         { color: #abb2bf; background-color: transparent; }
+#caffeine      { color: #3e4451; background-color: #282c34; }
+#caffeine.active { color: #e5c07b; background-color: #282c34; }
+#custom-dollar { color: #98c379; background-color: #282c34; }
+#custom-btc    { color: #d19a66; background-color: #282c34; }
+
+#workspaces button          { color: #4b5263; background-color: #21252b; }
+#workspaces button.focused  { color: #abb2bf; background-color: #3e4451; }
+#workspaces button.visible  { color: #828997; background-color: #282c34; }
+#workspaces button.urgent   { color: #21252b; background-color: #e06c75; }

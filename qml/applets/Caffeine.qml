@@ -2,20 +2,24 @@ import QtQuick
 import "qrc:/qbar" as QBar
 import "qrc:/qbar/Contrast.js" as Contrast
 
-Item {
+QBar.CssRect {
     id: root
+    cssId: "caffeine"
+    // State → cssClass: the engine resolves #caffeine / #caffeine.active and pushes the
+    // per-state background (the reverse slot re-applies when `active` flips).
+    cssClass: root.active ? ["active"] : []
     width: 32
     height: theme.height
 
-    readonly property string cssId: "caffeine"
-    readonly property var cssClasses: root.active ? ["active"] : []
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId, cssClasses) : ({})
+    readonly property var cssStyle: root.style
 
     property bool active: caffeineModel ? caffeineModel.active : false
 
+    // Falls through to transparent (no badge) when the theme leaves #caffeine unstyled;
+    // the icon's contrast then resolves against the bar background, staying readable.
     readonly property color backgroundColor: cssStyle["background-color"]
         ? cssTheme.parseColor(cssStyle["background-color"])
-        : (root.active ? "#ffffff" : "#000000")
+        : "transparent"
 
     readonly property color iconColor: cssStyle["color"]
         ? cssTheme.parseColor(cssStyle["color"])
@@ -28,10 +32,7 @@ Item {
         side: "auto"
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: root.backgroundColor
-    }
+    // Background painted by the CssRect base (per-state via cssClass).
 
     QBar.CssIcon {
         anchors.centerIn: parent

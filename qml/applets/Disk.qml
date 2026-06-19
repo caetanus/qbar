@@ -1,13 +1,14 @@
 import QtQuick
 import "qrc:/qbar" as QBar
 
-Item {
+QBar.CssRect {
     id: root
+    cssId: "disk"
     height: theme.height
     width: Math.max(1, preferredWidth)
 
-    readonly property string cssId: "disk"
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    // The engine pushes the resolved #disk rules into CssRect's `style` sink.
+    readonly property var cssStyle: root.style
 
     property bool available: diskModel ? diskModel.available : false
     property string displayText: diskModel ? diskModel.displayText : ""
@@ -47,11 +48,7 @@ Item {
         horizontalAlignment: "left"
     }
 
-    Rectangle {
-        anchors.fill: parent
-        visible: root.available
-        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "transparent"
-    }
+    // Background painted by the CssRect base.
 
     Row {
         id: contentRow

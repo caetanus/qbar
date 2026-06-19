@@ -1,0 +1,30 @@
+/* Dracula — https://draculatheme.com */
+
+* { border: none; border-radius: 0; }
+window#waybar    { background-color: rgba(40, 42, 54, 0.90); border-radius: 8px; }
+
+#clock         { color: #f8f8f2; background-color: #282a36; }
+#battery       { color: #50fa7b; background-color: #282a36; }
+#battery.charging  { color: #50fa7b; background-color: #282a36; }
+#battery.full      { color: #50fa7b; background-color: #282a36; }
+#battery.critical  { color: #ff5555; background-color: #282a36; }
+#cpu           { color: #8be9fd; background-color: #282a36; }
+#memory        { color: #bd93f9; background-color: #282a36; }
+#nm-applet       { color: #6272a4; background-color: #282a36; }
+#network-io    { color: #8be9fd; background-color: #282a36; }
+#pulseaudio    { color: #ff79c6; background-color: #282a36; }
+#pulseaudio.muted  { color: #44475a; background-color: #282a36; }
+#backlight     { color: #f1fa8c; background-color: #282a36; }
+#temperature   { color: #ffb86c; background-color: #282a36; }
+#keyboard      { color: #bd93f9; background-color: #282a36; }
+#tray          { background-color: #282a36; }
+#title         { color: #f8f8f2; background-color: transparent; }
+#caffeine      { color: #44475a; background-color: #282a36; }
+#caffeine.active { color: #f1fa8c; background-color: #282a36; }
+#custom-dollar { color: #50fa7b; background-color: #282a36; }
+#custom-btc    { color: #ffb86c; background-color: #282a36; }
+
+#workspaces button          { color: #44475a; background-color: #21222c; }
+#workspaces button.focused  { color: #f8f8f2; background-color: #44475a; }
+#workspaces button.visible  { color: #bd93f9; background-color: #282a36; }
+#workspaces button.urgent   { color: #282a36; background-color: #ff5555; }

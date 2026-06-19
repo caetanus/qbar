@@ -1,11 +1,13 @@
 import QtQuick
+import "qrc:/qbar" as QBar
 
-Item {
+QBar.CssRect {
     id: root
+    cssId: "mode"
+    defaultColor: "#e74c3c"
     height: theme.height
 
-    readonly property string cssId: "mode"
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    readonly property var cssStyle: root.style
 
     // i3/sway "binding mode" (e.g. "resize"). Other WM backends always report
     // "default", so this applet stays hidden outside of i3/sway binding modes.
@@ -21,10 +23,7 @@ Item {
     onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
     Component.onCompleted: preferredWidthUpdated(preferredWidth)
 
-    Rectangle {
-        anchors.fill: parent
-        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#e74c3c"
-    }
+    // Background painted by the CssRect base (defaultColor fallback).
 
     Text {
         id: label

@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "qbar configuration",
+  "description": "A single bar object, or an array of bar objects (multi-monitor, top+bottom).",
+  "oneOf": [
+    { "$ref": "#/$defs/bar" },
+    { "type": "array", "items": { "$ref": "#/$defs/bar" } }
+  ],
+  "$defs": {
+    "bar": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "$schema": { "type": "string", "description": "Path to this schema." },
+    "layer": { "type": "string", "enum": ["background", "bottom", "top", "overlay"], "description": "wlr-layer-shell layer." },
+    "position": { "type": "string", "enum": ["top", "bottom"], "description": "Bar edge." },
+    "height": { "type": "integer", "minimum": 1 },
+    "margin": { "type": "integer" },
+    "spacing": { "type": "integer", "description": "Gap between applets." },
+    "x": { "type": "integer" },
+    "y": { "type": "integer" },
+    "exclusiveZone": { "type": "boolean", "description": "Reserve screen space for the bar." },
+    "waylandLayerShell": { "type": "boolean" },
+    "popupKeyboardFocus": { "type": "boolean", "description": "Let popups grab the keyboard (enables Esc-to-close)." },
+    "background": { "type": "string", "description": "Color (#rrggbb, #aarrggbb, rgb(), rgba(), name)." },
+    "foreground": { "type": "string" },
+    "accent": { "type": "string" },
+    "fontFamily": { "type": "string" },
+    "fontSize": { "type": "integer", "minimum": 1 },
+    "trayItemPadding": { "type": "integer" },
+    "animationDuration": { "type": "integer", "minimum": 0 },
+    "animationEasing": { "type": "string", "description": "e.g. linear, inoutquad, outcubic." },
+    "windowManagerBackend": { "type": "string", "enum": ["auto", "i3", "sway", "hyprland", "bspwm", "ewmh", "none"] },
+    "styleSheet": { "type": "string", "description": "Path to a CSS theme." },
+    "output": { "type": "string", "description": "Target monitor name." },
+    "marginTop": { "type": "integer" },
+    "marginBottom": { "type": "integer" },
+    "marginLeft": { "type": "integer" },
+    "marginRight": { "type": "integer" },
+    "modules-left": { "$ref": "#/$defs/moduleList" },
+    "modules-center": { "$ref": "#/$defs/moduleList" },
+    "modules-right": { "$ref": "#/$defs/moduleList" },
+    "applets": { "$ref": "#/$defs/moduleList" },
+    "customTools": {
+      "type": "object",
+      "description": "Map of \"custom/<name>\" to a tool definition.",
+      "additionalProperties": { "$ref": "#/$defs/customTool" }
+    },
+    "taskbar": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Taskbar applet options.",
+      "properties": {
+        "scope": { "type": "string", "enum": ["workspace", "all", "monitor"], "description": "Which windows to list." },
+        "middleClickClose": { "type": "boolean", "description": "Middle-click closes a window." },
+        "rightClickMenu": { "type": "boolean", "description": "Right-click opens a focus/close menu." }
+      }
+    },
+    "cpu": { "$ref": "#/$defs/display" },
+    "memory": { "$ref": "#/$defs/display" },
+    "network": { "$ref": "#/$defs/display" }
+      }
+    },
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Composable display for the CPU/Memory/Network applets.",
+      "properties": {
+        "format": {
+          "type": "array",
+          "description": "Value parts shown beside the always-present graph. \"cycle\" is a slot the mouse wheel cycles. Empty list = graph only.",
+          "items": { "type": "string", "enum": ["text", "percentage", "clock", "absolute", "used", "cycle"] }
+        },
+        "text": { "type": "string", "description": "Literal label shown by the \"text\"/\"cycle\" parts." }
+      }
+    },
+    "moduleList": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "customTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exec": { "type": "string", "description": "Command to run." },
+        "command": { "type": "string" },
+        "arguments": { "type": "array", "items": { "type": "string" } },
+        "workingDirectory": { "type": "string" },
+        "interval": { "type": "number", "description": "Seconds between runs." },
+        "return-type": { "type": "string", "enum": ["json"], "description": "Omit for plain text; \"json\" for the waybar object format." },
+        "format": { "type": "string", "description": "e.g. \"{} ({percentage:.1f}%)\"." },
+        "format-icons": { "type": "object" },
+        "tooltip": { "type": "boolean" },
+        "exec-if": { "type": "string" },
+        "show-empty": { "type": "boolean" },
+        "on-click": { "type": "string" },
+        "on-click-middle": { "type": "string" },
+        "on-click-right": { "type": "string" },
+        "on-scroll-up": { "type": "string" },
+        "on-scroll-down": { "type": "string" }
+      }
+    }
+  }
+}

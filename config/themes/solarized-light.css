@@ -1,0 +1,33 @@
+/* Solarized Light — https://ethanschoonover.com/solarized/ */
+
+window#waybar    { background-color: rgba(253, 246, 227, 0.85); border-radius: 8px; border-left: 80px; border-right: 80px; padding: 0 6px; }
+
+#clock         { color: #657b83; background-color: transparent; }
+#battery       { color: #859900; background-color: transparent; }
+#battery.charging  { color: #859900; background-color: transparent; }
+#battery.full      { color: #859900; background-color: transparent; }
+#battery.critical  { color: #dc322f; background-color: rgba(220, 50, 47, 0.18); }
+#cpu           { color: #268bd2; background-color: transparent; }
+#memory        { color: #6c71c4; background-color: transparent; }
+#nm-applet       { color: #2aa198; background-color: transparent; }
+#network-io    { color: #2aa198; background-color: transparent; }
+#network-io.download { color: #b58900; fill: rgba(181, 137, 0, 0.22); }
+#network-io.upload { color: #cb4b16; fill: rgba(203, 75, 22, 0.26); }
+#network-io.arrowDown { color: #b58900; }
+#network-io.arrowUp { color: #cb4b16; }
+#pulseaudio    { color: #2aa198; background-color: transparent; }
+#pulseaudio.muted  { color: #93a1a1; background-color: transparent; }
+#backlight     { color: #b58900; background-color: transparent; }
+#temperature   { color: #cb4b16; background-color: transparent; }
+#keyboard      { color: #6c71c4; background-color: transparent; }
+#tray          { background-color: transparent; }
+#title         { color: #586e75; background-color: transparent; }
+#caffeine      { color: #93a1a1; background-color: transparent; }
+#caffeine.active { color: #b58900; background-color: rgba(181, 137, 0, 0.18); }
+#custom-dollar { color: #859900; background-color: transparent; }
+#custom-btc    { color: #cb4b16; background-color: transparent; }
+
+#workspaces button          { color: #93a1a1; background-color: transparent; }
+#workspaces button.focused  { color: #586e75; background-color: rgba(101, 123, 131, 0.12); }
+#workspaces button.visible  { color: #839496; background-color: rgba(131, 148, 150, 0.06); }
+#workspaces button.urgent   { color: #fdf6e3; background-color: #dc322f; }

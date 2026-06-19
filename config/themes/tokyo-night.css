@@ -1,0 +1,30 @@
+/* Tokyo Night — https://github.com/enkia/tokyo-night-vscode-theme */
+
+* { border: none; border-radius: 0; }
+window#waybar    { background-color: rgba(26, 27, 38, 0.90); border-radius: 8px; }
+
+#clock         { color: #c0caf5; background-color: #1a1b26; }
+#battery       { color: #9ece6a; background-color: #1a1b26; }
+#battery.charging  { color: #9ece6a; background-color: #1a1b26; }
+#battery.full      { color: #9ece6a; background-color: #1a1b26; }
+#battery.critical  { color: #f7768e; background-color: #1a1b26; }
+#cpu           { color: #7aa2f7; background-color: #1a1b26; }
+#memory        { color: #bb9af7; background-color: #1a1b26; }
+#nm-applet       { color: #7dcfff; background-color: #1a1b26; }
+#network-io    { color: #7dcfff; background-color: #1a1b26; }
+#pulseaudio    { color: #1abc9c; background-color: #1a1b26; }
+#pulseaudio.muted  { color: #565f89; background-color: #1a1b26; }
+#backlight     { color: #e0af68; background-color: #1a1b26; }
+#temperature   { color: #ff9e64; background-color: #1a1b26; }
+#keyboard      { color: #bb9af7; background-color: #1a1b26; }
+#tray          { background-color: #1a1b26; }
+#title         { color: #a9b1d6; background-color: transparent; }
+#caffeine      { color: #565f89; background-color: #1a1b26; }
+#caffeine.active { color: #e0af68; background-color: #1a1b26; }
+#custom-dollar { color: #9ece6a; background-color: #1a1b26; }
+#custom-btc    { color: #ff9e64; background-color: #1a1b26; }
+
+#workspaces button          { color: #565f89; background-color: #16161e; }
+#workspaces button.focused  { color: #c0caf5; background-color: #283457; }
+#workspaces button.visible  { color: #a9b1d6; background-color: #1a1b26; }
+#workspaces button.urgent   { color: #16161e; background-color: #f7768e; }

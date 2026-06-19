@@ -87,11 +87,12 @@ Item {
         anchors.margins: 0
         spacing: 0
 
-        Rectangle {
+        QBar.CssRect {
             id: outputBlock
+            cssId: "pulseaudio"
+            cssClass: root.outputAvailable ? (root.outputMuted ? ["muted"] : []) : ["unavailable"]
             width: outputRow.implicitWidth + 10
             height: theme.height
-            color: root.outputBackground
 
             Row {
                 id: outputRow
@@ -209,11 +210,12 @@ Item {
             }
         }
 
-        Rectangle {
+        QBar.CssRect {
             id: inputBlock
+            cssId: "pulseaudio"
+            cssClass: root.inputAvailable ? (root.inputMuted ? ["source-muted"] : ["source"]) : ["unavailable"]
             width: inputRow.implicitWidth + 10
             height: theme.height
-            color: root.inputBackground
 
             Row {
                 id: inputRow

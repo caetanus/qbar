@@ -6,6 +6,8 @@
 #include <QDebug>
 #include <QFile>
 #include <QHash>
+#include <QMetaMethod>
+#include <QMetaProperty>
 #include <QRegularExpression>
 #include <algorithm>
 
@@ -120,6 +122,11 @@ CssSimpleSelector parseSimpleSelector(const QString &raw)
             if (!pseudoElement) {
                 sel.classes.append(s.mid(nameStart, j - nameStart));
                 sel.specificity += 10;
+            } else {
+                // Pseudo-elements (::before/::after) name a decorative overlay; keep
+                // the name so resolve*() can target it instead of dropping it.
+                sel.pseudoElement = s.mid(nameStart, j - nameStart);
+                sel.specificity += 1;
             }
             i = j;
         } else if (c.isLetter() || c == QLatin1Char('_')) {
@@ -180,13 +187,123 @@ QVariantMap parseDeclarationBlock(const QString &block)
         const int colon = decl.indexOf(QLatin1Char(':'));
         if (colon > 0) {
             const QString prop = decl.left(colon).trimmed().toLower();
-            const QString val  = decl.mid(colon + 1).trimmed();
+            QString val = decl.mid(colon + 1).trimmed();
+            // Normalize CSS color keywords that Qt cannot parse to an explicit
+            // fully-transparent hex, in the engine, so every consumer gets a usable
+            // value — a raw QML `color:` binding or a Canvas fillStyle, not just
+            // parseColor(). Qt's QColor rejects `transparent`/`none`/`inherit` on those
+            // raw paths and falls back to black; `#00000000` reads as transparent black
+            // under both Qt's #AARRGGBB and CSS's #RRGGBBAA. Whole-value only: a gradient
+            // keeps its inner `transparent` stop (parseGradient routes it through
+            // parseColor) and substrings inside url()/font-family are never touched.
+            // `transparent` is always a colour keyword so it normalizes on any property;
+            // `none`/`inherit` mean "absent" on non-colour shorthands (border/box-shadow),
+            // so they only fold on colour properties.
+            const QString low = val.toLower();
+            const bool colorProp = prop.endsWith(QLatin1String("color"))
+                || prop == QLatin1String("fill")
+                || prop == QLatin1String("background");
+            if (low == QLatin1String("transparent")
+                || (colorProp && (low == QLatin1String("none") || low == QLatin1String("inherit"))))
+                val = QStringLiteral("#00000000");
             if (!prop.isEmpty())
                 props.insert(prop, val);
         }
         i = end + 1;
     }
     return props;
+}
+
+// Parse a `@keyframes` body — `0% { ... } 50% { ... } 100% { ... }` (also `from`/`to`,
+// and comma-separated offsets) — into a list of { offset (0..1), properties }, sorted by
+// offset. Reuses parseDeclarationBlock for each frame's declarations.
+QVariantList parseKeyframeBlock(const QString &block)
+{
+    QVariantList frames;
+    int i = 0;
+    while (i < block.length()) {
+        const int brace = block.indexOf(QLatin1Char('{'), i);
+        if (brace < 0)
+            break;
+        const QString selector = block.mid(i, brace - i).trimmed();
+        const int close = block.indexOf(QLatin1Char('}'), brace + 1);
+        if (close < 0)
+            break;
+        const QVariantMap props = parseDeclarationBlock(block.mid(brace + 1, close - brace - 1));
+        const QStringList sels = selector.split(QLatin1Char(','), Qt::SkipEmptyParts);
+        for (const QString &s : sels) {
+            const QString t = s.trimmed().toLower();
+            double offset = -1.0;
+            if (t == QLatin1String("from")) {
+                offset = 0.0;
+            } else if (t == QLatin1String("to")) {
+                offset = 1.0;
+            } else if (t.endsWith(QLatin1Char('%'))) {
+                bool ok = false;
+                const double pct = t.left(t.length() - 1).trimmed().toDouble(&ok);
+                if (ok)
+                    offset = pct / 100.0;
+            }
+            if (offset >= 0.0) {
+                QVariantMap frame;
+                frame.insert(QStringLiteral("offset"), offset);
+                frame.insert(QStringLiteral("properties"), props);
+                frames.append(frame);
+            }
+        }
+        i = close + 1;
+    }
+    std::sort(frames.begin(), frames.end(), [](const QVariant &a, const QVariant &b) {
+        return a.toMap().value(QStringLiteral("offset")).toDouble()
+            < b.toMap().value(QStringLiteral("offset")).toDouble();
+    });
+    return frames;
+}
+
+// Extract `@keyframes <name> { ... }` blocks (brace-matched, since they nest — which the
+// flat parseCss cannot handle) into `out`, and return the CSS with them removed so the
+// ordinary rule parser never sees them.
+QString extractKeyframes(const QString &css, QHash<QString, QVariantList> &out)
+{
+    QString result;
+    int i = 0;
+    while (i < css.length()) {
+        const int at = css.indexOf(QStringLiteral("@keyframes"), i, Qt::CaseInsensitive);
+        if (at < 0) {
+            result += css.mid(i);
+            break;
+        }
+        result += css.mid(i, at - i);
+        int j = at + 10; // past "@keyframes"
+        while (j < css.length() && css[j].isSpace())
+            ++j;
+        const int nameStart = j;
+        while (j < css.length() && css[j] != QLatin1Char('{') && !css[j].isSpace())
+            ++j;
+        const QString name = css.mid(nameStart, j - nameStart).trimmed();
+        while (j < css.length() && css[j] != QLatin1Char('{'))
+            ++j;
+        if (j >= css.length())
+            break;
+        int depth = 0;
+        int k = j;
+        for (; k < css.length(); ++k) {
+            if (css[k] == QLatin1Char('{')) {
+                ++depth;
+            } else if (css[k] == QLatin1Char('}')) {
+                --depth;
+                if (depth == 0) {
+                    ++k;
+                    break;
+                }
+            }
+        }
+        const QString inner = css.mid(j + 1, k - j - 2);
+        if (!name.isEmpty())
+            out.insert(name, parseKeyframeBlock(inner));
+        i = k;
+    }
+    return result;
 }
 
 QList<CssRule> parseCss(const QString &css)
@@ -232,8 +349,13 @@ QList<CssRule> parseCss(const QString &css)
     return rules;
 }
 
-bool selectorMatches(const CssSimpleSelector &sel, const QString &contextId, const QString &id, const QStringList &classes)
+bool selectorMatches(const CssSimpleSelector &sel, const QString &contextId, const QString &id,
+                     const QStringList &classes, const QString &pseudoElement)
 {
+    // A pseudo-element rule (`::before`) only matches when that overlay is requested,
+    // and an ordinary rule only matches when no overlay is requested.
+    if (sel.pseudoElement != pseudoElement)
+        return false;
     // Element-only selectors (e.g. bare `label` from GTK CSS) have no id and no classes.
     // They make no sense at the top level in qbar — only allow them when there is an ancestor
     // context (i.e. called via resolveWith), so they don't bleed into every applet.
@@ -307,22 +429,164 @@ void CssTheme::onCssFileChanged(const QString &path)
 
 void CssTheme::loadFromString(const QString &css)
 {
-    m_rules = parseCss(css);
+    // @keyframes blocks nest, which the flat parseCss can't handle — extract them first
+    // (on the comment-stripped, @define-color-expanded source so frame values resolve).
+    const QString cleaned = expandDefineColors(stripComments(css));
+    m_keyframes.clear();
+    const QString body = extractKeyframes(cleaned, m_keyframes);
+    m_rules = parseCss(body);
     m_loaded = true;
     emit loadedChanged();
+    // Reverse slot: push freshly-resolved styles to every registered object so a theme
+    // reload re-styles the live UI without any QML binding.
+    reapplyAll();
 }
 
-QVariantMap CssTheme::resolve(const QString &id, const QStringList &classes) const
+QVariantMap CssTheme::parseAnimation(const QString &cssValue) const
 {
-    return resolveImpl(QString(), id, classes);
+    return CssValueParser::parseAnimation(cssValue);
 }
 
-QVariantMap CssTheme::resolveWith(const QString &contextId, const QString &id, const QStringList &classes) const
+QVariantList CssTheme::keyframes(const QString &name) const
 {
-    return resolveImpl(contextId, id, classes);
+    return m_keyframes.value(name);
 }
 
-QVariantMap CssTheme::resolveImpl(const QString &contextId, const QString &id, const QStringList &classes) const
+// Coerce a CssQmlItem identity property (cssAlternateId / cssClass) to a string list:
+// it may be authored as a single string ("waybar", "focused"), a space-separated string,
+// or a QML list (["network", "nm-applet"]).
+static QStringList cssVariantToStringList(const QVariant &v)
+{
+    if (!v.isValid())
+        return {};
+    if (v.metaType().id() == QMetaType::QStringList)
+        return v.toStringList();
+    if (v.metaType().id() == QMetaType::QVariantList) {
+        QStringList out;
+        const QVariantList list = v.toList();
+        for (const QVariant &e : list) {
+            const QString s = e.toString().trimmed();
+            if (!s.isEmpty())
+                out << s;
+        }
+        return out;
+    }
+    return v.toString().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+}
+
+QVariantMap CssTheme::resolveMerged(const QString &cssId, const QStringList &alternateIds,
+                                    const QStringList &classes) const
+{
+    QVariantMap merged;
+    // Waybar-compat aliases first (lowest priority), then the primary id wins on conflict.
+    for (const QString &alt : alternateIds) {
+        if (alt.isEmpty())
+            continue;
+        const QVariantMap m = resolve(alt, classes);
+        for (auto it = m.constBegin(); it != m.constEnd(); ++it)
+            merged.insert(it.key(), it.value());
+    }
+    if (!cssId.isEmpty()) {
+        const QVariantMap primary = resolve(cssId, classes);
+        for (auto it = primary.constBegin(); it != primary.constEnd(); ++it)
+            merged.insert(it.key(), it.value());
+    }
+    return merged;
+}
+
+void CssTheme::applyCssTo(QObject *target) const
+{
+    if (!target)
+        return;
+
+    // Identity is read straight off the CssQmlItem target (re-read every apply, so a
+    // later cssClass change is reflected on the next apply / reload).
+    const QString cssId = target->property("cssId").toString();
+    const QStringList classes = cssVariantToStringList(target->property("cssClass"));
+    const QString cssPart = target->property("cssPart").toString();
+
+    // A part target (`#tray.item`, `#cpu.graph`) resolves ONLY that part — excluding the
+    // bare `#id` base — so a sub-element doesn't inherit the container's own background.
+    // Otherwise merge the waybar alias(es) under the primary id.
+    QVariantMap style;
+    if (!cssPart.isEmpty()) {
+        style = resolvePart(cssId, cssPart, classes);
+    } else {
+        const QStringList alternateIds = cssVariantToStringList(target->property("cssAlternateId"));
+        style = resolveMerged(cssId, alternateIds, classes);
+    }
+
+    // Push the resolved map into the target's `style` sink; its renderer keys off it
+    // (gradient/box-shadow/bevel with the alpha-fix a plain Rectangle cannot do).
+    target->setProperty("style", style);
+}
+
+void CssTheme::loadCss(QObject *target)
+{
+    if (!target)
+        return;
+
+    // The engine's one guarantee: the target must carry the CssQmlItem signature
+    // (identity `cssId` + a `style` sink). Without it loadCss would resolve nothing and
+    // style nothing — i.e. "quebra o brinquedo silenciosamente". So fail LOUDLY instead.
+    const QMetaObject *mo = target->metaObject();
+    if (mo->indexOfProperty("cssId") < 0 || mo->indexOfProperty("style") < 0) {
+        qWarning().noquote() << "CssTheme::loadCss: target" << mo->className()
+                             << "lacks the CssQmlItem signature (needs cssId + style) — refusing to style it.";
+        return;
+    }
+
+    // Register once; the reverse slot re-reads the object's identity on every (re)load.
+    if (!m_bindings.contains(QPointer<QObject>(target))) {
+        m_bindings.append(QPointer<QObject>(target));
+        // The reverse slot must never dangle: drop the registration when the object dies.
+        connect(target, &QObject::destroyed, this, [this](QObject *obj) {
+            m_bindings.removeIf([obj](const QPointer<QObject> &p) { return p.isNull() || p == obj; });
+        });
+        // Observe the registered cssClass: a state change (focused/urgent/hover) must
+        // re-style automatically, so the applet registers once and never re-calls loadCss.
+        const int classProp = mo->indexOfProperty("cssClass");
+        if (classProp >= 0) {
+            const QMetaProperty prop = mo->property(classProp);
+            if (prop.hasNotifySignal()) {
+                const QMetaMethod slot = staticMetaObject.method(
+                    staticMetaObject.indexOfSlot("reapplyForSender()"));
+                connect(target, prop.notifySignal(), this, slot);
+            }
+        }
+    }
+
+    applyCssTo(target);
+}
+
+void CssTheme::reapplyForSender()
+{
+    if (QObject *target = sender())
+        applyCssTo(target);
+}
+
+void CssTheme::reapplyAll()
+{
+    m_bindings.removeIf([](const QPointer<QObject> &p) { return p.isNull(); });
+    for (const QPointer<QObject> &p : m_bindings) {
+        if (p)
+            applyCssTo(p);
+    }
+}
+
+QVariantMap CssTheme::resolve(const QString &id, const QStringList &classes, const QString &pseudoElement) const
+{
+    return resolveImpl(QString(), id, classes, pseudoElement);
+}
+
+QVariantMap CssTheme::resolveWith(const QString &contextId, const QString &id, const QStringList &classes,
+                                  const QString &pseudoElement) const
+{
+    return resolveImpl(contextId, id, classes, pseudoElement);
+}
+
+QVariantMap CssTheme::resolveImpl(const QString &contextId, const QString &id, const QStringList &classes,
+                                  const QString &pseudoElement) const
 {
     struct Match {
         int specificity;
@@ -337,7 +601,7 @@ QVariantMap CssTheme::resolveImpl(const QString &contextId, const QString &id, c
         // Rules with no ancestor requirement match in all contexts.
         if (!rule.requiredAncestorId.isEmpty() && rule.requiredAncestorId != contextId)
             continue;
-        if (selectorMatches(rule.selector, contextId, id, classes))
+        if (selectorMatches(rule.selector, contextId, id, classes, pseudoElement))
             matches.append({rule.selector.specificity, i, rule.properties});
     }
 
@@ -353,7 +617,8 @@ QVariantMap CssTheme::resolveImpl(const QString &contextId, const QString &id, c
     return result;
 }
 
-QVariantMap CssTheme::resolveExact(const QString &id, const QStringList &classes) const
+QVariantMap CssTheme::resolveExact(const QString &id, const QStringList &classes, const QString &pseudoElement,
+                                   const QString &requiredClass) const
 {
     struct Match {
         int specificity;
@@ -367,11 +632,17 @@ QVariantMap CssTheme::resolveExact(const QString &id, const QStringList &classes
         if (!rule.requiredAncestorId.isEmpty())
             continue;
         const CssSimpleSelector &sel = rule.selector;
-        if (sel.id != id)
+        if (sel.id != id || sel.pseudoElement != pseudoElement)
             continue;
+        // `requiredClass` (used by resolvePart) restricts to rules carrying that class,
+        // e.g. `#cpu.graph`, so the bare `#cpu` base is excluded.
+        if (!requiredClass.isEmpty() && !sel.classes.contains(requiredClass))
+            continue;
+        // Every other class the selector demands must be a supplied state (the required
+        // class is implicit), so `#cpu.graph:active` matches only when "active" is asked.
         bool ok = true;
         for (const QString &cls : sel.classes)
-            if (!classes.contains(cls)) { ok = false; break; }
+            if (cls != requiredClass && !classes.contains(cls)) { ok = false; break; }
         if (!ok)
             continue;
         matches.append({sel.specificity, i, rule.properties});
@@ -386,6 +657,13 @@ QVariantMap CssTheme::resolveExact(const QString &id, const QStringList &classes
         for (auto it = m.props.constBegin(); it != m.props.constEnd(); ++it)
             result.insert(it.key(), it.value());
     return result;
+}
+
+QVariantMap CssTheme::resolvePart(const QString &id, const QString &part, const QStringList &classes,
+                                  const QString &pseudoElement) const
+{
+    // A "part" is an exact-match query that REQUIRES the part class — see resolveExact.
+    return resolveExact(id, classes, pseudoElement, part);
 }
 
 QColor CssTheme::parseColor(const QString &cssColor) const
@@ -459,15 +737,9 @@ QVariantMap CssTheme::parseGradient(const QString &cssValue) const
     return result;
 }
 
-QVariantMap CssTheme::parseBoxShadow(const QString &cssValue) const
+static QVariantMap parseOneBoxShadow(const QString &segment)
 {
-    QString s = cssValue.trimmed();
-    if (s.isEmpty() || s.compare(QLatin1String("none"), Qt::CaseInsensitive) == 0)
-        return {};
-
-    // Single shadow: take the first comma-separated segment.
-    s = CssValueParser::splitTopLevel(s, QLatin1Char(',')).first().trimmed();
-    const QStringList toks = CssValueParser::splitTopLevelWhitespace(s);
+    const QStringList toks = CssValueParser::splitTopLevelWhitespace(segment.trimmed());
 
     bool inset = false;
     QList<double> lengths;
@@ -497,6 +769,30 @@ QVariantMap CssTheme::parseBoxShadow(const QString &cssValue) const
     return result;
 }
 
+QVariantMap CssTheme::parseBoxShadow(const QString &cssValue) const
+{
+    const QString s = cssValue.trimmed();
+    if (s.isEmpty() || s.compare(QLatin1String("none"), Qt::CaseInsensitive) == 0)
+        return {};
+    // First shadow only — take the first comma-separated segment.
+    return parseOneBoxShadow(CssValueParser::splitTopLevel(s, QLatin1Char(',')).first());
+}
+
+QVariantList CssTheme::parseBoxShadowList(const QString &cssValue) const
+{
+    QVariantList shadows;
+    const QString s = cssValue.trimmed();
+    if (s.isEmpty() || s.compare(QLatin1String("none"), Qt::CaseInsensitive) == 0)
+        return shadows;
+    const QStringList segments = CssValueParser::splitTopLevel(s, QLatin1Char(','));
+    for (const QString &segment : segments) {
+        const QVariantMap shadow = parseOneBoxShadow(segment);
+        if (!shadow.isEmpty())
+            shadows.append(shadow);
+    }
+    return shadows;
+}
+
 int CssTheme::parseDuration(const QString &cssValue, int fallbackMs) const
 {
     return CssValueParser::parseDuration(cssValue, fallbackMs);
@@ -505,4 +801,9 @@ int CssTheme::parseDuration(const QString &cssValue, int fallbackMs) const
 int CssTheme::parseEasing(const QString &cssValue, int fallbackType) const
 {
     return static_cast<int>(CssValueParser::parseEasing(cssValue, static_cast<QEasingCurve::Type>(fallbackType)));
+}
+
+QVariantMap CssTheme::parseTransition(const QString &cssValue) const
+{
+    return CssValueParser::parseTransition(cssValue);
 }

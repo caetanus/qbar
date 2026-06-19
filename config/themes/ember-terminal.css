@@ -1,0 +1,78 @@
+/* Ember Terminal - red sunset AwesomeWM/polybar nostalgia */
+
+@define-color bg #130f0d;
+@define-color panel #241815;
+@define-color text #ffe8d2;
+@define-color muted #c69c81;
+@define-color ember #ff4d42;
+@define-color orange #ff8a3d;
+@define-color sand #ffd18a;
+@define-color moss #9fc66b;
+@define-color blue #6fb7d7;
+@define-color wine #d96b9d;
+
+* { border: none; border-radius: 0; }
+window#waybar { background-color: rgba(19, 15, 13, 0.88); border-radius: 7px; border-left: 68px; border-right: 68px; padding: 0 6px; }
+
+#left {
+    background-color: rgba(255, 77, 66, 0.18);
+    border-color: rgba(255, 77, 66, 0.55);
+    border-width: 1px;
+    border-radius: 0px;
+    padding: 0 10px;
+    margin-top: 0px;
+    margin-bottom: 0px;
+}
+
+#center {
+    background-color: transparent;
+    border-width: 0px;
+    padding: 0 0px;
+}
+
+#right {
+    background: linear-gradient(90deg, rgba(255, 209, 138, 0.10), rgba(255, 138, 61, 0.22));
+    border-color: rgba(255, 209, 138, 0.42);
+    border-width: 0px;
+    border-radius: 12px;
+    padding: 0 12px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+#clock, #title { color: @text; background-color: transparent; text-shadow: 0px 1px 2px rgba(15, 3, 0, 0.72); }
+#cpu { color: @orange; background-color: rgba(255, 77, 66, 0.12); }
+#cpu.graph { background-color: rgba(34, 18, 13, 0.76); color: @ember; fill: rgba(255, 77, 66, 0.24); width: 34px; }
+#memory { color: @wine; background-color: rgba(217, 107, 157, 0.12); }
+#memory.graph { background-color: rgba(31, 15, 24, 0.72); color: @wine; fill: rgba(217, 107, 157, 0.22); width: 34px; }
+#memory.swap { color: @sand; }
+#nm-applet { color: @blue; background-color: rgba(111, 183, 215, 0.10); }
+#network-io { color: @blue; background-color: transparent; }
+#network-io.download { color: @blue; fill: rgba(111, 183, 215, 0.20); }
+#network-io.upload { color: @sand; fill: rgba(255, 209, 138, 0.24); }
+#network-io.arrowDown { color: @blue; }
+#network-io.arrowUp { color: @sand; }
+#battery, #battery.charging, #battery.full { color: @moss; background-color: transparent; }
+#battery.critical { color: #130f0d; background-color: @ember; }
+#pulseaudio, #backlight, #temperature, #disk, #bluetooth, #power-profiles-daemon, #keyboard, #tray, #taskbar, #custom-dollar, #custom-btc { background-color: transparent; }
+#pulseaudio, #bluetooth { color: @blue; } #pulseaudio.muted { color: rgba(198, 156, 129, 0.62); }
+#backlight, #custom-btc { color: @sand; } #temperature { color: @ember; } #disk { color: @wine; } #power-profiles-daemon, #custom-dollar { color: @moss; } #keyboard, #taskbar { color: @muted; }
+#caffeine { color: @muted; background-color: transparent; } #caffeine.active { color: @sand; background-color: rgba(255, 209, 138, 0.15); }
+
+#workspaces button { color: rgba(255, 232, 210, 0.42); background-color: transparent; }
+#workspaces button.focused { color: #130f0d; background-color: @ember; }
+#workspaces button.visible { color: @sand; background-color: rgba(255, 77, 66, 0.14); }
+#workspaces button.urgent { color: #130f0d; background-color: @sand; }
+
+#overlay { background-color: rgba(12, 5, 2, 0.30); }
+#popup {
+    color: @text;
+    background: linear-gradient(145deg, rgba(19, 15, 13, 0.97), rgba(48, 24, 18, 0.95), rgba(104, 32, 24, 0.88));
+    border-color: rgba(255, 138, 61, 0.50);
+    border-width: 1px;
+    border-radius: 8px;
+    box-shadow: 0px 10px 24px rgba(0, 0, 0, 0.46);
+    text-shadow: 0px 1px 2px rgba(15, 3, 0, 0.62);
+    opacity: 0.97;
+}
+#cpu-popup { color: @text; text-shadow: 0px 1px 2px rgba(15, 3, 0, 0.58); }

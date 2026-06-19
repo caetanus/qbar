@@ -1,0 +1,182 @@
+/* Bliss XP - Windows XP luna taskbar energy */
+/* vim: set filetype=gtk-css : */
+@define-color xp-blue #245edb;
+@define-color xp-blue2 #3f8cff;
+@define-color xp-deep #1745ad;
+@define-color xp-green #38a330;
+@define-color xp-green2 #8bd85f;
+@define-color xp-sand #fff2b8;
+@define-color xp-text #ffffff;
+@define-color xp-ink #08245f;
+@define-color xp-red #e04b3f;
+@define-color xp-gray #d6dff7;
+
+* { border: none; border-radius: 0; }
+window#waybar {
+    background: linear-gradient(180deg, @xp-blue2, @xp-blue 48%, @xp-deep);
+    border-radius: 0px;
+    border-left: 0px;
+    border-right: 0px;
+    padding: 0 2px;
+}
+
+#left {
+    background: linear-gradient(180deg, #53baff, #1684df 55%, #0a5fb7);
+    border-color: rgba(255, 255, 255, 0.32);
+    border-width: 1px;
+    border-radius: 0px 12px 12px 0px;
+    padding: 0 10px;
+     margin-top: 1px;
+    margin-bottom: 1px;
+    box-shadow: 1px 0px 6px rgba(0, 0, 0, 0.35);
+}
+
+#center {
+    background-color: transparent;
+    border-width: 0px;
+    padding: 0 0px;
+}
+
+#right {
+    background: linear-gradient(180deg, #53baff, #1684df 55%, #0a5fb7);
+    border-color: rgba(255, 255, 255, 0.32);
+    border-width: 1px;
+    border-radius: 9px 0px 0px 9px;
+    padding: 0 9px;
+    margin-top: 1px;
+    margin-bottom: 1px;
+    box-shadow: -1px 0px 6px rgba(0, 0, 0, 0.30);
+}
+
+#title, #taskbar { color: @xp-text; background-color: transparent; text-shadow: 0px 1px 1px rgba(0, 25, 90, 0.75); }
+#clock {
+    color: @xp-text;
+    background: linear-gradient(180deg, #0c3d82, #1457a6 55%, #1b6ec8);
+    border-width: 0px;
+    border-radius: 8px 0px 0px 8px;
+    padding: 0 11px;
+    box-shadow: inset 0px 1px 2px rgba(3, 18, 60, 0.65), inset 0px -1px 0px rgba(120, 190, 255, 0.42);
+    text-shadow: 0px 1px 1px rgba(0, 25, 90, 0.78);
+}
+#media {
+    color: #d7ff9a;
+    background: linear-gradient(180deg, #3f4656, #11151e 48%, #07090d);
+    border-color: #8d98ad;
+    border-width: 1px;
+    border-radius: 9px 9px 9px 9px;
+    padding: 0 8px;
+    margin: 3px 0;
+    box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.55);
+    text-shadow: 0px 1px 1px rgba(0, 0, 0, 0.85);
+    font-family: "Trebuchet MS";
+    max-width: 150px;
+    label-padding: 7;
+}
+/* Recessed "now playing" display behind the title, Windows-media style. */
+#media-label {
+    background-color: rgba(0, 0, 0, 0.34);
+    border-radius: 4px;
+    box-shadow: inset 0px 1px 2px rgba(0, 0, 0, 0.80), inset 0px -1px 0px rgba(175, 205, 150, 0.16);
+}
+#cpu { color: @xp-text; background-color: rgba(255, 255, 255, 0.14); }
+#cpu.graph { background-color: rgba(8, 36, 95, 0.55); color: @xp-sand; fill: rgba(255, 242, 184, 0.30); width: 34px; }
+#memory { color: @xp-text; background-color: rgba(255, 255, 255, 0.12); }
+#memory.graph { background-color: rgba(8, 36, 95, 0.55); color: #d8c4ff; fill: rgba(216, 196, 255, 0.26); width: 34px; }
+#memory.swap { color: @xp-red; }
+#nm-applet { color: @xp-text; background-color: rgba(255, 255, 255, 0.10); }
+#network-io { color: @xp-text; background-color: transparent; }
+#network-io.download { color: #ffffff; fill: rgba(255, 255, 255, 0.22); }
+#network-io.upload { color: @xp-sand; fill: rgba(255, 242, 184, 0.24); }
+#network-io.arrowDown { color: #ffffff; }
+#network-io.arrowUp { color: @xp-sand; }
+#battery, #battery.charging, #battery.full, #custom-dollar, #power-profiles-daemon { color: @xp-sand; background-color: transparent; }
+@keyframes battery-pulse { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+#battery.critical { color: @xp-text; background-color: rgba(43, 47, 51, 0.92); }
+#battery.critical::before { background: @xp-red; animation: battery-pulse 1800ms ease-in-out infinite; }
+#pulseaudio, #backlight, #temperature, #disk, #bluetooth, #keyboard, #custom-btc, #caffeine { background-color: transparent; color: @xp-text; }
+#tray {
+    color: @xp-text;
+    background: linear-gradient(180deg, #0c3d82, #1457a6 55%, #1b6ec8);
+    border-width: 0px;
+    border-radius: 0px 8px 8px 0px;
+    padding: 0 6px;
+    margin-left: -4px;
+    box-shadow: inset 0px 1px 2px rgba(3, 18, 60, 0.65), inset 0px -1px 0px rgba(120, 190, 255, 0.42);
+    icon-mode: normal;
+}
+#tray.item { background-color: transparent; }
+#tray.item.urgent { background-color: rgba(224, 75, 63, 0.86); }
+#pulseaudio.muted, #caffeine { color: @xp-gray; } #caffeine.active { color: @xp-sand; background-color: rgba(255, 242, 184, 0.18); }
+#temperature { color: #ffe1d7; } #disk { color: #d8c4ff; } #bluetooth { color: #d8f4ff; } #custom-btc { color: @xp-sand; }
+
+#workspaces {
+    background: linear-gradient(180deg, #43a233, #2b8124 52%, #115a16);
+    border-color: rgba(255, 255, 255, 0.30);
+    border-width: 1px;
+    border-radius: 13px 13px 13px 13px;
+    padding: 0 2px;
+    box-shadow: 1px 0px 6px rgba(0, 0, 0, 0.35);
+}
+#workspaces button {
+    color: #ffffff;
+    background-color: transparent;
+    border-color: transparent;
+    border-width: 0px;
+    border-radius: 0px;
+    padding: 0 9px;
+    min-width: 30px;
+    border-bottom-color: rgba(0, 68, 0, 0.45);
+    border-bottom-width: 2px;
+    transition: background 180ms ease-in-out;
+    text-shadow: 0px 1px 1px rgba(0, 60, 0, 0.75);
+}
+#workspaces button.focused {
+    color: @xp-sand;
+    background-color: transparent;
+    border-top-color: @xp-sand;
+    border-top-width: 3px;
+    text-shadow: 0px 1px 1px rgba(0, 60, 0, 0.75);
+}
+/* Active workspace is marked by the top border above, not a fill overlay. */
+#workspaces button.focused::after { background: transparent; }
+#workspaces button.visible {
+    color: #ffffff;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(24, 123, 24, 0.06));
+    border-color: rgba(255, 255, 255, 0.26);
+}
+@keyframes ws-urgent-blink { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+#workspaces button.urgent {
+    color: #ffffff;
+    background: linear-gradient(180deg, @xp-green2, @xp-green 55%, #187b18);
+    border-color: rgba(255, 255, 255, 0.36);
+    border-radius: 10px;
+}
+/* Blink overlay driven by the standard @keyframes above (no animation-* quirks). */
+#workspaces button.urgent::before {
+    background: rgba(224, 75, 63, 0.88);
+    animation: ws-urgent-blink 760ms ease-in-out infinite;
+}
+
+#overlay { background-color: rgba(7, 22, 55, 0.24); }
+#popup {
+    color: @xp-text;
+    background: linear-gradient(180deg, #2f80ff, #174cbd 22%, #08245f 62%, #04143d);
+    border-color: #9ec7ff;
+    border-width: 2px;
+    border-radius: 4px;
+    box-shadow: 0px 10px 24px rgba(0, 0, 0, 0.38);
+    text-shadow: 0px 1px 1px rgba(0, 10, 46, 0.80);
+    opacity: 0.98;
+}
+#cpu-popup { color: @xp-text; text-shadow: 0px 1px 1px rgba(0, 10, 46, 0.80); }
+
+/* Classic XP info-tip: pale yellow, thin black border, black Tahoma text. */
+#tooltip {
+    background-color: #ffffe1;
+    border-color: #000000;
+    border-width: 1px;
+    border-radius: 0px;
+    color: #000000;
+    font-weight: normal;
+    font-family: "Tahoma";
+}

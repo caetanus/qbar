@@ -1,0 +1,30 @@
+/* Rosé Pine — https://rosepinetheme.com */
+
+* { border: none; border-radius: 0; }
+window#waybar    { background-color: rgba(25, 23, 36, 0.90); border-radius: 8px; }
+
+#clock         { color: #e0def4; background-color: #191724; }
+#battery       { color: #31748f; background-color: #191724; }
+#battery.charging  { color: #31748f; background-color: #191724; }
+#battery.full      { color: #31748f; background-color: #191724; }
+#battery.critical  { color: #eb6f92; background-color: #191724; }
+#cpu           { color: #9ccfd8; background-color: #191724; }
+#memory        { color: #c4a7e7; background-color: #191724; }
+#nm-applet       { color: #31748f; background-color: #191724; }
+#network-io    { color: #9ccfd8; background-color: #191724; }
+#pulseaudio    { color: #ebbcba; background-color: #191724; }
+#pulseaudio.muted  { color: #6e6a86; background-color: #191724; }
+#backlight     { color: #f6c177; background-color: #191724; }
+#temperature   { color: #eb6f92; background-color: #191724; }
+#keyboard      { color: #c4a7e7; background-color: #191724; }
+#tray          { background-color: #191724; }
+#title         { color: #908caa; background-color: transparent; }
+#caffeine      { color: #6e6a86; background-color: #191724; }
+#caffeine.active { color: #f6c177; background-color: #191724; }
+#custom-dollar { color: #31748f; background-color: #191724; }
+#custom-btc    { color: #f6c177; background-color: #191724; }
+
+#workspaces button          { color: #6e6a86; background-color: #12101e; }
+#workspaces button.focused  { color: #e0def4; background-color: #26233a; }
+#workspaces button.visible  { color: #908caa; background-color: #1f1d2e; }
+#workspaces button.urgent   { color: #191724; background-color: #eb6f92; }

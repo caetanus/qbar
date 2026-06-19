@@ -152,4 +152,146 @@ QEasingCurve::Type parseEasing(const QString &cssValue, QEasingCurve::Type fallb
     return fallback;
 }
 
+QVariantMap parseTransition(const QString &cssValue)
+{
+    QVariantMap out;
+    const QStringList segments = splitTopLevel(cssValue, QLatin1Char(','));
+    const QString first = (segments.isEmpty() ? cssValue : segments.first()).trimmed();
+    if (first.isEmpty())
+        return out;
+
+    QString property;
+    int duration = 0;
+    int delay = 0;
+    int timesSeen = 0;
+    QEasingCurve::Type easing = QEasingCurve::InOutQuad;
+
+    const QStringList tokens = splitTopLevelWhitespace(first);
+    for (const QString &tok : tokens) {
+        const QString low = tok.toLower();
+
+        // A <time> token ends in "ms"/"s" AND parses as a number (so a property
+        // like "colors" or a keyword like "ease" is not mistaken for a time).
+        const bool hasMs = low.endsWith(QStringLiteral("ms"));
+        bool isTime = false;
+        if (hasMs || low.endsWith(QLatin1Char('s'))) {
+            bool ok = false;
+            low.left(low.length() - (hasMs ? 2 : 1)).toDouble(&ok);
+            isTime = ok;
+        }
+        if (isTime) {
+            const int ms = parseDuration(low, 0);
+            if (timesSeen == 0)
+                duration = ms;
+            else
+                delay = ms;
+            ++timesSeen;
+            continue;
+        }
+
+        // A timing-function: a known easing keyword, or a cubic-bezier()/steps()
+        // function. parseEasing returns the sentinel fallback for non-keywords, so
+        // an unknown ident falls through to be treated as the property name.
+        if (low.startsWith(QStringLiteral("cubic-bezier")) || low.startsWith(QStringLiteral("steps"))) {
+            easing = parseEasing(low, QEasingCurve::InOutQuad);
+            continue;
+        }
+        const QEasingCurve::Type probe = parseEasing(low, QEasingCurve::TCBSpline);
+        if (probe != QEasingCurve::TCBSpline) {
+            easing = probe;
+            continue;
+        }
+
+        if (property.isEmpty())
+            property = tok;
+    }
+
+    out.insert(QStringLiteral("property"), property.isEmpty() ? QStringLiteral("all") : property);
+    out.insert(QStringLiteral("duration"), duration);
+    out.insert(QStringLiteral("delay"), delay);
+    out.insert(QStringLiteral("easing"), static_cast<int>(easing));
+    return out;
+}
+
+QVariantMap parseAnimation(const QString &cssValue)
+{
+    QVariantMap out;
+    const QStringList segments = splitTopLevel(cssValue, QLatin1Char(','));
+    const QString first = (segments.isEmpty() ? cssValue : segments.first()).trimmed();
+    if (first.isEmpty())
+        return out;
+
+    QString name;
+    QString direction = QStringLiteral("normal");
+    int duration = 0;
+    int delay = 0;
+    int timesSeen = 0;
+    int iterations = 1;
+    QEasingCurve::Type easing = QEasingCurve::InOutQuad;
+
+    const QStringList tokens = splitTopLevelWhitespace(first);
+    for (const QString &tok : tokens) {
+        const QString low = tok.toLower();
+
+        // <time> (duration first, then delay).
+        const bool hasMs = low.endsWith(QStringLiteral("ms"));
+        bool isTime = false;
+        if (hasMs || low.endsWith(QLatin1Char('s'))) {
+            bool ok = false;
+            low.left(low.length() - (hasMs ? 2 : 1)).toDouble(&ok);
+            isTime = ok;
+        }
+        if (isTime) {
+            const int ms = parseDuration(low, 0);
+            if (timesSeen == 0)
+                duration = ms;
+            else
+                delay = ms;
+            ++timesSeen;
+            continue;
+        }
+
+        if (low == QLatin1String("infinite")) {
+            iterations = -1;
+            continue;
+        }
+        if (low == QLatin1String("normal") || low == QLatin1String("reverse")
+            || low == QLatin1String("alternate") || low == QLatin1String("alternate-reverse")) {
+            direction = low;
+            continue;
+        }
+
+        // A bare number is the iteration count.
+        bool numOk = false;
+        const double n = low.toDouble(&numOk);
+        if (numOk) {
+            iterations = qMax(0, qRound(n));
+            continue;
+        }
+
+        // A timing-function keyword / function.
+        if (low.startsWith(QStringLiteral("cubic-bezier")) || low.startsWith(QStringLiteral("steps"))) {
+            easing = parseEasing(low, QEasingCurve::InOutQuad);
+            continue;
+        }
+        const QEasingCurve::Type probe = parseEasing(low, QEasingCurve::TCBSpline);
+        if (probe != QEasingCurve::TCBSpline) {
+            easing = probe;
+            continue;
+        }
+
+        // Otherwise the @keyframes name (first wins).
+        if (name.isEmpty())
+            name = tok;
+    }
+
+    out.insert(QStringLiteral("name"), name);
+    out.insert(QStringLiteral("duration"), duration);
+    out.insert(QStringLiteral("delay"), delay);
+    out.insert(QStringLiteral("easing"), static_cast<int>(easing));
+    out.insert(QStringLiteral("iterations"), iterations);
+    out.insert(QStringLiteral("direction"), direction);
+    return out;
+}
+
 } // namespace CssValueParser

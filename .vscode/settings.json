@@ -18,5 +18,13 @@
   "files.associations": {
     "*.qrc": "xml",
     "*.qml": "qml"
-  }
+  },
+  "//": "Theme files use the GTK CSS dialect (@define-color, custom props like active-fill-opacity/urgent-blink-color). The built-in CSS linter doesn't know them: silence the false errors and feed it the GTK at-rules via custom data.",
+  "css.lint.unknownAtRules": "ignore",
+  "css.lint.unknownProperties": "ignore",
+  "css.customData": [
+    ".vscode/gtk-css.json"
+  ],
+  "C_Cpp.default.compileCommands": "/home/caetano/lab/qbar/builddir/compile_commands.json",
+  "C_Cpp.default.configurationProvider": "mesonbuild.mesonbuild"
 }

@@ -1,0 +1,30 @@
+{
+  "version": 1.1,
+  "atDirectives": [
+    {
+      "name": "@define-color",
+      "description": "GTK CSS extension. Defines a named color, e.g. `@define-color accent #63b3ed;`, referenced later as `@accent`. Used by qbar/waybar themes."
+    },
+    {
+      "name": "@import",
+      "description": "Pulls in another GTK CSS file, e.g. `@import url(\"base.css\");`."
+    }
+  ],
+  "properties": [
+    { "name": "min-width", "description": "Minimum width of a workspace button / module." },
+    { "name": "active-fill-color", "description": "qbar: fill color of the active-workspace indicator." },
+    { "name": "active-fill-opacity", "description": "qbar: opacity (0..1) of the active-workspace fill." },
+    { "name": "active-duration", "description": "qbar: transition duration (ms) of the active-workspace indicator." },
+    { "name": "active-easing", "description": "qbar: easing curve name for the active-workspace transition." },
+    { "name": "transition-duration", "description": "qbar: transition duration (ms) for hover/state changes." },
+    { "name": "transition-easing", "description": "qbar: easing curve name (e.g. inoutquad, outcubic)." },
+    { "name": "hover-duration", "description": "qbar: hover highlight fade duration (ms)." },
+    { "name": "hover-easing", "description": "qbar: hover highlight easing curve name." },
+    { "name": "animation-duration", "description": "qbar: urgent-blink animation duration (ms)." },
+    { "name": "animation-easing", "description": "qbar: urgent-blink animation easing curve name." },
+    { "name": "urgent-blink-color", "description": "qbar: color of the urgent (attention) blink overlay." },
+    { "name": "urgent-blink-opacity", "description": "qbar: peak opacity (0..1) of the urgent blink." },
+    { "name": "inset-highlight", "description": "qbar: highlight color for a `box-shadow: inset` sunken bevel." },
+    { "name": "background-image-opacity", "description": "qbar: opacity (0..1) of a background-image layer." }
+  ]
+}

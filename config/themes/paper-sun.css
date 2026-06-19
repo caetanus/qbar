@@ -1,0 +1,90 @@
+/* Paper Sun - crisp light rice with warm editorial panels */
+
+@define-color paper #fbfaf5;
+@define-color panel #f0efe7;
+@define-color ink #252820;
+@define-color muted #77786d;
+@define-color line #d7d4c7;
+@define-color blue #2f6fd6;
+@define-color teal #168f86;
+@define-color olive #6f8f2e;
+@define-color plum #8f4fb5;
+@define-color rust #c25a38;
+@define-color gold #c99020;
+
+* { border: none; border-radius: 0; }
+window#waybar {
+    background-color: rgba(251, 250, 245, 0.92);
+    border-radius: 8px;
+    border-left: 72px;
+    border-right: 72px;
+    padding: 0 8px;
+}
+
+#left {
+    background-color: @ink;
+    border-color: @ink;
+    border-width: 1px;
+    border-radius: 6px;
+    padding: 0 10px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+#center {
+    background-color: transparent;
+    border-color: @line;
+    border-width: 1px;
+    border-radius: 0px;
+    padding: 0 18px;
+    margin-left: 24px;
+    margin-right: 24px;
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+#right {
+    background-color: @panel;
+    border-color: @line;
+    border-width: 1px;
+    border-radius: 6px;
+    padding: 0 10px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+#clock, #title, #taskbar { color: @ink; background-color: transparent; text-shadow: none; }
+#cpu { color: @paper; background-color: transparent; }
+#cpu.graph { background-color: rgba(255, 255, 255, 0.16); color: #8ec5ff; fill: rgba(142, 197, 255, 0.26); width: 34px; }
+#memory { color: @paper; background-color: transparent; }
+#memory.graph { background-color: rgba(255, 255, 255, 0.14); color: #d79be6; fill: rgba(215, 155, 230, 0.24); width: 34px; }
+#memory.swap { color: #ffb16b; }
+#nm-applet { color: @paper; background-color: transparent; }
+#network-io { color: @paper; background-color: transparent; }
+#network-io.download { color: #91e6d6; fill: rgba(145, 230, 214, 0.24); }
+#network-io.upload { color: #ffd37a; fill: rgba(255, 211, 122, 0.24); }
+#network-io.arrowDown { color: #91e6d6; }
+#network-io.arrowUp { color: #ffd37a; }
+#battery, #battery.charging, #battery.full, #custom-dollar, #power-profiles-daemon { color: @olive; background-color: transparent; }
+#battery.critical { color: @paper; background-color: @rust; }
+#pulseaudio, #backlight, #temperature, #disk, #bluetooth, #keyboard, #tray, #custom-btc, #caffeine { background-color: transparent; color: @ink; }
+#pulseaudio.muted, #caffeine { color: @muted; } #caffeine.active { color: @ink; background-color: rgba(201, 144, 32, 0.18); }
+#backlight, #custom-btc { color: @gold; } #temperature { color: @rust; } #disk { color: @plum; } #bluetooth { color: @blue; }
+
+#workspaces button { color: rgba(251, 250, 245, 0.58); background-color: transparent; }
+#workspaces button.focused { color: @ink; background-color: @paper; }
+#workspaces button.visible { color: @paper; background-color: rgba(251, 250, 245, 0.16); }
+#workspaces button.urgent { color: @paper; background-color: @rust; }
+
+#overlay { background-color: rgba(37, 40, 32, 0.18); }
+#popup {
+    color: @ink;
+    background-color: rgba(251, 250, 245, 0.98);
+    border-color: @line;
+    border-width: 1px;
+    border-radius: 6px;
+    box-shadow: 0px 12px 28px rgba(37, 40, 32, 0.22);
+    text-shadow: none;
+    opacity: 0.98;
+}
+#cpu-popup { color: @ink; text-shadow: none; }

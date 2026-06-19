@@ -3,13 +3,18 @@ import QtQuick.Effects
 import "qrc:/qbar" as QBar
 import "qrc:/qbar/Contrast.js" as Contrast
 
-Item {
+QBar.CssRect {
     id: root
+    cssId: "tray"
     height: theme.height
     width: preferredWidth
 
-    readonly property string cssId: "tray"
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    // The engine pushes the resolved #tray rules into CssRect's `style` sink.
+    readonly property var cssStyle: root.style
+    // Per-item background via the standard-CSS `#tray.item { background-color }` part;
+    // the attention state is `#tray.item:urgent { background-color }`.
+    readonly property var itemStyle: cssTheme && cssTheme.loaded ? cssTheme.resolvePart(cssId, "item") : ({})
+    readonly property var itemUrgentStyle: cssTheme && cssTheme.loaded ? cssTheme.resolvePart(cssId, "item", ["urgent"]) : ({})
     // How tray icons are rendered (CSS `icon-mode`):
     //   "normal" — native full-colour icons, never recoloured (Windows-like)
     //   "light"  — recoloured white   |  "dark" — recoloured near-black
@@ -52,12 +57,7 @@ Item {
         return cssTheme.parseLength(value, fallback)
     }
 
-    QBar.CssFill {
-        anchors.fill: parent
-        style: root.cssStyle
-        radius: root.cssStyle["border-radius"] ? cssTheme.parseLength(root.cssStyle["border-radius"], 0) : 0
-    }
-
+    // Background is painted by the CssRect base; per-item backgrounds are below.
     Row {
         id: contentRow
         anchors.left: parent.left
@@ -84,8 +84,8 @@ Item {
                 readonly property bool hasOverlaySymbolicIcon: overlaySymbolicIconSource && overlaySymbolicIconSource.length > 0
 
                 readonly property color itemBackground: status === "NeedsAttention"
-                    ? (root.cssStyle["attention-background"] ? cssTheme.parseColor(root.cssStyle["attention-background"]) : "#ccbd4b4b")
-                    : (root.cssStyle["item-background-color"] ? cssTheme.parseColor(root.cssStyle["item-background-color"]) : "transparent")
+                    ? (root.itemUrgentStyle["background-color"] ? cssTheme.parseColor(root.itemUrgentStyle["background-color"]) : "#ccbd4b4b")
+                    : (root.itemStyle["background-color"] ? cssTheme.parseColor(root.itemStyle["background-color"]) : "transparent")
                 readonly property color effectiveBackground: Contrast.effectiveBackground(
                     itemBackground.a > 0 ? itemBackground : (root.cssStyle["background-color"] ? cssTheme.parseColor(root.cssStyle["background-color"]) : theme.background),
                     cssTheme,

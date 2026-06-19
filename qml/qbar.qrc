@@ -26,6 +26,10 @@
     <file>qbar/Popup.qml</file>
     <file>qbar/DismissOverlay.qml</file>
     <file>qbar/PopupShell.qml</file>
+    <file>qbar/CssRect.qml</file>
+    <file>qbar/CssText.qml</file>
+    <file>qbar/CssEnable.qml</file>
+    <file>qbar/CssKeyframes.qml</file>
     <file>qbar/CssFill.qml</file>
     <file>qbar/CssIcon.qml</file>
     <file>qbar/CssDropShadow.qml</file>

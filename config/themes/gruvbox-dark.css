@@ -1,0 +1,30 @@
+/* Gruvbox Dark — https://github.com/morhetz/gruvbox */
+
+* { border: none; border-radius: 0; }
+window#waybar    { background-color: rgba(40, 40, 40, 0.90); border-radius: 8px; }
+
+#clock         { color: #ebdbb2; background-color: #282828; }
+#battery       { color: #b8bb26; background-color: #282828; }
+#battery.charging  { color: #b8bb26; background-color: #282828; }
+#battery.full      { color: #b8bb26; background-color: #282828; }
+#battery.critical  { color: #fb4934; background-color: #282828; }
+#cpu           { color: #83a598; background-color: #282828; }
+#memory        { color: #d3869b; background-color: #282828; }
+#nm-applet       { color: #8ec07c; background-color: #282828; }
+#network-io    { color: #8ec07c; background-color: #282828; }
+#pulseaudio    { color: #83a598; background-color: #282828; }
+#pulseaudio.muted  { color: #504945; background-color: #282828; }
+#backlight     { color: #fabd2f; background-color: #282828; }
+#temperature   { color: #fe8019; background-color: #282828; }
+#keyboard      { color: #d3869b; background-color: #282828; }
+#tray          { background-color: #282828; }
+#title         { color: #d5c4a1; background-color: transparent; }
+#caffeine      { color: #504945; background-color: #282828; }
+#caffeine.active { color: #fabd2f; background-color: #282828; }
+#custom-dollar { color: #b8bb26; background-color: #282828; }
+#custom-btc    { color: #fe8019; background-color: #282828; }
+
+#workspaces button          { color: #665c54; background-color: #1d2021; }
+#workspaces button.focused  { color: #fbf1c7; background-color: #3c3836; }
+#workspaces button.visible  { color: #bdae93; background-color: #282828; }
+#workspaces button.urgent   { color: #1d2021; background-color: #fb4934; }

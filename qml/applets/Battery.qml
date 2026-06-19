@@ -1,67 +1,39 @@
 import QtQuick
 import "qrc:/qbar" as QBar
 
-Item {
+QBar.CssRect {
     id: root
+    cssId: "battery"
+    // State → cssClass: the engine renders #battery / .charging / .full / .critical.
+    cssClass: charging ? ["charging"] : full ? ["full"] : lowBattery ? ["critical"] : []
+    defaultColor: "#2b2f33"
     width: 58
     height: theme.height
 
-    readonly property string cssId: "battery"
-    readonly property var cssClasses: charging ? ["charging"] : full ? ["full"] : lowBattery ? ["critical"] : []
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId, cssClasses) : ({})
+    readonly property var cssStyle: root.style
 
     property int level: batteryModel ? batteryModel.capacity : 0
     property bool charging: batteryModel ? batteryModel.charging : false
     property bool full: batteryModel ? batteryModel.full : false
     property bool lowBattery: batteryModel ? (!charging && !full && level <= 20) : false
-    property real alertPulse: 0
 
     signal activated()
 
-    function mixColor(a, b, t) {
-        return Qt.rgba(
-            a.r * (1 - t) + b.r * t,
-            a.g * (1 - t) + b.g * t,
-            a.b * (1 - t) + b.b * t,
-            a.a * (1 - t) + b.a * t
-        )
-    }
+    // Icon/text colour: themed #battery[.state] color, else a sensible contrast default
+    // (white over the dark/critical base, black over a light "full" badge).
+    readonly property color contentColor: cssStyle["color"]
+        ? cssTheme.parseColor(cssStyle["color"])
+        : (full ? "#000000" : "#ffffff")
 
-    function backgroundColor() {
-        if (lowBattery) {
-            var darkEnd = cssStyle["background-color"]
-                ? cssTheme.parseColor(cssStyle["background-color"])
-                : Qt.rgba(0.17, 0.19, 0.20, 1.0)
-            return mixColor(darkEnd, Qt.rgba(0.90, 0.16, 0.16, 1.0), alertPulse)
-        }
-        return cssStyle["background-color"]
-            ? cssTheme.parseColor(cssStyle["background-color"])
-            : (charging ? "#218f4f" : full ? "#ffffff" : "#2b2f33")
-    }
-
-    function contentColor() {
-        if (lowBattery) {
-            return mixColor(Qt.rgba(0.90, 0.16, 0.16, 1.0), Qt.rgba(1.0, 1.0, 1.0, 1.0), alertPulse)
-        }
-        return cssStyle["color"]
-            ? cssTheme.parseColor(cssStyle["color"])
-            : (full ? "#000000" : "#ffffff")
-    }
-
-    NumberAnimation on alertPulse {
-        from: 0
-        to: 1
-        duration: 10000
-        loops: Animation.Infinite
-        running: root.lowBattery
-        easing.type: Easing.InOutSine
-    }
-
-    onLowBatteryChanged: {
-        if (!lowBattery) {
-            alertPulse = 0
-        }
-    }
+    // Critical pulse via standard CSS `@keyframes` on `#battery.critical::before` — a red
+    // overlay whose opacity pulses. Replaces the old QML alertPulse colour-mix.
+    readonly property var pulseStyle: cssTheme && cssTheme.loaded
+        ? cssTheme.resolve("battery", ["critical"], "before") : ({})
+    readonly property var pulseAnim: cssTheme && cssTheme.loaded
+        ? cssTheme.parseAnimation(pulseStyle["animation"] || "") : ({})
+    readonly property var pulseFrames: cssTheme && cssTheme.loaded && pulseAnim.name
+        ? cssTheme.keyframes(pulseAnim.name) : []
+    readonly property bool pulseEnabled: lowBattery && pulseFrames.length > 0
 
     QBar.Popup {
         id: batteryPopup
@@ -75,9 +47,29 @@ Item {
         horizontalAlignment: "left"
     }
 
+    // Base background painted by the CssRect base (per-state via cssClass).
+
+    // Critical pulse: a red overlay whose opacity is driven through the theme's
+    // @keyframes; above the base fill, below the icon/text.
     Rectangle {
+        id: pulseOverlay
         anchors.fill: parent
-        color: root.backgroundColor()
+        color: {
+            var bg = root.pulseStyle["background"] || root.pulseStyle["background-color"]
+            return bg ? cssTheme.parseColor(bg) : "#e62929"
+        }
+        opacity: 0.0
+        visible: root.pulseEnabled
+
+        QBar.CssKeyframes {
+            target: pulseOverlay
+            animatedProperty: "opacity"
+            frames: root.pulseFrames
+            duration: root.pulseAnim.duration > 0 ? root.pulseAnim.duration : 1800
+            easingType: root.pulseAnim.easing !== undefined ? root.pulseAnim.easing : Easing.InOutSine
+            iterations: root.pulseAnim.iterations !== undefined ? root.pulseAnim.iterations : -1
+            running: root.pulseEnabled
+        }
     }
 
     Item {
@@ -106,7 +98,7 @@ Item {
             width: 4
             height: 3
             radius: 0
-            color: root.contentColor()
+            color: root.contentColor
             opacity: 0.65
         }
 
@@ -126,7 +118,7 @@ Item {
                 anchors.rightMargin: 2
                 height: Math.max(2, Math.round(parent.height * root.level / 100))
                 radius: 1
-                color: root.contentColor()
+                color: root.contentColor
                 opacity: 0.65
                 Behavior on height {
                     NumberAnimation {
@@ -165,7 +157,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: batteryIcon.left
         anchors.rightMargin: 3
-        color: root.contentColor()
+        color: root.contentColor
         font.family: theme.fontFamily
         font.pointSize: theme.fontSize
         text: batteryModel ? level + "%" : "--"

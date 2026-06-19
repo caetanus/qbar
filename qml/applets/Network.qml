@@ -13,23 +13,35 @@ Item {
     readonly property string cssId: "network-io"
     readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
 
+    // Standard-CSS sub-parts: the sparkline graph (#network-io.graph), its two series
+    // (#network-io.download / .upload), and the direction arrows — #network-io.arrow is
+    // the shared base (width + idle color via :inactive), .arrowDown/.arrowUp carry each
+    // direction's active color.
+    readonly property var graphStyle: cssTheme && cssTheme.loaded ? cssTheme.resolvePart(cssId, "graph") : ({})
+    readonly property var downloadStyle: cssTheme && cssTheme.loaded ? cssTheme.resolvePart(cssId, "download") : ({})
+    readonly property var uploadStyle: cssTheme && cssTheme.loaded ? cssTheme.resolvePart(cssId, "upload") : ({})
+    readonly property var arrowStyle: cssTheme && cssTheme.loaded ? cssTheme.resolvePart(cssId, "arrow") : ({})
+    readonly property var arrowDownStyle: cssTheme && cssTheme.loaded ? cssTheme.resolvePart(cssId, "arrowDown") : ({})
+    readonly property var arrowUpStyle: cssTheme && cssTheme.loaded ? cssTheme.resolvePart(cssId, "arrowUp") : ({})
+    readonly property var arrowInactiveStyle: cssTheme && cssTheme.loaded ? cssTheme.resolvePart(cssId, "arrow", ["inactive"]) : ({})
+
     readonly property color barBackground: Contrast.barBackground(cssTheme, theme.background)
-    readonly property color graphBackground: cssStyle["graph-background"]
-        ? cssTheme.parseColor(cssStyle["graph-background"])
+    readonly property color graphBackground: graphStyle["background-color"]
+        ? cssTheme.parseColor(graphStyle["background-color"])
         : "transparent"
     readonly property color effectiveGraphBackground: Contrast.effectiveBackground(graphBackground, cssTheme, theme.background)
     readonly property color labelBackground: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#3a3410"
     readonly property color labelColor: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
 
-    readonly property color downloadLineColor: cssStyle["download-color"]
-        ? cssTheme.parseColor(cssStyle["download-color"]) : Contrast.contrastColor(root.effectiveGraphBackground)
-    readonly property color downloadFillColor: cssStyle["download-fill"]
-        ? cssTheme.parseColor(cssStyle["download-fill"])
+    readonly property color downloadLineColor: downloadStyle["color"]
+        ? cssTheme.parseColor(downloadStyle["color"]) : Contrast.contrastColor(root.effectiveGraphBackground)
+    readonly property color downloadFillColor: downloadStyle["fill"]
+        ? cssTheme.parseColor(downloadStyle["fill"])
         : Qt.rgba(downloadLineColor.r, downloadLineColor.g, downloadLineColor.b, 0.22)
-    readonly property color uploadLineColor: cssStyle["upload-color"]
-        ? cssTheme.parseColor(cssStyle["upload-color"]) : Contrast.contrastColor(root.effectiveGraphBackground)
-    readonly property color uploadFillColor: cssStyle["upload-fill"]
-        ? cssTheme.parseColor(cssStyle["upload-fill"])
+    readonly property color uploadLineColor: uploadStyle["color"]
+        ? cssTheme.parseColor(uploadStyle["color"]) : Contrast.contrastColor(root.effectiveGraphBackground)
+    readonly property color uploadFillColor: uploadStyle["fill"]
+        ? cssTheme.parseColor(uploadStyle["fill"])
         : Qt.rgba(uploadLineColor.r, uploadLineColor.g, uploadLineColor.b, 0.26)
 
     property double downloadRateBytesPerSecond: networkModel ? networkModel.downloadRateBytesPerSecond : 0
@@ -38,8 +50,8 @@ Item {
     property var downloadHistory: networkModel ? networkModel.downloadRateHistory : []
     property var uploadHistory: networkModel ? networkModel.uploadRateHistory : []
     property int configuredWidth: cssPixels(cssStyle["width"], 0)
-    property int graphWidth: cssPixels(cssStyle["graph-width"], 22)
-    property int arrowWidth: cssPixels(cssStyle["arrow-width"], 8)
+    property int graphWidth: cssPixels(graphStyle["width"], 22)
+    property int arrowWidth: cssPixels(arrowStyle["width"], 8)
     property int labelPadding: cssPixels(cssStyle["label-padding"], 10)
     readonly property var parts: networkConfig && networkConfig.format ? networkConfig.format : ["cycle"]
     // The graph (with its direction arrows) is always shown; `format` lists only
@@ -146,8 +158,8 @@ Item {
                 Text {
                     anchors.centerIn: parent
                     color: root.downloadRateBytesPerSecond >= root.uploadRateBytesPerSecond
-                        ? (cssStyle["download-color"] || Contrast.contrastColor(root.effectiveGraphBackground))
-                        : (cssStyle["inactive-color"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.4))
+                        ? (root.arrowDownStyle["color"] || Contrast.contrastColor(root.effectiveGraphBackground))
+                        : (root.arrowInactiveStyle["color"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.4))
                     font.family: theme.fontFamily
                     font.pointSize: theme.fontSize
                     font.bold: true
@@ -162,8 +174,8 @@ Item {
                 Text {
                     anchors.centerIn: parent
                     color: root.uploadRateBytesPerSecond > root.downloadRateBytesPerSecond
-                        ? (cssStyle["upload-color"] || Contrast.contrastColor(root.effectiveGraphBackground))
-                        : (cssStyle["inactive-color"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.4))
+                        ? (root.arrowUpStyle["color"] || Contrast.contrastColor(root.effectiveGraphBackground))
+                        : (root.arrowInactiveStyle["color"] || Contrast.contrastFill(root.effectiveGraphBackground, 0.4))
                     font.family: theme.fontFamily
                     font.pointSize: theme.fontSize
                     font.bold: true

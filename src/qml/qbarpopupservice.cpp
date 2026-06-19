@@ -152,7 +152,6 @@ QString QBarPopupService::openTooltip(const QUrl &source,
 
     const QString id = nextId(requestedId);
     forceCloseTooltip(id);
-    qWarning() << "[tooltip] open request" << id << source << properties << "pos:" << x << y << "size:" << width << height;
 
     auto *view = createPopupView(source,
                                  properties,
@@ -202,9 +201,7 @@ QString QBarPopupService::openTooltip(const QUrl &source,
 
     m_tooltips.insert(id, Popup{view});
     m_tooltipHovered.insert(id, false);
-    qWarning() << "[tooltip] created" << id << "view:" << view;
     connect(view, &QObject::destroyed, this, [this, id]() {
-        qWarning() << "[tooltip] destroyed" << id;
         m_tooltips.remove(id);
         m_tooltipHovered.remove(id);
         emit tooltipClosed(id);
@@ -218,7 +215,6 @@ QString QBarPopupService::openTooltip(const QUrl &source,
     }
     view->show();
     view->raise();
-    qWarning() << "[tooltip] shown" << id << view->position();
     return id;
 }
 
@@ -226,7 +222,6 @@ void QBarPopupService::updatePopup(const QString &id, const QVariantMap &propert
 {
     QQuickItem *shell = m_popups.value(id);
     if (shell == nullptr) {
-        qWarning() << "[popup] update ignored (missing id)" << id << properties;
         return;
     }
 
@@ -246,26 +241,21 @@ void QBarPopupService::updatePopup(const QString &id, const QVariantMap &propert
     const int height = qMax(1, target->property("implicitHeight").toInt());
     shell->setProperty("targetWidth", width);
     shell->setProperty("targetHeight", height);
-
-    qWarning() << "[popup] updated" << id << properties << "size:" << width << height;
 }
 
 void QBarPopupService::updateTooltip(const QString &id, const QVariantMap &properties)
 {
     if (!m_tooltips.contains(id)) {
-        qWarning() << "[tooltip] update ignored (missing id)" << id << properties;
         return;
     }
 
     const auto tooltip = m_tooltips.value(id);
     if (tooltip.view == nullptr) {
-        qWarning() << "[tooltip] update ignored (missing view)" << id << properties;
         return;
     }
 
     auto *root = tooltip.view->rootObject();
     if (root == nullptr) {
-        qWarning() << "[tooltip] update ignored (missing root)" << id << properties;
         return;
     }
 
@@ -284,8 +274,6 @@ void QBarPopupService::updateTooltip(const QString &id, const QVariantMap &prope
     const int width = qMax(1, target->property("implicitWidth").toInt());
     const int height = qMax(1, target->property("implicitHeight").toInt());
     tooltip.view->resize(width, height);
-
-    qWarning() << "[tooltip] updated" << id << properties << "size:" << width << height;
 }
 
 void QBarPopupService::closePopup(const QString &id)
@@ -319,7 +307,6 @@ void QBarPopupService::closeTooltip(const QString &id)
     }
 
     m_tooltipHovered.remove(id);
-    qWarning() << "[tooltip] close" << id;
     tooltip.view->setProperty("_qbarClosing", true);
     if (auto *root = tooltip.view->rootObject()) {
         root->setProperty("popupClosing", true);
@@ -332,18 +319,15 @@ void QBarPopupService::closeTooltip(const QString &id)
 void QBarPopupService::setTooltipHovered(const QString &id, bool hovered)
 {
     if (!m_tooltips.contains(id)) {
-        qWarning() << "[tooltip] hover ignored (missing id)" << id << hovered;
         return;
     }
 
     const bool previous = m_tooltipHovered.value(id, false);
     if (previous == hovered) {
-        qWarning() << "[tooltip] hover unchanged" << id << hovered;
         return;
     }
 
     m_tooltipHovered.insert(id, hovered);
-    qWarning() << "[tooltip] hover changed" << id << hovered;
     emit tooltipHoveredChanged(id, hovered);
 }
 

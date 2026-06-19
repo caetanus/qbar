@@ -2,7 +2,7 @@ import QtQuick
 import QBar 1.0
 import "qrc:/qbar" as Chrome
 
-Item {
+Chrome.CssRect {
     id: root
 
     property string toolId: ""
@@ -11,8 +11,8 @@ Item {
     property alias toolModel: toolModel
 
     // waybar module names use "custom/foo"; CSS selectors use "#custom-foo"
-    readonly property string cssId: toolId.replace("/", "-")
-    readonly property var cssStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve(cssId) : ({})
+    cssId: toolId.replace("/", "-")
+    readonly property var cssStyle: root.style
 
     signal preferredWidthUpdated(int width)
 
@@ -46,10 +46,7 @@ Item {
     onImplicitWidthChanged: preferredWidthUpdated(Math.max(1, implicitWidth))
     Component.onCompleted: applyConfig()
 
-    Rectangle {
-        anchors.fill: parent
-        color: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "transparent"
-    }
+    // Background painted by the CssRect base.
 
     Row {
         id: contentRow

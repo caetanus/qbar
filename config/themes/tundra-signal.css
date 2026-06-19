@@ -1,0 +1,77 @@
+/* Tundra Signal - blue mountain minimalism with radio glow */
+
+@define-color bg #111820;
+@define-color panel #182330;
+@define-color text #e8f1ff;
+@define-color muted #9fb1c7;
+@define-color ice #8fc7ff;
+@define-color frost #b9e6ff;
+@define-color aurora #83f0c8;
+@define-color steel #6f85a3;
+@define-color amber #f0c674;
+@define-color red #ff7a90;
+
+* { border: none; border-radius: 0; }
+window#waybar { background-color: rgba(17, 24, 32, 0.86); border-radius: 8px; border-left: 84px; border-right: 84px; padding: 0 6px; }
+
+#left {
+    background-color: rgba(232, 241, 255, 0.08);
+    border-color: rgba(143, 199, 255, 0.28);
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 0 12px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+}
+
+#center {
+    background: linear-gradient(90deg, rgba(143, 199, 255, 0.00), rgba(143, 199, 255, 0.14), rgba(143, 199, 255, 0.00));
+    border-width: 0px;
+    border-radius: 0px;
+    padding: 0 18px;
+    margin-left: 20px;
+    margin-right: 20px;
+}
+
+#right {
+    background-color: transparent;
+    border-width: 0px;
+    padding: 0 0px;
+}
+
+#clock, #title { color: @text; background-color: transparent; text-shadow: 0px 1px 2px rgba(3, 7, 11, 0.72); }
+#cpu { color: @ice; background-color: rgba(143, 199, 255, 0.10); }
+#cpu.graph { background-color: rgba(8, 15, 23, 0.72); color: @ice; fill: rgba(143, 199, 255, 0.20); width: 32px; }
+#memory { color: @aurora; background-color: rgba(131, 240, 200, 0.10); }
+#memory.graph { background-color: rgba(8, 19, 20, 0.70); color: @aurora; fill: rgba(131, 240, 200, 0.20); width: 32px; }
+#memory.swap { color: @amber; }
+#nm-applet { color: @frost; background-color: rgba(185, 230, 255, 0.09); }
+#network-io { color: @frost; background-color: transparent; }
+#network-io.download { color: @frost; fill: rgba(185, 230, 255, 0.20); }
+#network-io.upload { color: @amber; fill: rgba(240, 198, 116, 0.22); }
+#network-io.arrowDown { color: @frost; }
+#network-io.arrowUp { color: @amber; }
+#battery, #battery.charging, #battery.full { color: @aurora; background-color: transparent; }
+#battery.critical { color: #111820; background-color: @red; }
+#pulseaudio, #backlight, #temperature, #disk, #bluetooth, #power-profiles-daemon, #keyboard, #tray, #taskbar, #custom-dollar, #custom-btc { background-color: transparent; }
+#pulseaudio, #bluetooth { color: @ice; } #pulseaudio.muted { color: @steel; }
+#backlight, #custom-btc { color: @amber; } #temperature { color: @red; } #disk { color: @frost; } #power-profiles-daemon, #custom-dollar { color: @aurora; } #keyboard, #taskbar { color: @muted; }
+#caffeine { color: @steel; background-color: transparent; } #caffeine.active { color: @amber; background-color: rgba(240, 198, 116, 0.14); }
+
+#workspaces button { color: rgba(232, 241, 255, 0.42); background-color: transparent; }
+#workspaces button.focused { color: #0a1118; background-color: @ice; }
+#workspaces button.visible { color: @frost; background-color: rgba(143, 199, 255, 0.12); }
+#workspaces button.urgent { color: #111820; background-color: @red; }
+
+#overlay { background-color: rgba(4, 8, 13, 0.28); }
+#popup {
+    color: @text;
+    background: linear-gradient(160deg, rgba(12, 18, 25, 0.97), rgba(24, 35, 48, 0.95), rgba(28, 52, 66, 0.90));
+    border-color: rgba(143, 199, 255, 0.42);
+    border-width: 1px;
+    border-radius: 8px;
+    box-shadow: 0px 9px 24px rgba(0, 0, 0, 0.42);
+    text-shadow: 0px 1px 2px rgba(3, 7, 11, 0.64);
+    opacity: 0.97;
+}
+#cpu-popup { color: @text; text-shadow: 0px 1px 2px rgba(3, 7, 11, 0.58); }

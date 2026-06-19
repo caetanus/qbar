@@ -1,0 +1,30 @@
+/* Solarized Dark — https://ethanschoonover.com/solarized */
+
+* { border: none; border-radius: 0; }
+window#waybar    { background-color: rgba(0, 43, 54, 0.90); border-radius: 8px; }
+
+#clock         { color: #839496; background-color: #002b36; }
+#battery       { color: #859900; background-color: #002b36; }
+#battery.charging  { color: #859900; background-color: #002b36; }
+#battery.full      { color: #859900; background-color: #002b36; }
+#battery.critical  { color: #dc322f; background-color: #002b36; }
+#cpu           { color: #268bd2; background-color: #002b36; }
+#memory        { color: #d33682; background-color: #002b36; }
+#nm-applet       { color: #2aa198; background-color: #002b36; }
+#network-io    { color: #2aa198; background-color: #002b36; }
+#pulseaudio    { color: #6c71c4; background-color: #002b36; }
+#pulseaudio.muted  { color: #073642; background-color: #002b36; }
+#backlight     { color: #b58900; background-color: #002b36; }
+#temperature   { color: #cb4b16; background-color: #002b36; }
+#keyboard      { color: #6c71c4; background-color: #002b36; }
+#tray          { background-color: #002b36; }
+#title         { color: #93a1a1; background-color: transparent; }
+#caffeine      { color: #073642; background-color: #002b36; }
+#caffeine.active { color: #b58900; background-color: #002b36; }
+#custom-dollar { color: #859900; background-color: #002b36; }
+#custom-btc    { color: #cb4b16; background-color: #002b36; }
+
+#workspaces button          { color: #586e75; background-color: #00212b; }
+#workspaces button.focused  { color: #fdf6e3; background-color: #073642; }
+#workspaces button.visible  { color: #657b83; background-color: #002b36; }
+#workspaces button.urgent   { color: #fdf6e3; background-color: #dc322f; }
