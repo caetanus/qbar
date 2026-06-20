@@ -154,7 +154,8 @@ const char *kConfigSchema = R"JSON({
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "exec": { "type": "string", "description": "Command to run." },
+        "exec": { "type": "string", "description": "Command to run (script-driven tool)." },
+        "source": { "type": "string", "description": "Path to a runtime QML widget (.qml), used INSTEAD of exec. Loaded from disk (not compiled in); resolved relative to the config dir. The widget may import \"qrc:/qbar\" (CssRect/CssText/CssEnable) and read cssTheme/theme/the models; declare `property string toolId` to receive its id and read its own customTools entry." },
         "command": { "type": "string" },
         "arguments": { "type": "array", "items": { "type": "string" } },
         "workingDirectory": { "type": "string" },

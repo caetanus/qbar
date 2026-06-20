@@ -462,6 +462,12 @@ void BarWindow::buildLayout()
     connect(m_wm, &WindowManagerBackend::workspaceFocusEvent, m_popupService, &QBarPopupService::closeAll);
 
     rootContext()->setContextProperty(QStringLiteral("theme"), theme);
+    // Directory of the active config file — relative custom-widget `source` paths
+    // (runtime QML loaded by Bar.appletUrl) resolve against it.
+    rootContext()->setContextProperty(QStringLiteral("configDir"),
+                                      m_config.configFilePath.isEmpty()
+                                          ? QString()
+                                          : QFileInfo(m_config.configFilePath).absolutePath());
     rootContext()->setContextProperty(QStringLiteral("popupEmbossShaderAvailable"),
 #ifdef QBAR_HAVE_POPUP_EMBOSS_SHADER
                                       true

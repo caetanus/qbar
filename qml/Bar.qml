@@ -81,9 +81,27 @@ Item {
 
     function appletUrl(name) {
         if (name.indexOf("CustomTool:") === 0) {
+            // A custom entry with a `source` is a RUNTIME QML widget (user-provided,
+            // not compiled in); one with `exec` is the script-driven CustomTool.
+            var id = name.substring("CustomTool:".length)
+            var def = (typeof customTools !== "undefined" && customTools && customTools[id]) ? customTools[id] : null
+            if (def && def.source && String(def.source).length > 0)
+                return root.resolveWidgetUrl(String(def.source))
             return "qrc:/applets/CustomTool.qml"
         }
         return "qrc:/applets/" + name + ".qml"
+    }
+
+    // Resolve a custom-widget `source` to a loadable URL: a qrc:/ or file:/ URL is used
+    // as-is, an absolute path gets file://, anything else resolves relative to the config
+    // directory (e.g. "widgets/Foo.qml" → <configDir>/widgets/Foo.qml).
+    function resolveWidgetUrl(src) {
+        if (src.indexOf("qrc:") === 0 || src.indexOf("file:") === 0)
+            return src
+        if (src.indexOf("/") === 0)
+            return "file://" + src
+        var dir = (typeof configDir !== "undefined" && configDir) ? configDir : "."
+        return "file://" + dir + "/" + src
     }
 
     function customToolId(name) {
