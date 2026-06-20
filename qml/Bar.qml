@@ -111,6 +111,16 @@ Item {
         return ""
     }
 
+    // Surface a clear warning when an applet or a runtime custom QML widget fails to
+    // load (a bad `source` path, or a QML error in a user-provided widget) — otherwise
+    // the slot just stays empty silently and the author has nothing to go on.
+    function reportLoadStatus(name, ldr) {
+        if (ldr && ldr.status === Loader.Error) {
+            console.warn("qbar: failed to load '" + name + "' from " + ldr.source
+                + " — check the path and the widget's QML for errors.")
+        }
+    }
+
     function appletWidth(item) {
         if (!item) {
             return 0
@@ -239,6 +249,8 @@ Item {
                         source: appletName === "Temperature" && temperatureModel && !temperatureModel.available ? "" : root.appletUrl(appletName)
                         asynchronous: false
 
+                        onStatusChanged: root.reportLoadStatus(appletName, loader)
+
                         onLoaded: {
                             if (appletName.indexOf("CustomTool:") === 0 && loader.item && "toolId" in loader.item) {
                                 loader.item.toolId = root.customToolId(appletName)
@@ -329,6 +341,8 @@ Item {
                         anchors.fill: parent
                         source: appletName === "Temperature" && temperatureModel && !temperatureModel.available ? "" : root.appletUrl(appletName)
                         asynchronous: false
+
+                        onStatusChanged: root.reportLoadStatus(appletName, loader)
 
                         onLoaded: {
                             if (appletName.indexOf("CustomTool:") === 0 && loader.item && "toolId" in loader.item) {
@@ -448,6 +462,8 @@ Item {
                         anchors.rightMargin: slot.marginRight
                         source: appletName === "Temperature" && temperatureModel && !temperatureModel.available ? "" : root.appletUrl(appletName)
                         asynchronous: false
+
+                        onStatusChanged: root.reportLoadStatus(appletName, loader)
 
                         onLoaded: {
                             if (appletName.indexOf("CustomTool:") === 0 && loader.item && "toolId" in loader.item) {
