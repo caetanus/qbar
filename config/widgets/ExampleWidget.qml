@@ -28,12 +28,14 @@ QBar.CssRect {
     // waybar id "custom/example" → CSS selector "#custom-example".
     cssId: toolId.replace("/", "-")
     height: theme.height
-    width: Math.max(1, label.implicitWidth + 16)
+    // Sizing contract: the bar's Loader resizes the item (clearing a `width:` binding),
+    // so Bar.appletWidth reads `preferredWidth` — expose that (content width), not `width`.
+    property int preferredWidth: Math.max(1, label.implicitWidth + 16)
+    width: Math.max(1, preferredWidth)
 
-    // Applet sizing contract: let the bar lay this out by its content width.
     signal preferredWidthUpdated(int width)
-    onWidthChanged: preferredWidthUpdated(width)
-    Component.onCompleted: preferredWidthUpdated(width)
+    onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
+    Component.onCompleted: preferredWidthUpdated(preferredWidth)
 
     QBar.CssText {
         id: label

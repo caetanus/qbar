@@ -6,6 +6,7 @@
     <file alias="qbar/PopupShell.qml">../../qml/qbar/PopupShell.qml</file>
     <file alias="qbar/CssFill.qml">../../qml/qbar/CssFill.qml</file>
     <file alias="qbar/CssRect.qml">../../qml/qbar/CssRect.qml</file>
+    <file alias="qbar/BatteryIcon.qml">../../qml/qbar/BatteryIcon.qml</file>
     <file alias="qbar/CssText.qml">../../qml/qbar/CssText.qml</file>
     <file alias="qbar/CssEnable.qml">../../qml/qbar/CssEnable.qml</file>
     <file alias="qbar/CssKeyframes.qml">../../qml/qbar/CssKeyframes.qml</file>

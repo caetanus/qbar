@@ -1,4 +1,5 @@
-/* Catppuccin Mocha — https://github.com/catppuccin/catppuccin */
+/* Catppuccin Mocha — adapted from the Waybar theme by the Catppuccin org
+   (https://github.com/catppuccin/waybar, MIT). Palette: github.com/catppuccin/catppuccin. */
 
 /** { border: none; border-radius: 0; }*/
 window#waybar    { background-color: rgba(30, 30, 46, 0.85); border-radius: 8px; border-left: 80px; border-right: 80px; padding: 0 6px; }

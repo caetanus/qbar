@@ -9,6 +9,13 @@ Item {
 
     // CSS id matches waybar's pulseaudio module
     readonly property string cssId: "pulseaudio"
+
+    // "/variant" from the module name (Bar.qml sets it): "" shows both pills, "out" shows
+    // only the speaker, "in" only the mic. Lets `Sound/out` + `Sound/in` be placed
+    // separately (e.g. the mic tucked into a drawer) while staying one applet.
+    property string variant: ""
+    readonly property bool showOutput: root.variant !== "in"
+    readonly property bool showInput: root.variant !== "out"
     // Output section CSS (muted class when muted, unavailable when not available)
     readonly property var outputCssStyle: cssTheme && cssTheme.loaded
         ? cssTheme.resolve(cssId, outputAvailable ? (outputMuted ? ["muted"] : []) : ["unavailable"])
@@ -90,9 +97,14 @@ Item {
         QBar.CssRect {
             id: outputBlock
             cssId: "pulseaudio"
+            visible: root.showOutput
             cssClass: root.outputAvailable ? (root.outputMuted ? ["muted"] : []) : ["unavailable"]
+            // The icon/text are colored to CONTRAST against outputBackground (yellow when
+            // active), so that colour must actually be painted when the theme sets no
+            // #pulseaudio background — otherwise dark-on-dark renders invisible.
+            defaultColor: root.outputBackground
             width: outputRow.implicitWidth + 10
-            height: theme.height
+            height: parent.height
 
             Row {
                 id: outputRow
@@ -213,9 +225,11 @@ Item {
         QBar.CssRect {
             id: inputBlock
             cssId: "pulseaudio"
+            visible: root.showInput
             cssClass: root.inputAvailable ? (root.inputMuted ? ["source-muted"] : ["source"]) : ["unavailable"]
+            defaultColor: root.inputBackground // paint the orange mic pill (see outputBlock)
             width: inputRow.implicitWidth + 10
-            height: theme.height
+            height: parent.height
 
             Row {
                 id: inputRow

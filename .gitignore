@@ -20,3 +20,7 @@ __pycache__/
 moc_*.cpp
 qrc_*.cpp
 ui_*.h
+
+# local tooling / scratch (not for publication)
+.claude/
+readme_ai.md

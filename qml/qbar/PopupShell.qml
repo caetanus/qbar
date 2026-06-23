@@ -83,8 +83,7 @@ Item {
 
     Item {
         id: contentLayer
-        width: Math.max(1, root.targetWidth)
-        height: Math.max(1, root.targetHeight)
+        anchors.fill: parent
 
         Loader {
             id: loader

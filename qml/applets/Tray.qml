@@ -26,9 +26,57 @@ QBar.CssRect {
     readonly property real paddingLeft: cssLengthFromList("padding", 3, 0)
 
     property int iconSize: Math.max(16, Math.round((theme.height - 6) * 0.85))
-    property real itemPadding: Math.max(2, Math.round(theme.trayItemPadding * 2))
+    // Per-icon padding (each side). waybar keeps tray icons tight (gaps come from `spacing`),
+    // so this is just `trayItemPadding`, NOT doubled — the ×2 made the tray look over-padded.
+    property real itemPadding: Math.max(1, Math.round(theme.trayItemPadding))
     property real itemWidth: iconSize + itemPadding * 2
-    property int preferredWidth: trayModel ? Math.ceil(trayModel.count * itemWidth + paddingLeft + paddingRight) : 0
+
+    // Collapsible tray (Windows-XP "show hidden icons"): when `#tray { -qbar-collapsible: true }`
+    // the tray shows only a toggle chevron plus up to `-qbar-collapsed-max` (default 2)
+    // attention-grabbing icons; clicking the chevron grows/shrinks the full tray. The grow is
+    // CSS-driven — `#tray { transition: <dur> }` sets the duration/easing (QML easing).
+    readonly property bool collapsible: String(cssStyle["-qbar-collapsible"] || "").toLowerCase() === "true"
+    readonly property int collapsedMax: cssStyle["-qbar-collapsed-max"]
+        ? Math.round(cssTheme.parseLength(cssStyle["-qbar-collapsed-max"], 2)) : 2
+    property bool expanded: false
+    // Model rows in the NeedsAttention state (reactive — the model re-emits on any change);
+    // while collapsed, the first `collapsedMax` of these stay visible.
+    readonly property var attentionRows: trayModel ? trayModel.attentionRows : []
+    // Up to `collapsedMax` icons stay visible while collapsed: attention icons first, then the
+    // earliest regular icons fill any remaining slots — so the tray never collapses to just
+    // the chevron when nothing is demanding attention.
+    readonly property var collapsedVisible: {
+        var out = []
+        for (var a = 0; a < attentionRows.length && out.length < collapsedMax; ++a)
+            out.push(attentionRows[a])
+        var total = trayModel ? trayModel.count : 0
+        for (var i = 0; i < total && out.length < collapsedMax; ++i)
+            if (out.indexOf(i) < 0)
+                out.push(i)
+        return out
+    }
+    readonly property real toggleWidth: collapsible ? Math.round(iconSize * 0.8) : 0
+    readonly property var _trans: (cssTheme && cssTheme.loaded && cssStyle["transition"])
+        ? cssTheme.parseTransition(cssStyle["transition"]) : ({})
+    readonly property int transitionMs: _trans.duration !== undefined ? _trans.duration
+        : (theme.animationDuration > 0 ? theme.animationDuration : 200)
+    readonly property int transitionEasing: _trans.easing !== undefined ? _trans.easing : Easing.OutCubic
+    readonly property color toggleColor: cssStyle["color"]
+        ? cssTheme.parseColor(cssStyle["color"])
+        : Contrast.contrastColor(Contrast.effectiveBackground(
+            cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : theme.background,
+            cssTheme, theme.background))
+
+    // While collapsed, only the toggle + the first `collapsedMax` attention icons show.
+    function itemShown(i) {
+        if (!collapsible || expanded)
+            return true
+        return collapsedVisible.indexOf(i) >= 0
+    }
+
+    // The applet sizes itself to its content (toggle + visible icons), so it grows/shrinks
+    // as the drawer opens; the slot width follows preferredWidth.
+    property int preferredWidth: Math.ceil(contentRow.implicitWidth + paddingLeft + paddingRight)
 
     signal activated()
     signal preferredWidthUpdated(int width)
@@ -70,13 +118,48 @@ QBar.CssRect {
         anchors.bottomMargin: root.paddingBottom
         spacing: root.cssStyle["spacing"] ? cssTheme.parseLength(root.cssStyle["spacing"], 0) : 0
 
+        // Toggle chevron — the XP "show hidden icons" arrow. ‹ collapsed (click to reveal),
+        // › expanded (click to hide). Only present when the tray is collapsible.
+        Item {
+            id: toggle
+            width: root.collapsible ? root.toggleWidth : 0
+            height: contentRow.height
+            visible: root.collapsible
+            clip: true
+
+            Text {
+                anchors.centerIn: parent
+                text: root.expanded ? "›" : "‹"  // › / ‹
+                color: root.toggleColor
+                font.family: theme.fontFamily
+                font.pointSize: theme.fontSize + 3
+                font.bold: true
+            }
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.expanded = !root.expanded
+            }
+        }
+
         Repeater {
             model: trayModel ? trayModel : 0
 
             Rectangle {
                 id: trayItem
-                width: root.itemWidth
+                readonly property bool shown: root.itemShown(index)
+                width: shown ? root.itemWidth : 0
+                clip: true
                 height: contentRow.height
+
+                Behavior on width {
+                    enabled: root.collapsible
+                    NumberAnimation {
+                        duration: root.transitionMs
+                        easing.type: root.transitionEasing
+                    }
+                }
 
                 readonly property bool hasIcon: iconSource && iconSource.length > 0
                 readonly property bool hasOverlay: hasIcon && overlayIconName && overlayIconName.length > 0

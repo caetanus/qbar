@@ -12,7 +12,7 @@
 @define-color red #ff7a90;
 
 * { border: none; border-radius: 0; }
-window#waybar { background-color: rgba(17, 24, 32, 0.86); border-radius: 8px; border-left: 84px; border-right: 84px; padding: 0 6px; }
+window#waybar { background-color: rgba(17, 24, 32, 0.86); border-radius: 8px;  margin-top: 5px; margin-bottom: 5px; border-left: 16px; border-right: 16px; padding: 0 6px; }
 
 #left {
     background-color: rgba(232, 241, 255, 0.08);
@@ -58,10 +58,15 @@ window#waybar { background-color: rgba(17, 24, 32, 0.86); border-radius: 8px; bo
 #backlight, #custom-btc { color: @amber; } #temperature { color: @red; } #disk { color: @frost; } #power-profiles-daemon, #custom-dollar { color: @aurora; } #keyboard, #taskbar { color: @muted; }
 #caffeine { color: @steel; background-color: transparent; } #caffeine.active { color: @amber; background-color: rgba(240, 198, 116, 0.14); }
 
-#workspaces button { color: rgba(232, 241, 255, 0.42); background-color: transparent; }
+#workspaces button { color: rgba(232, 241, 255, 0.42); background-color: transparent; transition: 200ms ease-out; }
 #workspaces button.focused { color: #0a1118; background-color: @ice; }
 #workspaces button.visible { color: @frost; background-color: rgba(143, 199, 255, 0.12); }
-#workspaces button.urgent { color: #111820; background-color: @red; }
+#workspaces button.urgent { color: #111820; background-color: @red; transform: rotate(3deg); }
+/* transform test: hovered tiles tilt 15° (transition above eases it); urgent tiles wiggle ±5° */
+#workspaces button:hover { transform: rotate(5deg); }
+
+/* drawer grow easing comes from the group's CSS transition (QML easing), loaded with the theme */
+#audio { transition: 50ms ease-out; }
 
 #overlay { background-color: rgba(4, 8, 13, 0.28); }
 #popup {

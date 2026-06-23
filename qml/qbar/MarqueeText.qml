@@ -58,22 +58,32 @@ Item {
     // wrap is seamless (the trailing copy lands where the first one started).
     readonly property real endVisibleX: root.width - label.implicitWidth
 
+    // All three children are Animators so the SequentialAnimation is itself treated
+    // as an Animator and runs on the scene-graph render thread — it keeps gliding even
+    // when the GUI thread is briefly blocked (custom-tool refreshes, JSON parses), which
+    // is what caused the marquee's "travadinhas". Note: a single non-Animator child (e.g.
+    // a PauseAnimation) would demote the WHOLE group back to the GUI thread, so the pause
+    // is expressed as a no-op hold Animator (from === to) instead of PauseAnimation.
+    // (Render-thread execution requires the threaded render loop, which qbar uses.)
     SequentialAnimation {
         running: root.overflowing && root.visible
         loops: Animation.Infinite
 
-        NumberAnimation {
+        XAnimator {
             target: track
-            property: "x"
             from: 0
             to: root.endVisibleX
             duration: Math.max(1, (label.implicitWidth - root.width) / root.pixelsPerSecond * 1000)
             easing.type: Easing.Linear
         }
-        PauseAnimation { duration: root.pauseDuration }
-        NumberAnimation {
+        XAnimator {
+            target: track // hold at the end edge for the pause (no movement)
+            from: root.endVisibleX
+            to: root.endVisibleX
+            duration: root.pauseDuration
+        }
+        XAnimator {
             target: track
-            property: "x"
             from: root.endVisibleX
             to: -separatorLabel.x
             duration: Math.max(1, (separatorLabel.x + root.endVisibleX) / root.pixelsPerSecond * 1000)

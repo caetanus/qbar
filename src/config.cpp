@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -66,127 +67,90 @@ QString configPath()
     return QDir(base).filePath(QStringLiteral("qbar/config.json"));
 }
 
-// JSON Schema for the config, written next to it so editors (VSCode, etc.) can
-// offer completion/validation. The config carries comments/trailing commas
-// (JSONC), so associate it via "$schema": "./config.schema.json" or an editor
-// file-association rule.
-const char *kConfigSchema = R"JSON({
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "qbar configuration",
-  "description": "A single bar object, or an array of bar objects (multi-monitor, top+bottom).",
-  "oneOf": [
-    { "$ref": "#/$defs/bar" },
-    { "type": "array", "items": { "$ref": "#/$defs/bar" } }
-  ],
-  "$defs": {
-    "bar": {
-      "type": "object",
-      "additionalProperties": true,
-      "properties": {
-        "$schema": { "type": "string", "description": "Path to this schema." },
-    "layer": { "type": "string", "enum": ["background", "bottom", "top", "overlay"], "description": "wlr-layer-shell layer." },
-    "position": { "type": "string", "enum": ["top", "bottom"], "description": "Bar edge." },
-    "height": { "type": "integer", "minimum": 1 },
-    "margin": { "type": "integer" },
-    "spacing": { "type": "integer", "description": "Gap between applets." },
-    "x": { "type": "integer" },
-    "y": { "type": "integer" },
-    "exclusiveZone": { "type": "boolean", "description": "Reserve screen space for the bar." },
-    "waylandLayerShell": { "type": "boolean" },
-    "popupKeyboardFocus": { "type": "boolean", "description": "Let popups grab the keyboard (enables Esc-to-close)." },
-    "background": { "type": "string", "description": "Color (#rrggbb, #aarrggbb, rgb(), rgba(), name)." },
-    "foreground": { "type": "string" },
-    "accent": { "type": "string" },
-    "fontFamily": { "type": "string" },
-    "fontSize": { "type": "integer", "minimum": 1 },
-    "trayItemPadding": { "type": "integer" },
-    "animationDuration": { "type": "integer", "minimum": 0 },
-    "animationEasing": { "type": "string", "description": "e.g. linear, inoutquad, outcubic." },
-    "windowManagerBackend": { "type": "string", "enum": ["auto", "i3", "sway", "hyprland", "bspwm", "ewmh", "none"] },
-    "styleSheet": { "type": "string", "description": "Path to a CSS theme." },
-    "output": { "type": "string", "description": "Target monitor name." },
-    "marginTop": { "type": "integer" },
-    "marginBottom": { "type": "integer" },
-    "marginLeft": { "type": "integer" },
-    "marginRight": { "type": "integer" },
-    "modules-left": { "$ref": "#/$defs/moduleList" },
-    "modules-center": { "$ref": "#/$defs/moduleList" },
-    "modules-right": { "$ref": "#/$defs/moduleList" },
-    "applets": { "$ref": "#/$defs/moduleList" },
-    "customTools": {
-      "type": "object",
-      "description": "Map of \"custom/<name>\" to a tool definition.",
-      "additionalProperties": { "$ref": "#/$defs/customTool" }
-    },
-    "taskbar": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Taskbar applet options.",
-      "properties": {
-        "scope": { "type": "string", "enum": ["workspace", "all", "monitor"], "description": "Which windows to list." },
-        "middleClickClose": { "type": "boolean", "description": "Middle-click closes a window." },
-        "rightClickMenu": { "type": "boolean", "description": "Right-click opens a focus/close menu." }
-      }
-    },
-    "cpu": { "$ref": "#/$defs/display" },
-    "memory": { "$ref": "#/$defs/display" },
-    "network": { "$ref": "#/$defs/display" }
-      }
-    },
-    "display": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Composable display for the CPU/Memory/Network applets.",
-      "properties": {
-        "format": {
-          "type": "array",
-          "description": "Value parts shown beside the always-present graph. \"cycle\" is a slot the mouse wheel cycles. Empty list = graph only.",
-          "items": { "type": "string", "enum": ["text", "percentage", "clock", "absolute", "used", "cycle"] }
-        },
-        "text": { "type": "string", "description": "Literal label shown by the \"text\"/\"cycle\" parts." }
-      }
-    },
-    "moduleList": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "customTool": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "exec": { "type": "string", "description": "Command to run (script-driven tool)." },
-        "source": { "type": "string", "description": "Path to a runtime QML widget (.qml), used INSTEAD of exec. Loaded from disk (not compiled in); resolved relative to the config dir. The widget may import \"qrc:/qbar\" (CssRect/CssText/CssEnable) and read cssTheme/theme/the models; declare `property string toolId` to receive its id and read its own customTools entry." },
-        "command": { "type": "string" },
-        "arguments": { "type": "array", "items": { "type": "string" } },
-        "workingDirectory": { "type": "string" },
-        "interval": { "type": "number", "description": "Seconds between runs." },
-        "return-type": { "type": "string", "enum": ["json"], "description": "Omit for plain text; \"json\" for the waybar object format." },
-        "format": { "type": "string", "description": "e.g. \"{} ({percentage:.1f}%)\"." },
-        "format-icons": { "type": "object" },
-        "tooltip": { "type": "boolean" },
-        "exec-if": { "type": "string" },
-        "show-empty": { "type": "boolean" },
-        "on-click": { "type": "string" },
-        "on-click-middle": { "type": "string" },
-        "on-click-right": { "type": "string" },
-        "on-scroll-up": { "type": "string" },
-        "on-scroll-down": { "type": "string" }
-      }
-    }
-  }
-}
-)JSON";
 
+// The bundled defaults — a documented config template, the JSON schema, every theme, and
+// the example QML widgets — live in the qrc under :/defaults (see data/qbar-defaults.qrc).
+// We copy them into the config dir so a new user lands on something real to edit.
+
+// Copy a qrc resource to disk if the destination is missing. qrc files come out read-only,
+// so relax permissions to user read/write (the whole point is that the user can edit them).
+bool copyResourceIfMissing(const QString &resourcePath, const QString &destPath)
+{
+    if (QFileInfo::exists(destPath)) {
+        return false;
+    }
+    QDir().mkpath(QFileInfo(destPath).path());
+    if (!QFile::copy(resourcePath, destPath)) {
+        return false;
+    }
+    QFile::setPermissions(destPath,
+                          QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                              | QFileDevice::ReadGroup | QFileDevice::ReadOther);
+    return true;
+}
+
+// Write the JSON schema next to the config (so editors validate) if it isn't there yet.
 void ensureConfigSchema(const QString &configFilePath)
 {
     const QString schemaPath = QFileInfo(configFilePath).dir().filePath(QStringLiteral("config.schema.json"));
-    if (QFileInfo::exists(schemaPath)) {
+    copyResourceIfMissing(QStringLiteral(":/defaults/config.schema.json"), schemaPath);
+}
+
+// First-run scaffold: with no config yet, spit the whole starter kit (documented config.json,
+// schema, all themes, example widgets) into the config dir, so the user isn't staring at an
+// empty directory. Only ever runs on a fresh dir (guarded on the config file's absence).
+void scaffoldConfigDir(const QString &configFilePath)
+{
+    if (QFileInfo::exists(configFilePath)) {
         return;
     }
-    QDir().mkpath(QFileInfo(schemaPath).path());
-    QFile file(schemaPath);
-    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        file.write(kConfigSchema);
+    const QString dir = QFileInfo(configFilePath).dir().path();
+    const QString prefix = QStringLiteral(":/defaults/");
+    QDirIterator it(QStringLiteral(":/defaults"), QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString src = it.next();
+        copyResourceIfMissing(src, QDir(dir).filePath(src.mid(prefix.size())));
+    }
+}
+
+// Flatten the top-level config into a list of bar objects, expanding "include" string entries
+// — a path (relative to the including file's dir) to another config file, à la polybar — so a
+// big multi-monitor setup can be split across files. Recursive, with a depth guard vs cycles.
+void collectBarObjects(const QJsonValue &value, const QString &baseDir,
+                       QList<QJsonObject> *out, int depth)
+{
+    if (depth > 8) {
+        qWarning("qbar: config include nesting too deep (cycle?), stopping");
+        return;
+    }
+    if (value.isObject()) {
+        out->append(value.toObject());
+    } else if (value.isArray()) {
+        for (const QJsonValue &entry : value.toArray()) {
+            collectBarObjects(entry, baseDir, out, depth);
+        }
+    } else if (value.isString()) {
+        QString path = value.toString();
+        if (!QDir::isAbsolutePath(path)) {
+            path = QDir(baseDir).filePath(path);
+        }
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            qWarning() << "qbar: config include not found:" << path;
+            return;
+        }
+        QString err;
+        const auto doc = Jsonc::parse(QString::fromUtf8(file.readAll()), &err);
+        if (!err.isEmpty()) {
+            qWarning() << "qbar: config include" << path << err;
+        }
+        // An included file's own relative includes resolve against ITS directory.
+        const QString includedBase = QFileInfo(path).absolutePath();
+        if (doc.isArray()) {
+            collectBarObjects(doc.array(), includedBase, out, depth + 1);
+        } else if (doc.isObject()) {
+            out->append(doc.object());
+        }
     }
 }
 
@@ -215,18 +179,64 @@ void applyCommandLineOverrides(BarConfig *config)
     }
 }
 
-void readStringList(const QJsonObject &root, const QString &key, QStringList *target)
+// A module list that may contain inline groups. A string is a module name as-is. An object
+// `{ "<name>": [ {id/orientation/drawer}, "Child", ... ] }` (or `{ "<name>": { "modules":
+// [...], ... } }`) is an inline group: it's normalised into `groups["group/<name>"]` and the
+// list gets the "group/<name>" reference token — so both this and waybar's top-level
+// `group/<name>` form collapse to the same internal representation Bar.qml renders.
+// Parse an inline group's body into its def map (options + a normalised "modules" list).
+// The body is either an array — `[ {opts}, "Child", ... ]` (opts objects are merged into the
+// def, strings are children) — or an object — `{ "modules": [...], ...opts }`.
+QVariantMap parseInlineGroupBody(const QJsonValue &body)
+{
+    QVariantMap def;
+    QStringList children;
+    if (body.isArray()) {
+        for (const auto &child : body.toArray()) {
+            if (child.isString()) {
+                children.append(child.toString());
+            } else if (child.isObject()) {
+                const QVariantMap opts = child.toObject().toVariantMap();
+                for (auto it = opts.constBegin(); it != opts.constEnd(); ++it) {
+                    def.insert(it.key(), it.value());
+                }
+            }
+        }
+    } else if (body.isObject()) {
+        def = body.toObject().toVariantMap();
+        for (const auto &child : body.toObject().value(QStringLiteral("modules")).toArray()) {
+            if (child.isString()) {
+                children.append(child.toString());
+            }
+        }
+    }
+    def.insert(QStringLiteral("modules"), children);
+    return def;
+}
+
+void readModuleList(const QJsonObject &root, const QString &key, QStringList *target, QVariantMap *groups)
 {
     const auto arr = root.value(key).toArray();
     if (arr.isEmpty()) {
         return;
     }
-
     target->clear();
     for (const auto &value : arr) {
         if (value.isString()) {
             target->append(value.toString());
+            continue;
         }
+        if (!value.isObject()) {
+            continue;
+        }
+        const QJsonObject obj = value.toObject();
+        if (obj.size() != 1) {
+            continue;
+        }
+        const QString name = obj.constBegin().key();
+        const QString ref = QStringLiteral("group/") + name;
+        groups->insert(ref, parseInlineGroupBody(obj.constBegin().value()));
+        target->append(ref);
     }
 }
 
@@ -312,7 +322,7 @@ QVariantMap parseTaskbar(const QJsonObject &root)
     return taskbar;
 }
 
-static BarConfig parseBarObject(const QJsonObject &root)
+BarConfig parseBarObject(const QJsonObject &root)
 {
     BarConfig config;
     config.height = root.value(QStringLiteral("height")).toInt(config.height);
@@ -333,6 +343,7 @@ static BarConfig parseBarObject(const QJsonObject &root)
     config.fontFamily = root.value(QStringLiteral("fontFamily")).toString(config.fontFamily);
     config.fontSize = root.value(QStringLiteral("fontSize")).toInt(config.fontSize);
     config.styleSheet = root.value(QStringLiteral("styleSheet")).toString(config.styleSheet);
+    config.baseStyleSheet = root.value(QStringLiteral("baseStyleSheet")).toString(config.baseStyleSheet);
     config.trayItemPadding = root.value(QStringLiteral("trayItemPadding")).toInt(config.trayItemPadding);
     config.background = readColor(root, QStringLiteral("background"), config.background);
     config.foreground = readColor(root, QStringLiteral("foreground"), config.foreground);
@@ -353,14 +364,21 @@ static BarConfig parseBarObject(const QJsonObject &root)
     config.memory = parseDisplay(root, QStringLiteral("memory"), {QStringLiteral("cycle")}, QStringLiteral("mem"));
     config.network = parseDisplay(root, QStringLiteral("network"), {QStringLiteral("cycle")}, QStringLiteral("net"));
 
+    // Collect every top-level "group/<name>" object (waybar group/drawer modules).
+    config.groups.clear();
+    for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
+        if (it.key().startsWith(QStringLiteral("group/")) && it.value().isObject())
+            config.groups.insert(it.key(), it.value().toObject().toVariantMap());
+    }
+
     const bool hasModuleSections = root.contains(QStringLiteral("modules-left"))
         || root.contains(QStringLiteral("modules-center"))
         || root.contains(QStringLiteral("modules-right"));
 
     if (hasModuleSections) {
-        readStringList(root, QStringLiteral("modules-left"), &config.appletsLeft);
-        readStringList(root, QStringLiteral("modules-center"), &config.appletsCenter);
-        readStringList(root, QStringLiteral("modules-right"), &config.appletsRight);
+        readModuleList(root, QStringLiteral("modules-left"), &config.appletsLeft, &config.groups);
+        readModuleList(root, QStringLiteral("modules-center"), &config.appletsCenter, &config.groups);
+        readModuleList(root, QStringLiteral("modules-right"), &config.appletsRight, &config.groups);
         config.applets = config.appletsLeft;
         config.applets.append(config.appletsCenter);
         config.applets.append(config.appletsRight);
@@ -386,6 +404,7 @@ static BarConfig parseBarObject(const QJsonObject &root)
 QList<BarConfig> loadConfigs()
 {
     const QString path = configPath();
+    scaffoldConfigDir(path); // first run: write the bundled starter kit into a fresh config dir
     ensureConfigSchema(path);
 
     const auto withDefaults = [&](BarConfig config, int index = 0) {
@@ -403,14 +422,12 @@ QList<BarConfig> loadConfigs()
     QString jsonError;
     const auto document = Jsonc::parse(QString::fromUtf8(file.readAll()), &jsonError);
 
-    // A single object is one bar; an array is several (multi-monitor, top+bottom).
+    // A single object is one bar; an array is several (multi-monitor, top+bottom). Array
+    // entries may also be "path" strings — includes, expanded relative to this file's dir.
     QList<QJsonObject> barObjects;
+    const QString baseDir = QFileInfo(path).absolutePath();
     if (document.isArray()) {
-        for (const auto &value : document.array()) {
-            if (value.isObject()) {
-                barObjects.append(value.toObject());
-            }
-        }
+        collectBarObjects(document.array(), baseDir, &barObjects, 0);
     } else if (document.isObject()) {
         barObjects.append(document.object());
     }

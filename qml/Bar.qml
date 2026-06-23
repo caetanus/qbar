@@ -80,6 +80,11 @@ Item {
     }
 
     function appletUrl(name) {
+        // A "group/<name>" token (waybar group/drawer) renders as the Group container,
+        // which loads its own child applets (reusing this same appletUrl).
+        if (name.indexOf("group/") === 0) {
+            return "qrc:/qbar/Group.qml"
+        }
         if (name.indexOf("CustomTool:") === 0) {
             // A custom entry with a `source` is a RUNTIME QML widget (user-provided,
             // not compiled in); one with `exec` is the script-driven CustomTool.
@@ -89,7 +94,30 @@ Item {
                 return root.resolveWidgetUrl(String(def.source))
             return "qrc:/applets/CustomTool.qml"
         }
-        return "qrc:/applets/" + name + ".qml"
+        // A "Name/variant" suffix (waybar submodule style, e.g. "Sound/out") loads the base
+        // applet "Name" and passes "variant" to it — so one applet can render in modes.
+        return "qrc:/applets/" + root.appletBaseName(name) + ".qml"
+    }
+
+    // The base applet name without a "/variant" suffix ("Sound/out" -> "Sound").
+    function appletBaseName(name) {
+        var slash = name.indexOf("/")
+        return slash >= 0 ? name.substring(0, slash) : name
+    }
+
+    // The "/variant" suffix of an applet name ("Sound/out" -> "out"), or "" if none. Passed
+    // to any loaded applet exposing a `variant` property.
+    function appletVariant(name) {
+        if (name.indexOf("group/") === 0 || name.indexOf("CustomTool:") === 0)
+            return ""
+        var slash = name.indexOf("/")
+        return slash >= 0 ? name.substring(slash + 1) : ""
+    }
+
+    // Feed a freshly-loaded applet its "/variant" (no-op when it has none or no such prop).
+    function wireVariant(name, item) {
+        if (item && "variant" in item)
+            item.variant = root.appletVariant(name)
     }
 
     // Resolve a custom-widget `source` to a loadable URL: a qrc:/ or file:/ URL is used
@@ -104,11 +132,32 @@ Item {
         return "file://" + dir + "/" + src
     }
 
+    // True when this slot hosts a runtime QML widget (a custom tool with a `source`),
+    // i.e. one loaded from disk and therefore hot-reloadable.
+    function isRuntimeWidget(name) {
+        if (name.indexOf("CustomTool:") !== 0)
+            return false
+        var id = name.substring("CustomTool:".length)
+        var def = (typeof customTools !== "undefined" && customTools && customTools[id]) ? customTools[id] : null
+        return !!(def && def.source && String(def.source).length > 0)
+    }
+
     function customToolId(name) {
         if (name.indexOf("CustomTool:") === 0) {
             return name.substring("CustomTool:".length)
         }
         return ""
+    }
+
+    // Feed a freshly-loaded Group its definition + the shared applet-URL resolver, so it
+    // can render its child modules. No-op for non-group slots.
+    function wireGroup(name, item) {
+        if (name.indexOf("group/") !== 0 || !item)
+            return
+        item.groupName = name
+        item.urlResolver = root.appletUrl
+        var groups = (typeof barGroups !== "undefined" && barGroups) ? barGroups : ({})
+        item.groupDef = groups[name] ? groups[name] : ({})
     }
 
     // Surface a clear warning when an applet or a runtime custom QML widget fails to
@@ -182,12 +231,16 @@ Item {
         titleLoader.item.rightOccupiedWidth = root.width - rightPane.x
     }
 
-    Rectangle {
+    // The bar's own background. CssFill (not a plain Rectangle) so window#waybar can use
+    // `background: linear-gradient(...)` / `background-image` — and so it restyles live on
+    // CSS reload, like the #left/#center/#right containers.
+    QBar.CssFill {
         anchors.fill: parent
         anchors.leftMargin: root.barMarginLeft
         anchors.rightMargin: root.barMarginRight
-        color: root.barBg
+        style: root.barStyle
         radius: root.barRadius
+        defaultColor: root.barBg
     }
 
     Item {
@@ -249,12 +302,29 @@ Item {
                         source: appletName === "Temperature" && temperatureModel && !temperatureModel.available ? "" : root.appletUrl(appletName)
                         asynchronous: false
 
+                        // Hot-reload: BarWindow watches runtime widget files, and on a change
+                        // clears the QML cache and bumps widgetReloadGeneration. Re-setting the
+                        // source (via empty) drops the Loader's cached QQmlComponent so it
+                        // recompiles the widget from disk; appletUrl is constant per slot, so
+                        // overwriting the binding here is harmless for a runtime widget.
+                        property int reloadGeneration: (typeof barWindow !== "undefined" && barWindow)
+                            ? barWindow.widgetReloadGeneration : 0
+                        onReloadGenerationChanged: {
+                            if (root.isRuntimeWidget(appletName)) {
+                                var url = root.appletUrl(appletName)
+                                source = ""
+                                source = url
+                            }
+                        }
+
                         onStatusChanged: root.reportLoadStatus(appletName, loader)
 
                         onLoaded: {
                             if (appletName.indexOf("CustomTool:") === 0 && loader.item && "toolId" in loader.item) {
                                 loader.item.toolId = root.customToolId(appletName)
                             }
+                            root.wireGroup(appletName, loader.item)
+                            root.wireVariant(appletName, loader.item)
                             slot.preferredWidth = root.appletWidth(loader.item)
                             root.bindTitleWidth(slot)
                         }
@@ -342,12 +412,29 @@ Item {
                         source: appletName === "Temperature" && temperatureModel && !temperatureModel.available ? "" : root.appletUrl(appletName)
                         asynchronous: false
 
+                        // Hot-reload: BarWindow watches runtime widget files, and on a change
+                        // clears the QML cache and bumps widgetReloadGeneration. Re-setting the
+                        // source (via empty) drops the Loader's cached QQmlComponent so it
+                        // recompiles the widget from disk; appletUrl is constant per slot, so
+                        // overwriting the binding here is harmless for a runtime widget.
+                        property int reloadGeneration: (typeof barWindow !== "undefined" && barWindow)
+                            ? barWindow.widgetReloadGeneration : 0
+                        onReloadGenerationChanged: {
+                            if (root.isRuntimeWidget(appletName)) {
+                                var url = root.appletUrl(appletName)
+                                source = ""
+                                source = url
+                            }
+                        }
+
                         onStatusChanged: root.reportLoadStatus(appletName, loader)
 
                         onLoaded: {
                             if (appletName.indexOf("CustomTool:") === 0 && loader.item && "toolId" in loader.item) {
                                 loader.item.toolId = root.customToolId(appletName)
                             }
+                            root.wireGroup(appletName, loader.item)
+                            root.wireVariant(appletName, loader.item)
                             slot.preferredWidth = root.appletWidth(loader.item)
                             root.bindTitleWidth(slot)
                         }
@@ -463,12 +550,29 @@ Item {
                         source: appletName === "Temperature" && temperatureModel && !temperatureModel.available ? "" : root.appletUrl(appletName)
                         asynchronous: false
 
+                        // Hot-reload: BarWindow watches runtime widget files, and on a change
+                        // clears the QML cache and bumps widgetReloadGeneration. Re-setting the
+                        // source (via empty) drops the Loader's cached QQmlComponent so it
+                        // recompiles the widget from disk; appletUrl is constant per slot, so
+                        // overwriting the binding here is harmless for a runtime widget.
+                        property int reloadGeneration: (typeof barWindow !== "undefined" && barWindow)
+                            ? barWindow.widgetReloadGeneration : 0
+                        onReloadGenerationChanged: {
+                            if (root.isRuntimeWidget(appletName)) {
+                                var url = root.appletUrl(appletName)
+                                source = ""
+                                source = url
+                            }
+                        }
+
                         onStatusChanged: root.reportLoadStatus(appletName, loader)
 
                         onLoaded: {
                             if (appletName.indexOf("CustomTool:") === 0 && loader.item && "toolId" in loader.item) {
                                 loader.item.toolId = root.customToolId(appletName)
                             }
+                            root.wireGroup(appletName, loader.item)
+                            root.wireVariant(appletName, loader.item)
                             slot.preferredWidth = root.appletWidth(loader.item)
                         }
                     }

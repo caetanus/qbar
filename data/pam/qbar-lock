@@ -1,0 +1,6 @@
+#%PAM-1.0
+
+# Local deployments may put pam_fprintd.so before password auth, for example:
+# auth sufficient pam_fprintd.so
+auth include login
+account include login

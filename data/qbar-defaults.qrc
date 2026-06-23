@@ -1,0 +1,43 @@
+<RCC>
+  <qresource prefix="/defaults">
+    <file alias="config.json">../config/config.json</file>
+    <file alias="config.schema.json">../config.schema.json</file>
+    <file alias="themes/aqua-glass.css">../config/themes/aqua-glass.css</file>
+    <file alias="themes/bliss-xp.css">../config/themes/bliss-xp.css</file>
+    <file alias="themes/catppuccin-frappe.css">../config/themes/catppuccin-frappe.css</file>
+    <file alias="themes/catppuccin-latte.css">../config/themes/catppuccin-latte.css</file>
+    <file alias="themes/catppuccin-macchiato.css">../config/themes/catppuccin-macchiato.css</file>
+    <file alias="themes/catppuccin-mocha.css">../config/themes/catppuccin-mocha.css</file>
+    <file alias="themes/circuit-bloom.css">../config/themes/circuit-bloom.css</file>
+    <file alias="themes/dracula.css">../config/themes/dracula.css</file>
+    <file alias="themes/ember-terminal.css">../config/themes/ember-terminal.css</file>
+    <file alias="themes/everforest-dark.css">../config/themes/everforest-dark.css</file>
+    <file alias="themes/gruvbox-dark.css">../config/themes/gruvbox-dark.css</file>
+    <file alias="themes/gruvbox-light.css">../config/themes/gruvbox-light.css</file>
+    <file alias="themes/high-contrast.css">../config/themes/high-contrast.css</file>
+    <file alias="themes/kanagawa.css">../config/themes/kanagawa.css</file>
+    <file alias="themes/macchiato.css">../config/themes/macchiato.css</file>
+    <file alias="themes/material-ocean.css">../config/themes/material-ocean.css</file>
+    <file alias="themes/mojave-drift.css">../config/themes/mojave-drift.css</file>
+    <file alias="themes/neon-shrine.css">../config/themes/neon-shrine.css</file>
+    <file alias="themes/nord.css">../config/themes/nord.css</file>
+    <file alias="themes/one-dark.css">../config/themes/one-dark.css</file>
+    <file alias="themes/palenight.css">../config/themes/palenight.css</file>
+    <file alias="themes/paper-sun.css">../config/themes/paper-sun.css</file>
+    <file alias="themes/rose-pine.css">../config/themes/rose-pine.css</file>
+    <file alias="themes/solarized-dark.css">../config/themes/solarized-dark.css</file>
+    <file alias="themes/solarized-light.css">../config/themes/solarized-light.css</file>
+    <file alias="themes/tokyo-night.css">../config/themes/tokyo-night.css</file>
+    <file alias="themes/tundra-signal.css">../config/themes/tundra-signal.css</file>
+    <file alias="themes/vinyl-dusk.css">../config/themes/vinyl-dusk.css</file>
+    <file alias="widgets/Bitcoin.qml">../config/widgets/Bitcoin.qml</file>
+    <file alias="widgets/BitcoinPopup.qml">../config/widgets/BitcoinPopup.qml</file>
+    <file alias="widgets/ExampleWidget.qml">../config/widgets/ExampleWidget.qml</file>
+    <file alias="widgets/SpeedTest.qml">../config/widgets/SpeedTest.qml</file>
+    <file alias="widgets/SpeedTestPopup.qml">../config/widgets/SpeedTestPopup.qml</file>
+    <file alias="widgets/Weather.qml">../config/widgets/Weather.qml</file>
+    <file alias="widgets/WeatherBackdrop.qml">../config/widgets/WeatherBackdrop.qml</file>
+    <file alias="widgets/WeatherPopup.qml">../config/widgets/WeatherPopup.qml</file>
+    <file alias="widgets/Wmo.js">../config/widgets/Wmo.js</file>
+  </qresource>
+</RCC>

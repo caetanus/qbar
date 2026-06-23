@@ -1,4 +1,5 @@
-/* Catppuccin Latte — https://github.com/catppuccin/catppuccin */
+/* Catppuccin Latte — adapted from the Waybar theme by the Catppuccin org
+   (https://github.com/catppuccin/waybar, MIT). Palette: github.com/catppuccin/catppuccin. */
 
 window#waybar    { background-color: rgba(239, 241, 245, 0.85); border-radius: 8px; border-left: 80px; border-right: 80px; padding: 0 6px; }
 

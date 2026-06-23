@@ -50,6 +50,7 @@ private:
 
     QString m_service;
     QString m_path;
+    QString m_interface;  // properties interface — differs per service (see connectToService)
     bool m_available = false;
     QString m_activeProfile;
     QStringList m_profiles;

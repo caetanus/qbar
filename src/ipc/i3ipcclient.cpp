@@ -591,10 +591,10 @@ void I3IpcClient::handleMessage(quint32 type, const QByteArray &payload, bool ev
             m_windows.replace(std::move(windows));
             const qint64 id = findQbarNode(tree, QCoreApplication::applicationPid());
             if (id >= 0) {
-                qWarning() << "QBar sway node id:" << id;
+                qDebug() << "QBar sway node id:" << id;
                 emit qbarNodeFound(id);
             } else {
-                qWarning() << "QBar sway node was not found in GET_TREE";
+                qDebug() << "QBar sway node was not found in GET_TREE";
             }
         }
         return;

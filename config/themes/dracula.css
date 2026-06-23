@@ -1,4 +1,5 @@
-/* Dracula — https://draculatheme.com */
+/* Dracula — adapted from the Waybar theme by the Dracula org
+   (https://github.com/dracula/waybar). Palette: https://draculatheme.com. */
 
 * { border: none; border-radius: 0; }
 window#waybar    { background-color: rgba(40, 42, 54, 0.90); border-radius: 8px; }

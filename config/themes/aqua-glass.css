@@ -15,8 +15,8 @@
 window#waybar {
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(176, 195, 216, 0.50) 48%, rgba(70, 83, 98, 0.40));
     border-radius: 0px;
-    border-left: 96px;
-    border-right: 96px;
+    border-left: 20px;
+    border-right: 20px;
     padding: 0 8px;
 }
 

@@ -72,7 +72,7 @@ Item {
         placement: "below"
         horizontalAlignment: "left"
 
-        onPopupOpened: {
+        onPopupOpened: function(id) {
             root.tooltipId = id
             root.refresh()
             root.opened(id)

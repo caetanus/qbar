@@ -1,5 +1,5 @@
 import QtQuick
-import Qt.labs.settings
+import QtCore
 import "qrc:/qbar" as QBar
 
 QBar.CssRect {
@@ -31,6 +31,12 @@ QBar.CssRect {
     signal preferredWidthUpdated(int width)
 
     property int preferredWidth: 0
+
+    // Reachable over the JSON IPC as the "clock" popup (e.g. a keyboard shortcut):
+    // reuse the click path's activated() so the calendar opens exactly as on click.
+    function open() { root.activated() }
+    function toggle() { root.activated() }
+    function close() { if (typeof qbarPopups !== "undefined" && qbarPopups) qbarPopups.closeAll() }
 
     function cssBoxParts(name) {
         var raw = cssStyle[name] || ""
@@ -90,6 +96,8 @@ QBar.CssRect {
         formatIndex = clockSettings.formatIndex
         clockText.text = Qt.formatDateTime(new Date(), root.currentFormat())
         syncPreferredWidth()
+        if (typeof qbarIpc !== "undefined" && qbarIpc)
+            qbarIpc.registerPopup("clock", root)
     }
 
     onFormatIndexChanged: {

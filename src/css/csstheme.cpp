@@ -4,11 +4,14 @@
 
 #include <QCryptographicHash>
 #include <QDebug>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QMetaMethod>
 #include <QMetaProperty>
 #include <QRegularExpression>
+#include <QUrl>
 #include <algorithm>
 
 namespace {
@@ -39,6 +42,48 @@ QString substituteVars(const QString &text, const QHash<QString, QString> &vars)
     }
     result += text.mid(last);
     return result;
+}
+
+// Inline `@import` statements by reading the referenced file and recursively expanding
+// it in place. Resolves a bare/relative path against `baseDir`; `visited` (absolute paths)
+// guards against import cycles. http(s) imports are skipped here — there is no base dir or
+// synchronous fetch at this layer (use `set-css <url>` for a remote *root* theme instead).
+QString expandImports(const QString &cssIn, const QString &baseDir, QStringList &visited)
+{
+    static const QRegularExpression importRe(
+        QStringLiteral(R"(@import\s+(?:url\(\s*)?['"]?([^'")\s]+)['"]?\s*\)?\s*;)"));
+
+    QString out;
+    int last = 0;
+    auto it = importRe.globalMatch(cssIn);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch m = it.next();
+        out += cssIn.mid(last, m.capturedStart() - last);
+        last = m.capturedEnd();
+
+        QString ref = m.captured(1);
+        if (ref.startsWith(QLatin1String("http://")) || ref.startsWith(QLatin1String("https://"))) {
+            qWarning() << "CssTheme @import: remote imports are not supported:" << ref;
+            continue;
+        }
+        if (ref.startsWith(QLatin1String("file://")))
+            ref = QUrl(ref).toLocalFile();
+        const QString path = QFileInfo(ref).isAbsolute() ? ref : QDir(baseDir).filePath(ref);
+        const QString abs = QFileInfo(path).absoluteFilePath();
+        if (visited.contains(abs))
+            continue; // already imported (cycle / duplicate)
+        visited.append(abs);
+
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qWarning() << "CssTheme @import: cannot read" << path;
+            continue;
+        }
+        const QString sub = QString::fromUtf8(file.readAll());
+        out += expandImports(sub, QFileInfo(path).absolutePath(), visited);
+    }
+    out += cssIn.mid(last);
+    return out;
 }
 
 // Expand GTK-style `@define-color name value;` declarations: collect them,
@@ -175,7 +220,7 @@ FullSelectorParse parseFullSelector(const QString &fullSelector)
     return result;
 }
 
-QVariantMap parseDeclarationBlock(const QString &block)
+QVariantMap parseDeclarationBlock(const QString &block, QVariantMap *importantOut = nullptr)
 {
     QVariantMap props;
     int i = 0;
@@ -188,6 +233,16 @@ QVariantMap parseDeclarationBlock(const QString &block)
         if (colon > 0) {
             const QString prop = decl.left(colon).trimmed().toLower();
             QString val = decl.mid(colon + 1).trimmed();
+            // CSS `!important`: strip a trailing `!important` (optional space) and flag it,
+            // so the cascade can let it win over higher-specificity non-important rules.
+            bool important = false;
+            {
+                const int bang = val.toLower().lastIndexOf(QLatin1String("!important"));
+                if (bang >= 0 && val.mid(bang + 10).trimmed().isEmpty()) {
+                    val = val.left(bang).trimmed();
+                    important = true;
+                }
+            }
             // Normalize CSS color keywords that Qt cannot parse to an explicit
             // fully-transparent hex, in the engine, so every consumer gets a usable
             // value — a raw QML `color:` binding or a Canvas fillStyle, not just
@@ -206,8 +261,11 @@ QVariantMap parseDeclarationBlock(const QString &block)
             if (low == QLatin1String("transparent")
                 || (colorProp && (low == QLatin1String("none") || low == QLatin1String("inherit"))))
                 val = QStringLiteral("#00000000");
-            if (!prop.isEmpty())
+            if (!prop.isEmpty()) {
                 props.insert(prop, val);
+                if (important && importantOut != nullptr)
+                    importantOut->insert(prop, val);
+            }
         }
         i = end + 1;
     }
@@ -333,12 +391,13 @@ QList<CssRule> parseCss(const QString &css)
         const QString blockContent = cleaned.mid(blockStart + 1, blockEnd - blockStart - 1);
 
         if (!selectorPart.isEmpty()) {
-            const QVariantMap props = parseDeclarationBlock(blockContent);
+            QVariantMap important;
+            const QVariantMap props = parseDeclarationBlock(blockContent, &important);
             if (!props.isEmpty()) {
                 const QStringList selectors = selectorPart.split(QLatin1Char(','), Qt::SkipEmptyParts);
                 for (const QString &sel : selectors) {
                     const FullSelectorParse parsed = parseFullSelector(sel.trimmed());
-                    rules.append({parsed.ancestorId, parsed.subject, props});
+                    rules.append({parsed.ancestorId, parsed.subject, props, important});
                 }
             }
         }
@@ -396,35 +455,63 @@ CssTheme::CssTheme(QObject *parent)
 
 void CssTheme::load(const QString &path)
 {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning() << "qbar: cannot open CSS file" << path;
-        return;
-    }
-    const QByteArray data = file.readAll();
-    const QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Md5);
-
-    // Re-add to watcher (editors often atomically replace files, removing them from the watch list)
-    if (!m_watcher->files().contains(path)) {
-        m_watcher->addPath(path);
-    }
-
-    if (hash == m_contentHash) {
-        return; // content unchanged — touch or spurious notification
-    }
-
-    // Stop watching the old path when switching files
-    if (!m_watchedPath.isEmpty() && m_watchedPath != path)
-        m_watcher->removePath(m_watchedPath);
-
-    m_contentHash = hash;
-    m_watchedPath = path;
-    loadFromString(QString::fromUtf8(data));
+    loadLayered(QStringList{path});
 }
 
-void CssTheme::onCssFileChanged(const QString &path)
+void CssTheme::setStylePrelude(const QString &css)
 {
-    load(path);
+    m_stylePrelude = css; // applied on the next loadLayered() the caller triggers
+}
+
+void CssTheme::loadLayered(const QStringList &paths)
+{
+    m_requestedLayer = paths; // remembered so a file-change reload re-reads the whole layer
+
+    QString combined;
+    QStringList present;
+    for (const QString &path : paths) {
+        if (path.isEmpty())
+            continue;
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qWarning() << "qbar: cannot open CSS file" << path;
+            continue;
+        }
+        present.append(path);
+        // Inline each file's @imports relative to ITS OWN directory, then concatenate so
+        // later sheets (the theme) cascade over earlier ones (the base).
+        QStringList visited{QFileInfo(path).absoluteFilePath()};
+        combined += expandImports(QString::fromUtf8(file.readAll()),
+                                  QFileInfo(path).absolutePath(), visited);
+        combined += QLatin1Char('\n');
+    }
+
+    // Prepend the config-derived prelude (lowest priority) so the theme CSS — concatenated
+    // after it — overrides it on equal specificity. The CSS is thus the single source of truth.
+    if (!m_stylePrelude.isEmpty())
+        combined = m_stylePrelude + QLatin1Char('\n') + combined;
+
+    // Watch every present file; drop watches for files no longer in the layer. (Editors
+    // atomically replace files, dropping them from the watch list — re-add on each load.)
+    const QStringList watched = m_watcher->files();
+    for (const QString &w : watched)
+        if (!present.contains(w))
+            m_watcher->removePath(w);
+    for (const QString &p : present)
+        if (!m_watcher->files().contains(p))
+            m_watcher->addPath(p);
+
+    const QByteArray hash = QCryptographicHash::hash(combined.toUtf8(), QCryptographicHash::Md5);
+    if (hash == m_contentHash)
+        return; // content unchanged — touch or spurious notification
+    m_contentHash = hash;
+    loadFromString(combined);
+}
+
+void CssTheme::onCssFileChanged(const QString &)
+{
+    // Any file in the layer changed — re-read the whole layer (base + theme).
+    loadLayered(m_requestedLayer);
 }
 
 void CssTheme::loadFromString(const QString &css)
@@ -592,6 +679,7 @@ QVariantMap CssTheme::resolveImpl(const QString &contextId, const QString &id, c
         int specificity;
         int sourceOrder;
         QVariantMap props;
+        QVariantMap important;
     };
 
     QList<Match> matches;
@@ -602,7 +690,7 @@ QVariantMap CssTheme::resolveImpl(const QString &contextId, const QString &id, c
         if (!rule.requiredAncestorId.isEmpty() && rule.requiredAncestorId != contextId)
             continue;
         if (selectorMatches(rule.selector, contextId, id, classes, pseudoElement))
-            matches.append({rule.selector.specificity, i, rule.properties});
+            matches.append({rule.selector.specificity, i, rule.properties, rule.importantProperties});
     }
 
     std::stable_sort(matches.begin(), matches.end(), [](const Match &a, const Match &b) {
@@ -612,6 +700,12 @@ QVariantMap CssTheme::resolveImpl(const QString &contextId, const QString &id, c
     QVariantMap result;
     for (const Match &m : matches) {
         for (auto it = m.props.constBegin(); it != m.props.constEnd(); ++it)
+            result.insert(it.key(), it.value());
+    }
+    // `!important` overlay: re-apply important declarations (in specificity order) on top,
+    // so they win over any non-important declaration regardless of its specificity.
+    for (const Match &m : matches) {
+        for (auto it = m.important.constBegin(); it != m.important.constEnd(); ++it)
             result.insert(it.key(), it.value());
     }
     return result;
@@ -624,6 +718,7 @@ QVariantMap CssTheme::resolveExact(const QString &id, const QStringList &classes
         int specificity;
         int sourceOrder;
         QVariantMap props;
+        QVariantMap important;
     };
 
     QList<Match> matches;
@@ -645,7 +740,7 @@ QVariantMap CssTheme::resolveExact(const QString &id, const QStringList &classes
             if (cls != requiredClass && !classes.contains(cls)) { ok = false; break; }
         if (!ok)
             continue;
-        matches.append({sel.specificity, i, rule.properties});
+        matches.append({sel.specificity, i, rule.properties, rule.importantProperties});
     }
 
     std::stable_sort(matches.begin(), matches.end(), [](const Match &a, const Match &b) {
@@ -655,6 +750,9 @@ QVariantMap CssTheme::resolveExact(const QString &id, const QStringList &classes
     QVariantMap result;
     for (const Match &m : matches)
         for (auto it = m.props.constBegin(); it != m.props.constEnd(); ++it)
+            result.insert(it.key(), it.value());
+    for (const Match &m : matches) // !important overlay (see resolveImpl)
+        for (auto it = m.important.constBegin(); it != m.important.constEnd(); ++it)
             result.insert(it.key(), it.value());
     return result;
 }
@@ -677,6 +775,26 @@ qreal CssTheme::parseLength(const QString &value, qreal fallback) const
     if (CssValueParser::parseLengthPx(value, &out))
         return out;
     return fallback;
+}
+
+qreal CssTheme::parseFontSize(const QString &value, qreal fallbackPt) const
+{
+    // Resolve a CSS font-size to POINTS (QML Text.pointSize), centrally, so no component
+    // hand-converts units. CSS px are device-independent pixels → points ×72/96; pt is
+    // points; em/rem scale `fallbackPt` (the element's base size); a bare number is points.
+    const QString s = value.trimmed().toLower();
+    // Forgiving number+unit parse so "13px" / "10pt" / "1.5rem" / "11" all work.
+    static const QRegularExpression numRe(QStringLiteral("^\\s*(-?\\d*\\.?\\d+)\\s*([a-z%]*)\\s*$"));
+    const QRegularExpressionMatch m = numRe.match(s);
+    if (!m.hasMatch())
+        return fallbackPt;
+    const double num = m.captured(1).toDouble();
+    const QString unit = m.captured(2);
+    if (unit == QLatin1String("px"))
+        return num * 72.0 / 96.0;
+    if (unit == QLatin1String("em") || unit == QLatin1String("rem"))
+        return num * fallbackPt;
+    return num; // pt or unitless → points
 }
 
 QVariantMap CssTheme::parseGradient(const QString &cssValue) const
@@ -806,4 +924,70 @@ int CssTheme::parseEasing(const QString &cssValue, int fallbackType) const
 QVariantMap CssTheme::parseTransition(const QString &cssValue) const
 {
     return CssValueParser::parseTransition(cssValue);
+}
+
+QVariantMap CssTheme::parseTransform(const QString &cssValue) const
+{
+    QVariantMap result{
+        {QStringLiteral("rotate"), 0.0},
+        {QStringLiteral("scale"), 1.0},
+        {QStringLiteral("scaleX"), 1.0},
+        {QStringLiteral("scaleY"), 1.0},
+        {QStringLiteral("translateX"), 0.0},
+        {QStringLiteral("translateY"), 0.0},
+    };
+    if (cssValue.trimmed().isEmpty()) {
+        return result;
+    }
+
+    const auto firstNumber = [](const QString &raw, double fallback) -> double {
+        static const QRegularExpression re(QStringLiteral("(-?\\d*\\.?\\d+)"));
+        const auto m = re.match(raw);
+        return m.hasMatch() ? m.captured(1).toDouble() : fallback;
+    };
+    const auto angleDeg = [&firstNumber](const QString &raw) -> double {
+        const double v = firstNumber(raw, 0.0);
+        const QString s = raw.toLower();
+        if (s.contains(QLatin1String("turn"))) {
+            return v * 360.0;
+        }
+        if (s.contains(QLatin1String("rad"))) { // grad is rare; treat any "rad" as radians
+            return v * 180.0 / 3.141592653589793;
+        }
+        return v; // "deg" or bare number
+    };
+
+    static const QRegularExpression fnRe(QStringLiteral("([a-zA-Z]+)\\s*\\(([^)]*)\\)"));
+    auto it = fnRe.globalMatch(cssValue);
+    while (it.hasNext()) {
+        const auto m = it.next();
+        const QString fn = m.captured(1).toLower();
+        const QStringList args = m.captured(2).split(QLatin1Char(','));
+        if (args.isEmpty()) {
+            continue;
+        }
+        if (fn == QLatin1String("rotate")) {
+            result.insert(QStringLiteral("rotate"), angleDeg(args.at(0)));
+        } else if (fn == QLatin1String("scale")) {
+            const double sx = firstNumber(args.at(0), 1.0);
+            const double sy = args.size() >= 2 ? firstNumber(args.at(1), sx) : sx;
+            result.insert(QStringLiteral("scaleX"), sx);
+            result.insert(QStringLiteral("scaleY"), sy);
+            result.insert(QStringLiteral("scale"), sx);
+        } else if (fn == QLatin1String("scalex")) {
+            result.insert(QStringLiteral("scaleX"), firstNumber(args.at(0), 1.0));
+        } else if (fn == QLatin1String("scaley")) {
+            result.insert(QStringLiteral("scaleY"), firstNumber(args.at(0), 1.0));
+        } else if (fn == QLatin1String("translate")) {
+            result.insert(QStringLiteral("translateX"), firstNumber(args.at(0), 0.0));
+            if (args.size() >= 2) {
+                result.insert(QStringLiteral("translateY"), firstNumber(args.at(1), 0.0));
+            }
+        } else if (fn == QLatin1String("translatex")) {
+            result.insert(QStringLiteral("translateX"), firstNumber(args.at(0), 0.0));
+        } else if (fn == QLatin1String("translatey")) {
+            result.insert(QStringLiteral("translateY"), firstNumber(args.at(0), 0.0));
+        }
+    }
+    return result;
 }

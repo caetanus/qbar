@@ -6,6 +6,8 @@
 
 #include <QCoreApplication>
 #include <QDebug>
+#include <QDynamicPropertyChangeEvent>
+#include <QEvent>
 #include <QGuiApplication>
 #include <QRect>
 #include <QScreen>
@@ -104,17 +106,28 @@ const xdg_surface_listener xdgSurfaceListener = {
     QBarXdgPopupSurface::handleXdgSurfaceConfigure,
 };
 
+const xdg_surface_listener xdgToplevelSurfaceListener = {
+    QBarXdgToplevelSurface::handleXdgSurfaceConfigure,
+};
+
 const xdg_popup_listener xdgPopupListener = {
     QBarXdgPopupSurface::handlePopupConfigure,
     QBarXdgPopupSurface::handlePopupDone,
     QBarXdgPopupSurface::handlePopupRepositioned,
 };
 
+const xdg_toplevel_listener xdgToplevelListener = {
+    QBarXdgToplevelSurface::handleToplevelConfigure,
+    QBarXdgToplevelSurface::handleToplevelClose,
+    QBarXdgToplevelSurface::handleConfigureBounds,
+    QBarXdgToplevelSurface::handleWmCapabilities,
+};
+
 } // namespace
 
 bool QBarLayerShellIntegration::initialize(QtWaylandClient::QWaylandDisplay *display)
 {
-    qWarning() << "QBar layer-shell integration initialize";
+    qDebug() << "QBar layer-shell integration initialize";
     RegistryState state;
     wl_display *wlDisplay = display->wl_display();
     wl_registry *registry = wl_display_get_registry(wlDisplay);
@@ -140,9 +153,15 @@ QtWaylandClient::QWaylandShellSurface *QBarLayerShellIntegration::createShellSur
     // xdg_popup and never get its layer geometry.
     const bool overlay = window != nullptr && window->window() != nullptr
         && window->window()->property("qbarOverlay").toBool();
+    const bool detached = window != nullptr && window->window() != nullptr
+        && window->window()->property("qbarDetachedPopup").toBool();
+    if (detached) {
+        qDebug() << "QBar layer-shell create detached xdg_toplevel surface";
+        return new QBarXdgToplevelSurface(this, window);
+    }
     if (!overlay && window != nullptr && window->window() != nullptr
         && (window->window()->flags() & Qt::Popup) == Qt::Popup) {
-        qWarning() << "QBar layer-shell create popup surface";
+        qDebug() << "QBar layer-shell create popup surface";
         return new QBarXdgPopupSurface(this, window);
     }
 
@@ -180,14 +199,42 @@ QBarLayerShellSurface::QBarLayerShellSurface(QBarLayerShellIntegration *integrat
     zwlr_layer_surface_v1_add_listener(m_layerSurface, &layerSurfaceListener, this);
     applyLayerState();
     wl_surface_commit(wlSurface());
-    qWarning() << "QBar layer-shell surface committed";
+    qDebug() << "QBar layer-shell surface committed";
+
+    // Watch the bar window for live CSS edge-gap changes. barwindow re-derives
+    // qbarBarMarginTop/Bottom from the theme on hot-reload (setProperty), which posts a
+    // QDynamicPropertyChangeEvent; re-apply + commit so a floating margin updates without a
+    // restart. (Initial construction sets the properties BEFORE this surface exists, so the
+    // first apply above already has them — the filter only matters for later reloads.)
+    if (window != nullptr && window->window() != nullptr) {
+        m_filteredWindow = window->window();
+        m_filteredWindow->installEventFilter(this);
+    }
 }
 
 QBarLayerShellSurface::~QBarLayerShellSurface()
 {
+    // Remove ourselves from the window's event-filter list before we die, or a later event to
+    // a still-alive window would dispatch through a dangling filter and crash
+    // (sendThroughObjectEventFilters → null).
+    if (m_filteredWindow != nullptr) {
+        m_filteredWindow->removeEventFilter(this);
+    }
     if (m_layerSurface != nullptr) {
         zwlr_layer_surface_v1_destroy(m_layerSurface);
     }
+}
+
+bool QBarLayerShellSurface::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::DynamicPropertyChange && m_layerSurface != nullptr) {
+        const QByteArray name = static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName();
+        if (name == "qbarBarMarginTop" || name == "qbarBarMarginBottom") {
+            applyLayerState();
+            wl_surface_commit(wlSurface());
+        }
+    }
+    return QtWaylandClient::QWaylandShellSurface::eventFilter(watched, event);
 }
 
 bool QBarLayerShellSurface::isExposed() const
@@ -198,7 +245,7 @@ bool QBarLayerShellSurface::isExposed() const
 void QBarLayerShellSurface::applyConfigure()
 {
     if (m_configuredSize.isValid()) {
-        qWarning() << "QBar layer-shell apply configure:" << m_configuredSize;
+        qDebug() << "QBar layer-shell apply configure:" << m_configuredSize;
         resizeFromApplyConfigure(m_configuredSize);
     }
 }
@@ -240,11 +287,18 @@ void QBarLayerShellSurface::configure(uint32_t serial, uint32_t width, uint32_t 
     m_configuredSize = QSize(width > 0 ? static_cast<int>(width) : 1,
                              height > 0 ? static_cast<int>(height) : fallbackHeight);
     m_configured = true;
-    qWarning() << "QBar layer-shell configure:" << m_configuredSize;
+    qDebug() << "QBar layer-shell configure:" << m_configuredSize;
     resizeFromApplyConfigure(m_configuredSize);
+    // Defer the exposure/update kick instead of calling it synchronously from this wl-event
+    // dispatch. Qt itself NEVER calls updateExposure() synchronously from a listener — it
+    // always marshals it (QueuedConnection). Calling it inline here re-enters Qt's window
+    // machinery mid-dispatch and races the frame-callback / shell-surface teardown path
+    // (QWaylandWindow::calculateExposure → mShellSurface->isExposed() on a freed surface).
+    // Binding the invoke to the window means Qt drops it if the window is being destroyed.
     if (window() != nullptr) {
-        window()->updateExposure();
-        window()->requestUpdate();
+        auto *w = window();
+        QMetaObject::invokeMethod(
+            w, [w]() { w->updateExposure(); w->requestUpdate(); }, Qt::QueuedConnection);
     }
     applyConfigureWhenPossible();
 }
@@ -324,9 +378,20 @@ void QBarLayerShellSurface::applyLayerState()
         verticalAnchor
             | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
             | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+    // Bar CSS margins → a floating bar (barwindow derives the px values). The compositor reserves
+    // `exclusive_zone + margin-on-the-anchored-edge`, so the two margins play different roles:
+    //   • anchored-edge margin (top for a top bar) — set_margin positions the bar off the screen
+    //     edge, and the compositor adds it to the reserved area for us.
+    //   • opposite-edge margin (bottom for a top bar) — the INNER gap between the bar and the
+    //     tiled windows; it isn't part of set_margin's effect, so it goes into the exclusive zone.
+    // Hence exclusive = height + innerGap (NOT height + anchoredGap, which would double-count the
+    // anchored margin and reserve a phantom strip).
+    const int marginTop = win != nullptr ? win->property("qbarBarMarginTop").toInt() : 0;
+    const int marginBottom = win != nullptr ? win->property("qbarBarMarginBottom").toInt() : 0;
+    const int innerGap = bottom ? marginTop : marginBottom;
     zwlr_layer_surface_v1_set_size(m_layerSurface, 0, static_cast<uint32_t>(height));
-    zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, exclusive ? height : 0);
-    zwlr_layer_surface_v1_set_margin(m_layerSurface, 0, 0, 0, 0);
+    zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, exclusive ? height + innerGap : 0);
+    zwlr_layer_surface_v1_set_margin(m_layerSurface, marginTop, 0, marginBottom, 0);
     zwlr_layer_surface_v1_set_keyboard_interactivity(
         m_layerSurface,
         ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
@@ -346,6 +411,122 @@ void QBarLayerShellSurface::handleClosed(void *data, zwlr_layer_surface_v1 *)
     static_cast<QBarLayerShellSurface *>(data)->closeFromCompositor();
 }
 
+QBarXdgToplevelSurface::QBarXdgToplevelSurface(QBarLayerShellIntegration *integration,
+                                               QtWaylandClient::QWaylandWindow *window)
+    : QtWaylandClient::QWaylandShellSurface(window)
+{
+    if (window != nullptr && window->window() != nullptr)
+        m_geometry = window->window()->geometry();
+    if (!m_geometry.isValid())
+        m_geometry.setSize(QSize(1, 1));
+
+    m_xdgSurface = xdg_wm_base_get_xdg_surface(integration->xdgWmBase(), wlSurface());
+    xdg_surface_add_listener(m_xdgSurface, &xdgToplevelSurfaceListener, this);
+    m_xdgToplevel = xdg_surface_get_toplevel(m_xdgSurface);
+    xdg_toplevel_add_listener(m_xdgToplevel, &xdgToplevelListener, this);
+    const QString title = window != nullptr && window->window() != nullptr
+        ? window->window()->title() : QStringLiteral("QBar Detached");
+    const QByteArray titleUtf8 = title.toUtf8();
+    xdg_toplevel_set_title(m_xdgToplevel, titleUtf8.constData());
+    xdg_toplevel_set_app_id(m_xdgToplevel, "qbar-detached");
+    wl_surface_commit(wlSurface());
+}
+
+QBarXdgToplevelSurface::~QBarXdgToplevelSurface()
+{
+    if (m_xdgToplevel != nullptr)
+        xdg_toplevel_destroy(m_xdgToplevel);
+    if (m_xdgSurface != nullptr)
+        xdg_surface_destroy(m_xdgSurface);
+}
+
+bool QBarXdgToplevelSurface::isExposed() const
+{
+    return m_configured;
+}
+
+void QBarXdgToplevelSurface::applyConfigure()
+{
+    if (m_configuredSize.isValid())
+        resizeFromApplyConfigure(m_configuredSize);
+}
+
+void QBarXdgToplevelSurface::setWindowGeometry(const QRect &rect)
+{
+    if (!rect.isValid() || m_xdgSurface == nullptr)
+        return;
+    m_geometry = rect;
+    xdg_surface_set_window_geometry(m_xdgSurface, 0, 0, rect.width(), rect.height());
+}
+
+void QBarXdgToplevelSurface::setWindowSize(const QSize &size)
+{
+    if (size.isValid())
+        m_geometry.setSize(size);
+}
+
+std::any QBarXdgToplevelSurface::surfaceRole() const
+{
+    return m_xdgToplevel;
+}
+
+void QBarXdgToplevelSurface::attachPopup(QtWaylandClient::QWaylandShellSurface *popup)
+{
+    Q_UNUSED(popup);
+}
+
+void QBarXdgToplevelSurface::detachPopup(QtWaylandClient::QWaylandShellSurface *popup)
+{
+    Q_UNUSED(popup);
+}
+
+void QBarXdgToplevelSurface::handleXdgSurfaceConfigure(void *data,
+                                                       xdg_surface *surface,
+                                                       uint32_t serial)
+{
+    auto *toplevel = static_cast<QBarXdgToplevelSurface *>(data);
+    xdg_surface_ack_configure(surface, serial);
+    toplevel->m_configured = true;
+    if (!toplevel->m_configuredSize.isValid())
+        toplevel->m_configuredSize = toplevel->m_geometry.size();
+    if (toplevel->window() != nullptr) {
+        auto *window = toplevel->window();
+        QMetaObject::invokeMethod(window, [window]() {
+            window->updateExposure();
+            window->requestUpdate();
+        }, Qt::QueuedConnection);
+    }
+    toplevel->applyConfigureWhenPossible();
+}
+
+void QBarXdgToplevelSurface::handleToplevelConfigure(void *data,
+                                                     xdg_toplevel *,
+                                                     int32_t width,
+                                                     int32_t height,
+                                                     wl_array *)
+{
+    auto *toplevel = static_cast<QBarXdgToplevelSurface *>(data);
+    if (width > 0 && height > 0)
+        toplevel->m_configuredSize = QSize(width, height);
+}
+
+void QBarXdgToplevelSurface::handleToplevelClose(void *data, xdg_toplevel *)
+{
+    auto *toplevel = static_cast<QBarXdgToplevelSurface *>(data);
+    if (toplevel->window() != nullptr && toplevel->window()->window() != nullptr) {
+        QWindow *window = toplevel->window()->window();
+        QMetaObject::invokeMethod(window, [window]() { window->close(); }, Qt::QueuedConnection);
+    }
+}
+
+void QBarXdgToplevelSurface::handleConfigureBounds(void *, xdg_toplevel *, int32_t, int32_t)
+{
+}
+
+void QBarXdgToplevelSurface::handleWmCapabilities(void *, xdg_toplevel *, wl_array *)
+{
+}
+
 QBarXdgPopupSurface::QBarXdgPopupSurface(QBarLayerShellIntegration *integration, QtWaylandClient::QWaylandWindow *window)
     : QtWaylandClient::QWaylandShellSurface(window)
     , m_integration(integration)
@@ -357,8 +538,12 @@ QBarXdgPopupSurface::QBarXdgPopupSurface(QBarLayerShellIntegration *integration,
         m_geometry.setSize(QSize(1, 1));
     }
 
-    m_xdgSurface = xdg_wm_base_get_xdg_surface(m_integration->xdgWmBase(), wlSurface());
-    xdg_surface_add_listener(m_xdgSurface, &xdgSurfaceListener, this);
+    // NOTE: the xdg_surface is deliberately NOT created here. An xdg_surface that is committed
+    // before it has a role (xdg_popup) is a fatal protocol error ("xdg_surface must have a role
+    // object"), and Qt may commit wlSurface() between this constructor and the later
+    // attachPopup/setLayerParent that assigns the role — or a Qt::Popup window may never get a
+    // parent attached at all. So we create the xdg_surface and its xdg_popup role together,
+    // atomically, in createPopup().
 }
 
 QBarXdgPopupSurface::~QBarXdgPopupSurface()
@@ -456,6 +641,13 @@ void QBarXdgPopupSurface::createPopup(xdg_surface *parentSurface)
 {
     if (m_xdgPopup != nullptr) {
         return;
+    }
+
+    // Create the xdg_surface and its xdg_popup role together (see the constructor note): no
+    // event dispatch happens between them, so the surface can never be seen role-less.
+    if (m_xdgSurface == nullptr) {
+        m_xdgSurface = xdg_wm_base_get_xdg_surface(m_integration->xdgWmBase(), wlSurface());
+        xdg_surface_add_listener(m_xdgSurface, &xdgSurfaceListener, this);
     }
 
     xdg_positioner *positioner = createPositioner();
@@ -593,8 +785,10 @@ void QBarXdgPopupSurface::handleXdgSurfaceConfigure(void *data, xdg_surface *sur
         popup->m_configuredSize = popup->m_geometry.size().isValid() ? popup->m_geometry.size() : QSize(1, 1);
     }
     if (popup->window() != nullptr) {
-        popup->window()->updateExposure();
-        popup->window()->requestUpdate();
+        // Defer (don't drive Qt's window machinery synchronously from this wl dispatch).
+        auto *w = popup->window();
+        QMetaObject::invokeMethod(
+            w, [w]() { w->updateExposure(); w->requestUpdate(); }, Qt::QueuedConnection);
     }
     popup->applyConfigureWhenPossible();
 }
@@ -616,7 +810,12 @@ void QBarXdgPopupSurface::handlePopupDone(void *data, xdg_popup *)
 {
     auto *popup = static_cast<QBarXdgPopupSurface *>(data);
     if (popup->window() != nullptr && popup->window()->window() != nullptr) {
-        popup->window()->window()->setVisible(false);
+        // CRITICAL: never hide (→ tear down the surface) synchronously from inside this wl
+        // event dispatch — that re-enters Qt's window/shell-surface teardown while a frame
+        // callback can be in flight (the UAF). Defer to the GUI event loop; bound to the
+        // QWindow so Qt drops it if the window is already gone.
+        QWindow *win = popup->window()->window();
+        QMetaObject::invokeMethod(win, [win]() { win->setVisible(false); }, Qt::QueuedConnection);
     }
 }
 

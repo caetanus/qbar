@@ -1,4 +1,5 @@
-/* Catppuccin Macchiato — https://github.com/catppuccin/catppuccin */
+/* Catppuccin Macchiato — adapted from the Waybar theme by the Catppuccin org
+   (https://github.com/catppuccin/waybar, MIT). Palette: github.com/catppuccin/catppuccin. */
 
 * { border: none; border-radius: 0; }
 window#waybar    { background-color: rgba(36, 39, 58, 0.85); border-radius: 8px; }

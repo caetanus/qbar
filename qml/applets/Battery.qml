@@ -1,5 +1,6 @@
 import QtQuick
 import "qrc:/qbar" as QBar
+import "qrc:/qbar/Contrast.js" as Contrast
 
 QBar.CssRect {
     id: root
@@ -19,11 +20,15 @@ QBar.CssRect {
 
     signal activated()
 
-    // Icon/text colour: themed #battery[.state] color, else a sensible contrast default
-    // (white over the dark/critical base, black over a light "full" badge).
+    // The painted base background (themed #battery[.state] background, else the dark
+    // defaultColor). The content color contrasts against THIS, so it stays readable
+    // whether the badge is dark (default) or a light themed "full" badge — fixes the
+    // black-on-dark text when full and the theme sets no #battery.full background.
+    readonly property color badgeBackground: cssStyle["background-color"]
+        ? cssTheme.parseColor(cssStyle["background-color"]) : root.defaultColor
     readonly property color contentColor: cssStyle["color"]
         ? cssTheme.parseColor(cssStyle["color"])
-        : (full ? "#000000" : "#ffffff")
+        : Contrast.contrastColor(Contrast.effectiveBackground(badgeBackground, cssTheme, theme.background))
 
     // Critical pulse via standard CSS `@keyframes` on `#battery.critical::before` — a red
     // overlay whose opacity pulses. Replaces the old QML alertPulse colour-mix.
@@ -37,6 +42,7 @@ QBar.CssRect {
 
     QBar.Popup {
         id: batteryPopup
+        name: "battery"
         anchorItem: root
         source: "qrc:/popups/BatteryPopup.qml"
         payload: ({ battery: batteryModel })
@@ -72,85 +78,14 @@ QBar.CssRect {
         }
     }
 
-    Item {
+    QBar.BatteryIcon {
         id: batteryIcon
-        width: 12
-        height: 18
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
         anchors.rightMargin: 4
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.topMargin: 3
-            radius: 2
-            border.width: 0
-            color: "#00000000"
-        }
-
-        Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            anchors.topMargin: 2
-            width: 4
-            height: 3
-            radius: 0
-            color: root.contentColor
-            opacity: 0.65
-        }
-
-        Item {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            anchors.topMargin: 3
-            anchors.bottomMargin: 2
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.leftMargin: 2
-                anchors.rightMargin: 2
-                height: Math.max(2, Math.round(parent.height * root.level / 100))
-                radius: 1
-                color: root.contentColor
-                opacity: 0.65
-                Behavior on height {
-                    NumberAnimation {
-                        duration: 180
-                        easing.type: Easing.InOutQuad
-                    }
-                }
-            }
-        }
-
-        Canvas {
-            anchors.centerIn: parent
-            width: 8
-            height: 12
-            visible: root.charging
-            onVisibleChanged: if (visible) requestPaint()
-            Component.onCompleted: requestPaint()
-            onPaint: {
-                var ctx = getContext("2d")
-                ctx.clearRect(0, 0, width, height)
-                ctx.fillStyle = "#ffffff"
-                ctx.beginPath()
-                ctx.moveTo(4, 0)
-                ctx.lineTo(1, 6)
-                ctx.lineTo(4, 6)
-                ctx.lineTo(2, 12)
-                ctx.lineTo(7, 5)
-                ctx.lineTo(4, 5)
-                ctx.closePath()
-                ctx.fill()
-            }
-        }
+        level: root.level
+        charging: root.charging
+        color: root.contentColor
     }
 
     Text {

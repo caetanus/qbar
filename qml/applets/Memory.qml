@@ -1,5 +1,5 @@
 import QtQuick
-import Qt.labs.settings
+import QtCore
 import "qrc:/qbar" as QBar
 import "qrc:/qbar/Contrast.js" as Contrast
 import "qrc:/qbar/Format.js" as Format
@@ -94,6 +94,7 @@ Item {
 
     QBar.Popup {
         id: memoryPopup
+        name: "memory"
         anchorItem: root
         source: "qrc:/popups/CPUPopup.qml"
         payload: ({ cpu: cpuModel, popupMode: "memory", coreColumns: root.popupColumns })

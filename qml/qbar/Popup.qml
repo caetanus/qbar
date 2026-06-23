@@ -16,6 +16,12 @@ Item {
     property int gap: 0
     property string placement: "below"
     property string horizontalAlignment: "left"
+    // When set, this popup is reachable over the JSON IPC by this name
+    // (e.g. `{"command":"toggle","popup":"cpu"}` from a keyboard shortcut).
+    property string name: ""
+    // Title for the toplevel window created when this popup is DETACHED (so it isn't the
+    // generic "QBar Detached"). e.g. "QBar Bitcoin Applet — BTC/USDT".
+    property string windowTitle: ""
     readonly property bool isOpen: popupId.length > 0
     width: 0
     height: 0
@@ -67,9 +73,18 @@ Item {
         var point = explicitPosition && explicitPosition.x !== undefined && explicitPosition.y !== undefined
             ? explicitPosition
             : anchorPoint()
+        // Carry the detached-window title in the payload so the service can title the toplevel
+        // it creates on detach (the spec stores the payload). Copy so we don't mutate `payload`.
+        var pl = payload
+        if (windowTitle.length > 0) {
+            pl = {}
+            for (var k in payload)
+                pl[k] = payload[k]
+            pl.windowTitle = windowTitle
+        }
         popupId = kind === "tooltip"
-            ? qbarPopups.openTooltip(source, payload, point.x, point.y, popupWidth, popupHeight, popupId)
-            : qbarPopups.openPopup(source, payload, point.x, point.y, popupWidth, popupHeight, popupId)
+            ? qbarPopups.openTooltip(source, pl, point.x, point.y, popupWidth, popupHeight, popupId)
+            : qbarPopups.openPopup(source, pl, point.x, point.y, popupWidth, popupHeight, popupId)
         if (popupId.length > 0) {
             popupOpened(popupId)
         }
@@ -90,12 +105,23 @@ Item {
         closed()
     }
 
+    function detach() {
+        if (kind === "tooltip" || popupId.length === 0)
+            return false
+        return qbarPopups.detachPopup(popupId)
+    }
+
     function toggle() {
         if (isOpen) {
             close()
         } else {
             open()
         }
+    }
+
+    Component.onCompleted: {
+        if (name.length > 0 && typeof qbarIpc !== "undefined" && qbarIpc)
+            qbarIpc.registerPopup(name, root)
     }
 
     Connections {

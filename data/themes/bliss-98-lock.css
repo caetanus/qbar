@@ -1,0 +1,39 @@
+/* Bliss 98 lockscreen */
+
+@define-color xp-blue #245edb;
+@define-color xp-blue2 #3f8cff;
+@define-color xp-deep #1745ad;
+@define-color xp-green #38a330;
+@define-color xp-sand #fff2b8;
+@define-color xp-text #ffffff;
+
+#lockscreen {
+    background: linear-gradient(180deg, #53baff, @xp-blue 44%, @xp-deep);
+    overlay-color: rgba(0, 12, 48, 0.22);
+}
+
+#auth-panel {
+    background: linear-gradient(180deg, #eef6ff, #b9d8ff 9%, #1e63d8 10%, #0d3b9e);
+    border-color: rgba(255, 255, 255, 0.62);
+    border-width: 1px;
+    border-radius: 12px;
+    box-shadow: 0px 10px 22px rgba(0, 0, 0, 0.38);
+}
+
+#lock-label {
+    color: @xp-text;
+    font-family: "Trebuchet MS";
+    text-shadow: 0px 1px 1px rgba(0, 18, 72, 0.82);
+}
+
+#password-input {
+    color: #081d4f;
+    background-color: #fff7cf;
+    border-color: #7aa7e8;
+    border-width: 1px;
+    border-radius: 7px;
+}
+
+#lock-error {
+    color: #ffd7d7;
+}
