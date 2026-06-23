@@ -26,21 +26,25 @@ a JSON IPC for scripting, and a matching QML/PAM lock screen.
 
 ## Screenshots
 
-A bar (Tokyo Night) with workspaces, CPU/memory/network graphs, clock, temperature, sound, battery, a live BTC ticker, and the system tray:
+A bar (Tokyo Night) with workspaces, CPU/memory/network graphs, disk usage and MPRIS now-playing on the left; an audio drawer, battery, a live BTC ticker, the clock, and the system tray on the right:
 
 ![qbar bar](docs/assets/bar.png)
 
 Popups (opened by click or over the IPC):
 
-| CPU dashboard | Memory dashboard |
+| System dashboard (per-core graphs, top processes) | Now playing (MPRIS) |
 |---|---|
-| ![cpu](docs/assets/popup-cpu.png) | ![memory](docs/assets/popup-memory.png) |
-| **Calendar** | **Bitcoin candlesticks** (scroll to zoom, hover for OHLC) |
+| ![system](docs/assets/popup-cpu.png) | ![media](docs/assets/popup-media.png) |
+| **Calendar** (events from the local calendar) | **Bitcoin candlesticks** (scroll to zoom, hover for OHLC) |
 | ![calendar](docs/assets/popup-clock.png) | ![bitcoin](docs/assets/popup-bitcoin.png) |
 
-A few of the 27 bundled themes — see the [full gallery](docs/assets/themes.png):
+A few of the 28 bundled themes — light and dark, including the Windows-XP-style `bliss-xp` — see the [full gallery](docs/assets/themes.png):
 
 ![theme gallery](docs/assets/themes.png)
+
+Preview a theme live before you commit to it — `qbar-ipc set-css` hot-swaps the running bar to any stylesheet (a file you just downloaded, or even straight from a URL); `qbar-ipc reset-css` snaps back to your configured theme:
+
+![preview a theme with qbar-ipc](docs/assets/ipc-theme.png)
 
 ## Building
 
