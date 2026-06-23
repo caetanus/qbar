@@ -1,6 +1,6 @@
 import QtQuick
 import QBar 1.0
-import Qt.labs.settings
+import QtCore
 import "qrc:/qbar" as Chrome
 import "qrc:/qbar/Contrast.js" as Contrast
 import "qrc:/qbar/Format.js" as Format
@@ -30,6 +30,19 @@ Item {
         ? cssTheme.parseColor(graphStyle["background-color"])
         : "transparent"
     readonly property color effectiveGraphBackground: Contrast.effectiveBackground(graphBackground, cssTheme, theme.background)
+    // The graph cell's panel fill. Order: an explicit #network-io.graph background-color wins;
+    // otherwise mirror the theme's #cpu.graph panel so this graph matches the CPU/Memory graphs
+    // (themes style #cpu.graph/#memory.graph but rarely #network-io.graph, which used to leave
+    // this one washed-out beside them). Final fallback, for themes that style no graph panel at
+    // all, is the same subtle contrast tint CPU paints inside its sparkline.
+    readonly property color graphCellBackground: {
+        if (graphStyle["background-color"])
+            return cssTheme.parseColor(graphStyle["background-color"])
+        var cpuGraph = (cssTheme && cssTheme.loaded) ? cssTheme.resolvePart("cpu", "graph") : ({})
+        if (cpuGraph && cpuGraph["background-color"])
+            return cssTheme.parseColor(cpuGraph["background-color"])
+        return Contrast.contrastFill(effectiveGraphBackground, 0.04)
+    }
     readonly property color labelBackground: cssStyle["background-color"] ? cssTheme.parseColor(cssStyle["background-color"]) : "#3a3410"
     readonly property color labelColor: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
 
@@ -118,9 +131,22 @@ Item {
         return root.valueForMode(part)
     }
 
+    Chrome.Popup {
+        id: netPopup
+        name: "network"
+        anchorItem: root
+        source: "qrc:/popups/NetworkPopup.qml"
+        payload: ({ net: networkModel, procs: networkProcessModel })
+        popupWidth: 380
+        popupHeight: 320
+        gap: 2
+        placement: "below"
+        horizontalAlignment: "left"
+    }
+
     Chrome.Tooltip {
         anchorItem: root
-        hovered: root.tooltipHovered
+        hovered: root.tooltipHovered && !netPopup.isOpen
         text: "down " + root.formatRate(root.downloadRateBytesPerSecond) + ", up " + root.formatRate(root.uploadRateBytesPerSecond) + ", total " + root.formatRate(root.totalRateBytesPerSecond)
         side: "auto"
     }
@@ -154,7 +180,7 @@ Item {
             Rectangle {
                 width: root.arrowWidth
                 height: root.height
-                color: root.graphBackground
+                color: root.graphCellBackground
                 Text {
                     anchors.centerIn: parent
                     color: root.downloadRateBytesPerSecond >= root.uploadRateBytesPerSecond
@@ -170,7 +196,7 @@ Item {
             Rectangle {
                 width: root.arrowWidth
                 height: root.height
-                color: root.graphBackground
+                color: root.graphCellBackground
                 Text {
                     anchors.centerIn: parent
                     color: root.uploadRateBytesPerSecond > root.downloadRateBytesPerSecond
@@ -186,7 +212,7 @@ Item {
             Rectangle {
                 width: root.graphWidth
                 height: root.height
-                color: root.graphBackground
+                color: root.graphCellBackground
 
                 Sparkline {
                     anchors.fill: parent
@@ -234,7 +260,9 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
+        acceptedButtons: Qt.LeftButton
         onContainsMouseChanged: root.tooltipHovered = containsMouse
+        onClicked: netPopup.toggle()
         onWheel: function(wheel) {
             var n = root.cycleModes.length
             root.cycleIndex = (root.cycleIndex + (wheel.angleDelta.y > 0 ? -1 : 1) + n) % n

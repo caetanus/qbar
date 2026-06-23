@@ -12,7 +12,7 @@
 @define-color wine #d96b9d;
 
 * { border: none; border-radius: 0; }
-window#waybar { background-color: rgba(19, 15, 13, 0.88); border-radius: 7px; border-left: 68px; border-right: 68px; padding: 0 6px; }
+window#waybar { background-color: rgba(19, 15, 13, 0.88); border-radius: 7px; border-left: 15px; border-right: 15px; padding: 0 6px; }
 
 #left {
     background-color: rgba(255, 77, 66, 0.18);

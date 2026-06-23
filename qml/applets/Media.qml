@@ -189,6 +189,7 @@ Item {
 
     QBar.Popup {
         id: mediaPopup
+        name: "media"
         anchorItem: root
         source: "qrc:/popups/MediaPopup.qml"
         popupWidth: 340

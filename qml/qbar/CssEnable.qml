@@ -61,7 +61,7 @@ Item {
                 if (s["font-family"] !== undefined)
                     f.family = s["font-family"]
                 if (s["font-size"] !== undefined)
-                    f.pointSize = cssTheme.parseLength(s["font-size"], f.pointSize)
+                    f.pointSize = cssTheme.parseFontSize(s["font-size"], f.pointSize)
                 p.font = f
             }
         } else if (prim === "rect") {

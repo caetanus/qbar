@@ -1,21 +1,17 @@
 #include "barwindow.h"
 
 #include "qml/qbarpopupservice.h"
+#include "qml/qbaripc.h"
+#include "qml/jsonasync.h"
+#include "qml/jstimers.h"
+#include "qml/netfetch.h"
+#include "qml/jsprocess.h"
+#include "qml/localstorage.h"
+#include "qml/modelcapsules.h"
 #include "json/jsonc.h"
-#include "cpu/cpumodel.h"
-#include "temperature/temperaturemodel.h"
-#include "brightness/brightnessmodel.h"
 #include "caffeine/caffeinemodel.h"
-#include "battery/batterymodel.h"
-#include "network/networkmodel.h"
-#include "networkmanager/networkmanagermodel.h"
-#include "disk/diskmodel.h"
-#include "bluetooth/bluetoothmodel.h"
-#include "powerprofiles/powerprofilesmodel.h"
 #include "sound/audiobackendfactory.h"
-#include "mpris/mprismodel.h"
 #include "platform/capslockmonitor.h"
-#include "calendar/calendarmodel.h"
 #include "css/csstheme.h"
 #include "dbus/dbusservice.h"
 #include "platform/platformbarintegration.h"
@@ -24,6 +20,7 @@
 
 #include <QApplication>
 #include <QByteArray>
+#include <QSet>
 #include <QCloseEvent>
 #include <QColor>
 #include <QCoreApplication>
@@ -51,11 +48,17 @@
 #include <QStandardPaths>
 #include <QShowEvent>
 #include <QPointF>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QRegularExpression>
+#include <QSharedPointer>
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantMap>
 #include <algorithm>
+#include <chrono>
 #include <unistd.h>
 
 namespace {
@@ -282,22 +285,19 @@ BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
 {
     configureWindow();
     m_wm = createWindowManagerBackend(m_config.windowManagerBackend, this);
+    // Eager backends — these have direct C++ consumers (tray → popup service; sound/caffeine
+    // → wiring), so they stay owned by the bar. Everything else is created lazily on first
+    // use via ModelCapsules (see the context-property block below).
     m_trayModel = new StatusNotifierModel(this);
-    m_cpuModel = new CpuModel(this);
-    m_temperatureModel = new TemperatureModel(this);
-    m_networkModel = new NetworkModel(this);
-    m_networkManagerModel = new NetworkManagerModel(this);
-    m_brightnessModel = new BrightnessModel(this);
     m_caffeineModel = new CaffeineModel(this, this);
     m_soundModel = createAudioBackend(this);
-    m_mprisModel = new MprisModel(this);
     m_capsLockMonitor = new CapsLockMonitor(this);
-    m_calendarModel = new CalendarModel(this);
-    m_batteryModel = new BatteryModel(this);
-    m_diskModel = new DiskModel(this);
-    m_bluetoothModel = new BluetoothModel(this);
-    m_powerProfilesModel = new PowerProfilesModel(this);
     m_cssTheme = new CssTheme(this);
+    // Recompute the bar's CSS edge gap on every theme (re)load. CssTheme's own file watcher
+    // reloads the stylesheet WITHOUT going through loadCssTheme(), so without this the margin
+    // would only update on a full restart or theme swap, not on a live CSS edit.
+    connect(m_cssTheme, &CssTheme::loadedChanged, this, &BarWindow::updateBarMarginsFromCss);
+    m_configuredStyleSheet = m_config.styleSheet; // remembered so reset-css can revert a preview
     loadCssTheme();
 
     m_configWatcher = new QFileSystemWatcher(this);
@@ -309,6 +309,16 @@ BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
         m_configWatcher->addPath(m_config.configFilePath);
     }
     connect(m_configWatcher, &QFileSystemWatcher::fileChanged, this, &BarWindow::onConfigFileChanged);
+
+    // Debounce reloads: editors save by truncating or atomically replacing the file, so the
+    // watcher often fires mid-write. Wait a beat so we read the SETTLED file, not a half-written
+    // one (which parsed as "invalid JSONC at offset 0" and dropped the reload).
+    m_configReloadTimer = new QTimer(this);
+    m_configReloadTimer->setSingleShot(true);
+    m_configReloadTimer->setInterval(120);
+    connect(m_configReloadTimer, &QTimer::timeout, this, &BarWindow::reloadConfigFromDisk);
+
+    setupWidgetWatcher();
 
     if (auto *i3Backend = qobject_cast<I3IpcClient *>(m_wm)) {
         connect(i3Backend, SIGNAL(qbarNodeFound(qint64)), this, SLOT(handleQbarNodeFound(qint64)));
@@ -356,37 +366,355 @@ void BarWindow::showEvent(QShowEvent *event)
 
 void BarWindow::loadCssTheme()
 {
-    // Probe candidate paths in priority order
     const QString configDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-    QStringList candidates;
-    if (!m_config.styleSheet.isEmpty())
-        candidates.append(m_config.styleSheet);
-    candidates.append(QDir(configDir).filePath(QStringLiteral("qbar/style.css")));
 
-    for (const QString &path : candidates) {
-        if (QFileInfo::exists(path)) {
-            m_cssTheme->load(path);
-            return;
+    // Translate config-derived drawer `transition-duration`s into a CSS prelude that the
+    // engine prepends (lowest priority) to the theme. This keeps the CSS the single source
+    // of truth for the drawer animation: an explicit `#<name> { transition }` in the theme
+    // overrides this default; otherwise the config value drives it.
+    QString prelude;
+    for (auto it = m_config.groups.constBegin(); it != m_config.groups.constEnd(); ++it) {
+        const QVariantMap drawer = it.value().toMap().value(QStringLiteral("drawer")).toMap();
+        if (!drawer.contains(QStringLiteral("transition-duration")))
+            continue;
+        QString name = it.key(); // "group/<name>"
+        if (name.startsWith(QStringLiteral("group/")))
+            name = name.mid(6);
+        prelude += QStringLiteral("#%1 { transition: %2ms; }\n")
+                       .arg(name)
+                       .arg(drawer.value(QStringLiteral("transition-duration")).toInt());
+    }
+    m_cssTheme->setStylePrelude(prelude);
+
+    // The CSS cascade, in order: an optional base (only if configured) that the theme
+    // cascades over, then the theme itself (explicit styleSheet, else the conventional
+    // qbar/style.css). loadLayered concatenates them so the theme wins on equal specificity.
+    // Resolve a theme reference: http(s)/file URLs and absolute paths pass through; a bare
+    // relative path resolves against the directory of THIS config file (so it works the same
+    // whether the config is at ~/.config/qbar/ or wherever --config points). Lets the bundled
+    // default config portably say "themes/nord.css".
+    const QString configBaseDir = !m_config.configFilePath.isEmpty()
+        ? QFileInfo(m_config.configFilePath).absolutePath()
+        : QDir(configDir).filePath(QStringLiteral("qbar"));
+    const auto resolveTheme = [&configBaseDir](const QString &p) -> QString {
+        if (p.isEmpty())
+            return p;
+        const QString scheme = QUrl(p).scheme();
+        if (scheme == QLatin1String("http") || scheme == QLatin1String("https")
+            || scheme == QLatin1String("file") || QDir::isAbsolutePath(p)) {
+            return p;
+        }
+        return QDir(configBaseDir).filePath(p);
+    };
+
+    QStringList layer;
+    if (!m_config.baseStyleSheet.isEmpty())
+        layer.append(resolveTheme(m_config.baseStyleSheet));
+    if (!m_config.styleSheet.isEmpty())
+        layer.append(resolveTheme(m_config.styleSheet));
+    else
+        layer.append(QDir(configDir).filePath(QStringLiteral("qbar/style.css")));
+
+    m_cssTheme->loadLayered(layer);
+    // loadLayered emits loadedChanged → updateBarMarginsFromCss(), so the bar margins are
+    // already current here; no explicit call needed.
+}
+
+void BarWindow::updateBarMarginsFromCss()
+{
+    if (m_cssTheme == nullptr) {
+        return;
+    }
+    // Bar edge gap from the bar's CSS (#qbar / window#waybar are synonyms here) — margin-top /
+    // margin-bottom, or the `margin` shorthand (waybar floating-bar idiom). The layer-shell
+    // integration reads these window properties. CSS-ONLY on purpose: the JSON `margin` has
+    // never driven the layer gap, so honouring it now would shift every existing config.
+    // Horizontal insets stay with Bar.qml (margin-left/right → content inset).
+    QVariantMap barRule = m_cssTheme->resolve(QStringLiteral("waybar"));
+    const QVariantMap qbarRule = m_cssTheme->resolveExact(QStringLiteral("qbar"));
+    for (auto it = qbarRule.constBegin(); it != qbarRule.constEnd(); ++it) {
+        barRule.insert(it.key(), it.value());
+    }
+    int shorthandTop = 0;
+    int shorthandBottom = 0;
+    bool hasShorthand = false;
+    if (barRule.contains(QStringLiteral("margin"))) {
+        const QStringList parts = barRule.value(QStringLiteral("margin")).toString().trimmed().split(
+            QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+        if (!parts.isEmpty()) {
+            hasShorthand = true;
+            shorthandTop = qRound(m_cssTheme->parseLength(parts.first(), 0));
+            shorthandBottom = parts.size() >= 3 ? qRound(m_cssTheme->parseLength(parts.at(2), 0)) : shorthandTop;
         }
     }
+    const auto verticalMargin = [&](const char *key, int shorthandVal) -> int {
+        if (barRule.contains(QLatin1String(key))) {
+            return qRound(m_cssTheme->parseLength(barRule.value(QLatin1String(key)).toString(), 0));
+        }
+        return hasShorthand ? shorthandVal : 0;
+    };
+    setProperty("qbarBarMarginTop", verticalMargin("margin-top", shorthandTop));
+    setProperty("qbarBarMarginBottom", verticalMargin("margin-bottom", shorthandBottom));
+    qInfo("QBar bar edge margins from CSS: top=%lld bottom=%lld",
+          property("qbarBarMarginTop").toLongLong(), property("qbarBarMarginBottom").toLongLong());
+}
+
+bool BarWindow::setStyleSheet(const QString &pathOrUrl)
+{
+    if (pathOrUrl.isEmpty() || m_cssTheme == nullptr) {
+        return false;
+    }
+
+    // Treat the argument as a URL when applicable: http(s) → fetch and apply the CSS body;
+    // file:// or a bare path → load from disk (the default).
+    const QUrl url(pathOrUrl);
+    const QString scheme = url.scheme();
+
+    if (scheme == QLatin1String("http") || scheme == QLatin1String("https")) {
+        if (m_cssNam == nullptr) {
+            m_cssNam = new QNetworkAccessManager(this);
+        }
+        QNetworkRequest request(url);
+        request.setTransferTimeout(std::chrono::seconds(15));
+        QNetworkReply *reply = m_cssNam->get(request);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, url]() {
+            reply->deleteLater();
+            if (reply->error() != QNetworkReply::NoError) {
+                qWarning() << "QBar set-css: fetch failed:" << reply->errorString();
+                return;
+            }
+            // Resolve @import relative to the fetched URL (so a web theme's relative
+            // imports load from the web too), then apply the inlined CSS.
+            auto visited = QSharedPointer<QStringList>::create();
+            visited->append(url.toString(QUrl::RemoveFragment));
+            resolveCssImports(QString::fromUtf8(reply->readAll()), url, visited,
+                              [this](const QString &css) { m_cssTheme->loadFromString(css); });
+        });
+        return true; // request dispatched; the theme applies when it arrives
+    }
+
+    const QString path = url.isLocalFile() ? url.toLocalFile() : pathOrUrl;
+    if (!QFileInfo::exists(path)) {
+        qWarning() << "QBar set-css: file not found:" << path;
+        return false;
+    }
+    m_config.styleSheet = path; // so a later reload keeps the swapped theme
+    loadCssTheme();             // re-layer: keeps baseStyleSheet (if any) under the new theme
+    return true;
+}
+
+bool BarWindow::resetStyleSheet()
+{
+    if (m_cssTheme == nullptr) {
+        return false;
+    }
+    m_config.styleSheet = m_configuredStyleSheet; // revert a set-css preview to the configured theme
+    loadCssTheme();
+    return true;
+}
+
+void BarWindow::resolveCssImports(const QString &css, const QUrl &base,
+                                  QSharedPointer<QStringList> visited,
+                                  std::function<void(const QString &)> done)
+{
+    static const QRegularExpression importRe(
+        QStringLiteral(R"(@import\s+(?:url\(\s*)?['"]?([^'")\s]+)['"]?\s*\)?\s*;)"));
+    const QRegularExpressionMatch m = importRe.match(css);
+    if (!m.hasMatch()) {
+        done(css);
+        return;
+    }
+
+    const QString before = css.left(m.capturedStart());
+    const QString after = css.mid(m.capturedEnd());
+    // CSS @import resolves relative to the importing document's URL — so a relative ref in
+    // a web theme stays on the web, and a relative ref in a file theme stays on disk.
+    const QUrl target = base.resolved(QUrl(m.captured(1)));
+    const QString key = target.toString(QUrl::RemoveFragment);
+
+    // Splice the imported content (after expanding ITS own imports, relative to ITS url)
+    // in place of the @import, then continue resolving the rest of the parent document.
+    const auto onContent = [this, before, after, target, base, visited, done](const QString &sub) {
+        resolveCssImports(sub, target, visited,
+                          [this, before, after, base, visited, done](const QString &expanded) {
+                              resolveCssImports(before + expanded + after, base, visited, done);
+                          });
+    };
+
+    if (visited->contains(key)) { // already imported (cycle / duplicate) — drop it
+        resolveCssImports(before + after, base, visited, done);
+        return;
+    }
+    visited->append(key);
+
+    const QString scheme = target.scheme();
+    if (scheme == QLatin1String("http") || scheme == QLatin1String("https")) {
+        if (m_cssNam == nullptr) {
+            m_cssNam = new QNetworkAccessManager(this);
+        }
+        QNetworkRequest request(target);
+        request.setTransferTimeout(std::chrono::seconds(15));
+        QNetworkReply *reply = m_cssNam->get(request);
+        connect(reply, &QNetworkReply::finished, this, [reply, onContent]() {
+            reply->deleteLater();
+            if (reply->error() != QNetworkReply::NoError) {
+                qWarning() << "QBar @import: fetch failed:" << reply->errorString();
+            }
+            onContent(reply->error() == QNetworkReply::NoError
+                          ? QString::fromUtf8(reply->readAll()) : QString());
+        });
+    } else {
+        const QString local = target.isLocalFile() ? target.toLocalFile() : target.path();
+        QFile file(local);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qWarning() << "QBar @import: cannot read" << local;
+            onContent(QString());
+            return;
+        }
+        onContent(QString::fromUtf8(file.readAll()));
+    }
+}
+
+QStringList BarWindow::runtimeWidgetFiles() const
+{
+    // A customTool with a `source` (vs `exec`) is a runtime QML widget. A widget usually
+    // pulls in siblings (a popup .qml, a .js helper), so we hot-reload every .qml/.js in
+    // each directory that holds a widget source — not just the entry point named in config.
+    const QString configDir = m_config.configFilePath.isEmpty()
+        ? QString()
+        : QFileInfo(m_config.configFilePath).absolutePath();
+
+    QStringList dirs;
+    const auto tools = m_config.customTools;
+    for (auto it = tools.constBegin(); it != tools.constEnd(); ++it) {
+        const QString source = it.value().toMap().value(QStringLiteral("source")).toString();
+        if (source.isEmpty() || source.startsWith(QStringLiteral("qrc:")))
+            continue; // empty, or compiled-in and not watchable
+        QString path;
+        if (source.startsWith(QStringLiteral("file://")))
+            path = QUrl(source).toLocalFile();
+        else if (source.startsWith(QLatin1Char('/')))
+            path = source;
+        else if (!configDir.isEmpty())
+            path = QDir(configDir).filePath(source);
+        const QString dir = path.isEmpty() ? QString() : QFileInfo(path).absolutePath();
+        if (!dir.isEmpty() && !dirs.contains(dir))
+            dirs.append(dir);
+    }
+
+    QStringList files;
+    const QStringList filters{QStringLiteral("*.qml"), QStringLiteral("*.js")};
+    for (const QString &dir : std::as_const(dirs)) {
+        const auto entries = QDir(dir).entryInfoList(filters, QDir::Files);
+        for (const QFileInfo &fi : entries) {
+            const QString p = fi.absoluteFilePath();
+            if (!files.contains(p))
+                files.append(p);
+        }
+    }
+    return files;
+}
+
+QByteArray BarWindow::widgetContentHash() const
+{
+    QCryptographicHash hash(QCryptographicHash::Md5);
+    for (const QString &f : std::as_const(m_widgetFiles)) {
+        hash.addData(f.toUtf8()); // fold the path in so renames/deletes change the digest
+        QFile file(f);
+        if (file.open(QIODevice::ReadOnly))
+            hash.addData(file.readAll());
+    }
+    return hash.result();
+}
+
+void BarWindow::refreshWidgetWatch()
+{
+    // Re-enumerate widget files (a save may have added/removed siblings) and reconcile the
+    // watcher: editors save atomically (write tmp + rename), which drops a file from the
+    // watch list — re-adding here keeps it live. Directories are watched too so a brand-new
+    // sibling file triggers a rescan.
+    m_widgetFiles = runtimeWidgetFiles();
+
+    QStringList dirs;
+    for (const QString &f : std::as_const(m_widgetFiles)) {
+        const QString dir = QFileInfo(f).absolutePath();
+        if (!dirs.contains(dir))
+            dirs.append(dir);
+    }
+
+    const QStringList wantFiles = m_widgetFiles;
+    const QStringList watchedFiles = m_widgetWatcher->files();
+    for (const QString &f : watchedFiles) {
+        if (!wantFiles.contains(f))
+            m_widgetWatcher->removePath(f);
+    }
+    for (const QString &f : std::as_const(wantFiles)) {
+        if (QFileInfo::exists(f) && !m_widgetWatcher->files().contains(f))
+            m_widgetWatcher->addPath(f);
+    }
+    for (const QString &d : std::as_const(dirs)) {
+        if (QFileInfo::exists(d) && !m_widgetWatcher->directories().contains(d))
+            m_widgetWatcher->addPath(d);
+    }
+}
+
+void BarWindow::setupWidgetWatcher()
+{
+    m_widgetWatcher = new QFileSystemWatcher(this);
+    connect(m_widgetWatcher, &QFileSystemWatcher::fileChanged, this, &BarWindow::onWidgetFileChanged);
+    connect(m_widgetWatcher, &QFileSystemWatcher::directoryChanged, this, &BarWindow::onWidgetFileChanged);
+
+    refreshWidgetWatch();
+    m_widgetHash = widgetContentHash();
+}
+
+void BarWindow::onWidgetFileChanged(const QString &)
+{
+    refreshWidgetWatch();
+
+    // Coalesce the burst of events one save produces by hashing the watched files — a
+    // no-op notification (touch, or our own re-add) leaves the digest unchanged.
+    const QByteArray digest = widgetContentHash();
+    if (digest == m_widgetHash)
+        return;
+    m_widgetHash = digest;
+    reloadWidgets();
+}
+
+void BarWindow::reloadWidgets()
+{
+    // Drop cached QML so the next Loader source-set re-reads the widget from disk, then
+    // bump the generation Bar.qml's widget Loaders are bound to (they reload on change).
+    engine()->clearComponentCache();
+    ++m_widgetReloadGeneration;
+    emit widgetReloadGenerationChanged();
 }
 
 void BarWindow::onConfigFileChanged(const QString &path)
 {
-    // Re-add to watcher — editors often atomically replace files
-    if (!m_configWatcher->files().contains(path))
+    // Editors atomically replace the file, swapping its inode — re-add so future saves fire.
+    if (!m_configWatcher->files().contains(path)) {
         m_configWatcher->addPath(path);
+    }
+    m_configReloadTimer->start(); // coalesce + wait for the write to settle, then reload
+}
 
+void BarWindow::reloadConfigFromDisk()
+{
+    const QString path = m_config.configFilePath;
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
         qWarning() << "qbar: cannot read config file" << path;
         return;
     }
     const QByteArray data = file.readAll();
+    if (data.isEmpty()) {
+        return; // still mid-save (truncated) — the next fileChanged re-arms the timer
+    }
     const QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Md5);
-    if (hash == m_configHash)
+    if (hash == m_configHash) {
         return; // touch with no content change
-    m_configHash = hash;
+    }
 
     QString jsonError;
     const auto doc = Jsonc::parse(QString::fromUtf8(data), &jsonError);
@@ -404,22 +732,41 @@ void BarWindow::onConfigFileChanged(const QString &path)
     }
 
     if (!foundRoot) {
+        // Likely a still-settling write; leave m_configHash untouched so the next event retries.
         qWarning() << "qbar: config.json is broken (invalid JSONC), ignoring reload" << jsonError;
         return;
     }
+    m_configHash = hash; // commit only after a clean parse
 
-    const QString newStyleSheet = root.value(QStringLiteral("styleSheet")).toString();
-    if (newStyleSheet != m_config.styleSheet) {
-        m_config.styleSheet = newStyleSheet;
+    const BarConfig fresh = parseBarObject(root);
+
+    if (fresh.styleSheet != m_config.styleSheet || fresh.baseStyleSheet != m_config.baseStyleSheet) {
+        m_config.styleSheet = fresh.styleSheet;
+        m_configuredStyleSheet = fresh.styleSheet; // keep reset-css pointed at the config's theme
+        m_config.baseStyleSheet = fresh.baseStyleSheet;
         loadCssTheme();
-    } else {
-        // styleSheet unchanged — CSS watcher handles its own reloads
     }
 
-    const QVariantMap newCustomTools = parseCustomTools(root);
-    if (newCustomTools != m_config.customTools) {
-        m_config.customTools = newCustomTools;
+    if (fresh.customTools != m_config.customTools) {
+        m_config.customTools = fresh.customTools;
         rootContext()->setContextProperty(QStringLiteral("customTools"), m_config.customTools);
+    }
+
+    // Module/group changes: update the applet lists the Bar.qml Repeaters bind to (and expose
+    // any newly-configured applet's backend), so adding/removing an applet takes effect live.
+    if (fresh.appletsLeft != m_config.appletsLeft || fresh.appletsCenter != m_config.appletsCenter
+        || fresh.appletsRight != m_config.appletsRight || fresh.groups != m_config.groups) {
+        m_config.appletsLeft = fresh.appletsLeft;
+        m_config.appletsCenter = fresh.appletsCenter;
+        m_config.appletsRight = fresh.appletsRight;
+        m_config.applets = fresh.applets;
+        m_config.groups = fresh.groups;
+        exposeModels();
+        rootContext()->setContextProperty(QStringLiteral("appletNames"), m_config.applets);
+        rootContext()->setContextProperty(QStringLiteral("leftApplets"), m_config.appletsLeft);
+        rootContext()->setContextProperty(QStringLiteral("centerApplets"), m_config.appletsCenter);
+        rootContext()->setContextProperty(QStringLiteral("rightApplets"), m_config.appletsRight);
+        rootContext()->setContextProperty(QStringLiteral("barGroups"), m_config.groups);
     }
 }
 
@@ -433,6 +780,7 @@ void BarWindow::configureWindow()
     setProperty("qbarBarHeight", m_config.height);
     setProperty("qbarBarPosition", barPositionName(m_config.position));
     setProperty("qbarBarExclusive", m_config.exclusiveZone);
+    // (Bar edge margins are derived from CSS in loadCssTheme(), once m_cssTheme exists.)
     const int windowHeight = !m_config.waylandLayerShell && m_config.height < 50 ? 50 : m_config.height;
     setMinimumHeight(windowHeight);
     setMaximumHeight(windowHeight);
@@ -444,12 +792,80 @@ void BarWindow::configureWindow()
     setColor(Qt::transparent);
 }
 
+// Expose the lazy capsule backends as context properties, but ONLY for the applets this bar's
+// config actually uses — so an unconfigured applet's backend is never acquired (never built).
+// acquire() is a shared process-wide singleton, so a model used on more than one bar is built
+// once. To QML each is an ordinary context property — it can't tell eager from lazy. Safe to
+// re-run on a live config reload: acquire() returns the cached model, and newly-configured
+// applets get their model exposed (so the Repeaters that just gained them find it).
+void BarWindow::exposeModels()
+{
+    QSet<QString> usedApplets;
+    const auto addModule = [&usedApplets](const QString &token) {
+        if (token.startsWith(QLatin1String("CustomTool:")) || token.startsWith(QLatin1String("group/")))
+            return;
+        const int slash = token.indexOf(QLatin1Char('/')); // strip a "/variant" suffix
+        usedApplets.insert(slash >= 0 ? token.left(slash) : token);
+    };
+    for (const QString &t : m_config.appletsLeft) {
+        addModule(t);
+    }
+    for (const QString &t : m_config.appletsCenter) {
+        addModule(t);
+    }
+    for (const QString &t : m_config.appletsRight) {
+        addModule(t);
+    }
+    for (auto it = m_config.groups.constBegin(); it != m_config.groups.constEnd(); ++it) {
+        const QVariantList mods = it.value().toMap().value(QStringLiteral("modules")).toList();
+        for (const QVariant &m : mods) {
+            addModule(m.toString());
+        }
+    }
+    const auto expose = [this, &usedApplets](const char *applet, const char *ctx, const char *key) {
+        if (usedApplets.contains(QLatin1String(applet))) {
+            rootContext()->setContextProperty(QLatin1String(ctx),
+                                               ModelCapsules::instance()->acquire(QLatin1String(key)));
+        }
+    };
+    expose("CPU", "cpuModel", "cpu");
+    expose("Memory", "cpuModel", "cpu");          // Memory reads cpuModel too
+    expose("Temperature", "temperatureModel", "temperature");
+    expose("Network", "networkModel", "network");
+    expose("Network", "networkProcessModel", "networkProcess");
+    expose("NetworkManager", "networkManagerModel", "networkManager");
+    expose("Brightness", "brightnessModel", "brightness");
+    expose("Media", "mprisModel", "mpris");
+    expose("Battery", "batteryModel", "battery");
+    expose("Disk", "diskModel", "disk");
+    expose("Bluetooth", "bluetoothModel", "bluetooth");
+    expose("PowerProfiles", "powerProfilesModel", "powerProfiles");
+    expose("UPower", "upowerModel", "upower");
+    expose("User", "userModel", "user");
+    expose("Privacy", "privacyModel", "privacy");
+    expose("Clock", "calendarModel", "calendar"); // the calendar popup Clock opens
+}
+
 void BarWindow::buildLayout()
 {
     const QVariantMap theme = themeMap(m_config);
     if (engine()->imageProvider(QStringLiteral("themeicon")) == nullptr) {
         engine()->addImageProvider(QStringLiteral("themeicon"), new ThemeIconProvider);
     }
+
+    // Web-style setTimeout/setInterval globals (QTimer-backed) — Qt's QML engine has none.
+    JsTimers::install(engine());
+    // `Http` global — a QNetworkAccessManager-backed fetch transport for Fetch.js, since
+    // QML's XMLHttpRequest silently hangs on network failure (no timeout/onerror).
+    NetFetch::install(engine());
+    // `JsonAsync` global — worker-threaded JSON.parse for Json.js, so large payloads
+    // don't block the event loop and stutter animations (the MPRIS marquee).
+    JsonAsync::install(engine());
+    // Persistent Web-Storage-like key/value API for runtime QML widgets.
+    LocalStorage::install(engine());
+    // `Proc` global — a QProcess-backed runner so custom QML widgets can shell out to
+    // external commands (the QML side has no process API). Async + self-cleaning like Http.
+    JsProcess::install(engine());
 
     m_popupService = new QBarPopupService(engine(), theme, m_wm->workspaceModel(), m_wm, m_trayModel, m_cssTheme, this);
     m_popupService->setOverlayKeyboardFocus(m_config.popupKeyboardFocus);
@@ -476,29 +892,22 @@ void BarWindow::buildLayout()
 #endif
     );
     rootContext()->setContextProperty(QStringLiteral("qbarPopups"), m_popupService);
+    rootContext()->setContextProperty(QStringLiteral("qbarIpc"), QbarIpc::instance());
+    QbarIpc::instance()->registerBar(this); // enables the IPC `set-css` command
     rootContext()->setContextProperty(QStringLiteral("workspaceModel"), m_wm->workspaceModel());
     rootContext()->setContextProperty(QStringLiteral("windowModel"), m_wm->windowModel());
     rootContext()->setContextProperty(QStringLiteral("taskbarConfig"), m_config.taskbar);
     rootContext()->setContextProperty(QStringLiteral("cpuConfig"), m_config.cpu);
     rootContext()->setContextProperty(QStringLiteral("memoryConfig"), m_config.memory);
     rootContext()->setContextProperty(QStringLiteral("networkConfig"), m_config.network);
-    rootContext()->setContextProperty(QStringLiteral("cpuModel"), m_cpuModel);
-    rootContext()->setContextProperty(QStringLiteral("temperatureModel"), m_temperatureModel);
-    rootContext()->setContextProperty(QStringLiteral("networkModel"), m_networkModel);
-    rootContext()->setContextProperty(QStringLiteral("networkManagerModel"), m_networkManagerModel);
-    rootContext()->setContextProperty(QStringLiteral("brightnessModel"), m_brightnessModel);
+    exposeModels(); // lazy capsule backends, gated by which applets this bar's config uses
+
     rootContext()->setContextProperty(QStringLiteral("caffeineModel"), m_caffeineModel);
     rootContext()->setContextProperty(QStringLiteral("soundModel"), m_soundModel);
-    rootContext()->setContextProperty(QStringLiteral("mprisModel"), m_mprisModel);
     rootContext()->setContextProperty(QStringLiteral("capsLock"), m_capsLockMonitor);
-    rootContext()->setContextProperty(QStringLiteral("calendarModel"), m_calendarModel);
     rootContext()->setContextProperty(QStringLiteral("wm"), m_wm);
     rootContext()->setContextProperty(QStringLiteral("i3Ipc"), m_wm);
     rootContext()->setContextProperty(QStringLiteral("trayModel"), m_trayModel);
-    rootContext()->setContextProperty(QStringLiteral("batteryModel"), m_batteryModel);
-    rootContext()->setContextProperty(QStringLiteral("diskModel"), m_diskModel);
-    rootContext()->setContextProperty(QStringLiteral("bluetoothModel"), m_bluetoothModel);
-    rootContext()->setContextProperty(QStringLiteral("powerProfilesModel"), m_powerProfilesModel);
     rootContext()->setContextProperty(QStringLiteral("cssTheme"), m_cssTheme);
     rootContext()->setContextProperty(QStringLiteral("dbus"), new DBusService(engine(), this));
     rootContext()->setContextProperty(QStringLiteral("customTools"), m_config.customTools);
@@ -506,6 +915,7 @@ void BarWindow::buildLayout()
     rootContext()->setContextProperty(QStringLiteral("leftApplets"), m_config.appletsLeft);
     rootContext()->setContextProperty(QStringLiteral("centerApplets"), m_config.appletsCenter);
     rootContext()->setContextProperty(QStringLiteral("rightApplets"), m_config.appletsRight);
+    rootContext()->setContextProperty(QStringLiteral("barGroups"), m_config.groups);
     rootContext()->setContextProperty(QStringLiteral("barWindow"), this);
 
     setResizeMode(QQuickView::SizeRootObjectToView);

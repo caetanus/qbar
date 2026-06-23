@@ -5,6 +5,8 @@
 #include <QHash>
 #include <QPoint>
 #include <QPointer>
+#include <QSet>
+#include <QSize>
 #include <QUrl>
 #include <QWindow>
 #include <QVariantList>
@@ -56,6 +58,7 @@ public:
     Q_INVOKABLE void updatePopup(const QString &id, const QVariantMap &properties);
     Q_INVOKABLE void updateTooltip(const QString &id, const QVariantMap &properties);
     Q_INVOKABLE void closePopup(const QString &id);
+    Q_INVOKABLE bool detachPopup(const QString &id);
     Q_INVOKABLE void closeTooltip(const QString &id);
     Q_INVOKABLE void setTooltipHovered(const QString &id, bool hovered);
     Q_INVOKABLE QString openMenu(const QVariantList &items,
@@ -68,6 +71,7 @@ public slots:
 
 signals:
     void popupClosed(const QString &id);
+    void popupDetached(const QString &id);
     void tooltipClosed(const QString &id);
     void tooltipHoveredChanged(const QString &id, bool hovered);
     void menuTriggered(const QString &id, int index, const QVariantMap &item);
@@ -75,6 +79,17 @@ signals:
 private:
     struct Popup {
         QPointer<QQuickView> view;
+        // The position the tooltip was created at (for a bottom bar, the bar's top edge).
+        // Resizing a Wayland xdg_popup recreates its surface + re-runs the positioner; on a
+        // bottom bar the gravity grows it upward, so re-anchoring must use this STABLE origin
+        // rather than the already-flipped window position — otherwise it climbs on each update.
+        QPoint anchor;
+    };
+    struct PopupSpec {
+        QUrl source;
+        QVariantMap properties;
+        QSize size;
+        QPoint position;
     };
 
     QString nextId(const QString &requestedId);
@@ -92,7 +107,8 @@ private:
                                 const QVariantMap &properties,
                                 const QString &id,
                                 Qt::WindowFlags flags,
-                                const QString &titlePrefix);
+                                const QString &titlePrefix,
+                                bool detached = false);
     void populateMenu(QMenu *menu, const QVariantList &items, const QString &id, int *index);
 
     QQmlEngine *m_engine = nullptr;
@@ -104,6 +120,9 @@ private:
     // Popups are QML items drawn inside the single backdrop overlay window
     // (m_dismissOverlay). Tooltips remain ordinary standalone windows.
     QHash<QString, QPointer<QQuickItem>> m_popups;
+    QHash<QString, PopupSpec> m_popupSpecs;
+    QHash<QString, QPointer<QQuickView>> m_detachedPopups;
+    QSet<QString> m_detachingPopups;
     QHash<QString, Popup> m_tooltips;
     QHash<QString, bool> m_tooltipHovered;
     QPointer<QMenu> m_openMenu;

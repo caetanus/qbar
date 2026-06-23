@@ -38,6 +38,7 @@ QBar.CssRect {
 
     QBar.Popup {
         id: diskPopup
+        name: "disk"
         anchorItem: root
         source: "qrc:/popups/DiskPopup.qml"
         payload: ({ disk: diskModel, columns: root.popupColumns })

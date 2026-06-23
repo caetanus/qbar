@@ -14,9 +14,12 @@
 namespace {
 constexpr auto kLegacyService = "net.hadess.PowerProfiles";
 constexpr auto kLegacyPath = "/net/hadess/PowerProfiles";
+constexpr auto kLegacyInterface = "net.hadess.PowerProfiles";
 constexpr auto kUPowerService = "org.freedesktop.UPower.PowerProfiles";
 constexpr auto kUPowerPath = "/org/freedesktop/UPower/PowerProfiles";
-constexpr auto kInterface = "net.hadess.PowerProfiles";
+// The renamed service exposes its properties under the matching interface name, NOT
+// net.hadess.PowerProfiles — GetAll/Set/PropertiesChanged must use the right one per service.
+constexpr auto kUPowerInterface = "org.freedesktop.UPower.PowerProfiles";
 constexpr auto kPropsInterface = "org.freedesktop.DBus.Properties";
 } // namespace
 
@@ -59,12 +62,15 @@ void PowerProfilesModel::connectToService()
     // Pick the registered name (prefer the modern UPower one).
     QString service;
     QString path;
+    QString interface;
     if (bus->isServiceRegistered(QString::fromLatin1(kUPowerService))) {
         service = QString::fromLatin1(kUPowerService);
         path = QString::fromLatin1(kUPowerPath);
+        interface = QString::fromLatin1(kUPowerInterface);
     } else if (bus->isServiceRegistered(QString::fromLatin1(kLegacyService))) {
         service = QString::fromLatin1(kLegacyService);
         path = QString::fromLatin1(kLegacyPath);
+        interface = QString::fromLatin1(kLegacyInterface);
     } else {
         return;
     }
@@ -74,6 +80,7 @@ void PowerProfilesModel::connectToService()
     }
     m_service = service;
     m_path = path;
+    m_interface = interface;
 
     QDBusConnection::systemBus().connect(m_service, m_path, QString::fromLatin1(kPropsInterface),
                                          QStringLiteral("PropertiesChanged"), this,
@@ -91,6 +98,7 @@ void PowerProfilesModel::disconnectFromService()
                                             SLOT(handlePropertiesChanged(QString, QVariantMap, QStringList)));
     m_service.clear();
     m_path.clear();
+    m_interface.clear();
     m_available = false;
     m_activeProfile.clear();
     m_profiles.clear();
@@ -104,7 +112,7 @@ void PowerProfilesModel::refresh()
     }
     auto call = QDBusMessage::createMethodCall(m_service, m_path, QString::fromLatin1(kPropsInterface),
                                                QStringLiteral("GetAll"));
-    call << QString::fromLatin1(kInterface);
+    call << m_interface;
     auto pending = QDBusConnection::systemBus().asyncCall(call);
     auto *watcher = new QDBusPendingCallWatcher(pending, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
@@ -125,7 +133,7 @@ void PowerProfilesModel::handlePropertiesChanged(const QString &interface,
                                                  const QVariantMap &changedProps,
                                                  const QStringList &)
 {
-    if (interface != QLatin1String(kInterface)) {
+    if (interface != m_interface) {
         return;
     }
     bool touched = false;
@@ -174,7 +182,7 @@ void PowerProfilesModel::setProfile(const QString &profile)
     }
     auto call = QDBusMessage::createMethodCall(m_service, m_path, QString::fromLatin1(kPropsInterface),
                                                QStringLiteral("Set"));
-    call << QString::fromLatin1(kInterface) << QStringLiteral("ActiveProfile")
+    call << m_interface << QStringLiteral("ActiveProfile")
          << QVariant::fromValue(QDBusVariant(profile));
     QDBusConnection::systemBus().asyncCall(call);
 }

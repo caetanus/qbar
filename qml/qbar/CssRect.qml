@@ -76,11 +76,21 @@ Item {
 
     readonly property var shadowList: (cssTheme && cssTheme.loaded && style && style["box-shadow"])
         ? cssTheme.parseBoxShadowList(style["box-shadow"]) : []
-    readonly property var shadow: shadowList.length > 0 ? shadowList[0] : ({})
-    readonly property bool hasShadow: shadow && shadow.color !== undefined
-    // `box-shadow: inset ...` → recessed bevel: dark inner edge top/left, light bottom/right.
+    // Drop shadow uses the first OUTSET shadow (inset shadows never cast a drop shadow).
+    readonly property var outsetShadow: {
+        for (var i = 0; i < root.shadowList.length; ++i)
+            if (root.shadowList[i] && root.shadowList[i].inset !== true)
+                return root.shadowList[i]
+        return ({})
+    }
+    readonly property bool hasOutsetShadow: root.outsetShadow.color !== undefined
+    // Inset shadows. TWO of them (a dark+light pair) = a recessed bevel (e.g. bliss-xp's
+    // sunken panels). A SINGLE one = a directional inner edge — waybar's idiom for the
+    // active-workspace underline (`box-shadow: inset 0 -3px #fff`), NOT a 4-sided bevel.
     readonly property var insetShadows: root.insetShadowsOf(root.shadowList)
-    readonly property bool insetBevel: root.insetShadows.length > 0
+    readonly property bool insetBevel: root.insetShadows.length >= 2
+    readonly property var insetEdgeShadow: root.insetShadows.length === 1 ? root.insetShadows[0] : null
+    readonly property bool insetEdge: root.insetEdgeShadow !== null
     readonly property color insetDarkColor: root.insetShadows.length > 0
         ? root.insetShadows[0].color : "transparent"
     readonly property color insetLightColor: root.insetShadows.length > 1
@@ -163,13 +173,13 @@ Item {
             }
         }
 
-        layer.enabled: root.hasShadow && !root.insetBevel
+        layer.enabled: root.hasOutsetShadow
         layer.effect: MultiEffect {
             shadowEnabled: true
-            shadowColor: root.hasShadow ? root.shadow.color : "transparent"
-            shadowHorizontalOffset: root.hasShadow ? root.shadow.x : 0
-            shadowVerticalOffset: root.hasShadow ? root.shadow.y : 0
-            shadowBlur: root.hasShadow ? Math.min(1, root.shadow.blur / 32) : 0
+            shadowColor: root.hasOutsetShadow ? root.outsetShadow.color : "transparent"
+            shadowHorizontalOffset: root.hasOutsetShadow ? root.outsetShadow.x : 0
+            shadowVerticalOffset: root.hasOutsetShadow ? root.outsetShadow.y : 0
+            shadowBlur: root.hasOutsetShadow ? Math.min(1, root.outsetShadow.blur / 32) : 0
             autoPaddingEnabled: true
         }
 
@@ -260,6 +270,34 @@ Item {
             anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom
             anchors.topMargin: root.clampedRadius(1); anchors.bottomMargin: root.clampedRadius(2)
             width: 1; color: root.insetLightColor
+        }
+    }
+
+    // A SINGLE inset box-shadow is a directional inner edge (waybar's active-workspace
+    // underline `box-shadow: inset 0 -3px #fff`), not a 4-sided bevel: one band on the side
+    // the offset points away from, thick = |offset|.
+    Item {
+        anchors.fill: parent
+        visible: root.insetEdge
+        Rectangle { // top/bottom band (vertical offset dominates)
+            visible: root.insetEdge && root.insetEdgeShadow.y !== 0
+                && Math.abs(root.insetEdgeShadow.y) >= Math.abs(root.insetEdgeShadow.x)
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: root.insetEdge && root.insetEdgeShadow.y > 0 ? parent.top : undefined
+            anchors.bottom: root.insetEdge && root.insetEdgeShadow.y < 0 ? parent.bottom : undefined
+            height: root.insetEdge ? Math.max(1, Math.abs(root.insetEdgeShadow.y)) : 0
+            color: root.insetEdge ? root.insetEdgeShadow.color : "transparent"
+        }
+        Rectangle { // left/right band (horizontal offset dominates)
+            visible: root.insetEdge && root.insetEdgeShadow.x !== 0
+                && Math.abs(root.insetEdgeShadow.x) > Math.abs(root.insetEdgeShadow.y)
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.left: root.insetEdge && root.insetEdgeShadow.x > 0 ? parent.left : undefined
+            anchors.right: root.insetEdge && root.insetEdgeShadow.x < 0 ? parent.right : undefined
+            width: root.insetEdge ? Math.max(1, Math.abs(root.insetEdgeShadow.x)) : 0
+            color: root.insetEdge ? root.insetEdgeShadow.color : "transparent"
         }
     }
 

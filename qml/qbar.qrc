@@ -6,6 +6,9 @@
     <file>applets/Caffeine.qml</file>
     <file>applets/Disk.qml</file>
     <file>applets/PowerProfiles.qml</file>
+    <file>applets/UPower.qml</file>
+    <file>applets/User.qml</file>
+    <file>applets/Privacy.qml</file>
     <file>applets/CPU.qml</file>
     <file>applets/Clock.qml</file>
     <file>applets/Brightness.qml</file>
@@ -27,6 +30,8 @@
     <file>qbar/DismissOverlay.qml</file>
     <file>qbar/PopupShell.qml</file>
     <file>qbar/CssRect.qml</file>
+    <file>qbar/Group.qml</file>
+    <file>qbar/BatteryIcon.qml</file>
     <file>qbar/CssText.qml</file>
     <file>qbar/CssEnable.qml</file>
     <file>qbar/CssKeyframes.qml</file>
@@ -37,9 +42,14 @@
     <file>qbar/Tooltip.qml</file>
     <file>qbar/Contrast.js</file>
     <file>qbar/Format.js</file>
+    <file>qbar/Fetch.js</file>
+    <file>qbar/Json.js</file>
     <file>icons/caffeine-cup-empty-white.svg</file>
     <file>icons/caffeine-cup-full-black.svg</file>
     <file>popups/BatteryPopup.qml</file>
+    <file>popups/UPowerPopup.qml</file>
+    <file>popups/UserPopup.qml</file>
+    <file>popups/NetworkPopup.qml</file>
     <file>popups/CalendarPopup.qml</file>
     <file>popups/CPUPopup.qml</file>
     <file>popups/DiskPopup.qml</file>

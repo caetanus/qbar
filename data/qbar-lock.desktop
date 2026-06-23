@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=QBar Lock
+Comment=QBar QML lockscreen
+Exec=qbar-lock
+Icon=system-lock-screen
+Terminal=false
+Categories=System;Security;
+StartupNotify=false

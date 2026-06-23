@@ -3,6 +3,7 @@ project(
   'c',
   'cpp',
   version: '0.1.0',
+  license: 'MIT',
   default_options: [
     'b_pie=false',
     'cpp_std=c++20',
@@ -58,6 +59,12 @@ platform_generated = []
 platform_args = []
 platform_includes = []
 wayland_shell_plugin = []
+
+if get_option('qml_debug')
+  # Pulls in the QML debug services so `-qmljsdebugger=port:N` activates the
+  # profiler/JS-debugger connector. Profiling builds only — never ship enabled.
+  platform_args += ['-DQT_QML_DEBUG', '-DQT_QML_DEBUG_NO_WARNING']
+endif
 
 if popup_emboss_shader_enabled
   platform_args += ['-DQBAR_HAVE_POPUP_EMBOSS_SHADER=1']
@@ -162,7 +169,15 @@ if wayland_dep.found() and wlroots_dep.found() and wayland_scanner.found()
     'qbar-layer-shell-plugin-copy',
     input: wayland_shell_plugin,
     output: 'qbar-layer-shell-plugin-copy.stamp',
-    command: ['sh', '-c', 'mkdir -p wayland-shell-integration && cp "$1" wayland-shell-integration/libqbar-layer-shell.so && touch "$2"', 'sh', '@INPUT@', '@OUTPUT@'],
+    # Replace the plugin ATOMICALLY (write to a temp, then rename). A plain `cp` truncates and
+    # rewrites the SAME inode, and a running qbar mmaps this file MAP_PRIVATE — so overwriting it
+    # in place pulls the read-only .text/.data.rel.ro (vtable) pages out from under the live
+    # process, corrupting it on the next page fault → crash during recompilation (confirmed: the
+    # inode is preserved by cp, and cores taken right after a rebuild showed zeroed plugin
+    # vtables → rip=0 in sendThroughObjectEventFilters). rename() gives the destination a NEW
+    # inode; the old one stays alive for the running process's mapping, so a rebuild no longer
+    # crashes a running bar.
+    command: ['sh', '-c', 'mkdir -p wayland-shell-integration && cp "$1" wayland-shell-integration/libqbar-layer-shell.so.tmp && mv -f wayland-shell-integration/libqbar-layer-shell.so.tmp wayland-shell-integration/libqbar-layer-shell.so && touch "$2"', 'sh', '@INPUT@', '@OUTPUT@'],
     build_by_default: true,
   )
 endif
@@ -170,6 +185,7 @@ endif
 sources = files(
   'src/main.cpp',
   'src/barwindow.cpp',
+  'src/crashguard.cpp',
   'src/config.cpp',
   'src/brightness/brightnessmodel.cpp',
   'src/caffeine/caffeinemodel.cpp',
@@ -181,6 +197,13 @@ sources = files(
   'src/json/jsonc.cpp',
   'src/dbus/dbusservice.cpp',
   'src/qml/qbarpopupservice.cpp',
+  'src/qml/qbaripc.cpp',
+  'src/qml/jsonasync.cpp',
+  'src/qml/jstimers.cpp',
+  'src/qml/netfetch.cpp',
+  'src/qml/jsprocess.cpp',
+  'src/qml/localstorage.cpp',
+  'src/qml/modelcapsules.cpp',
   'src/tray/statusnotifiermodel.cpp',
   'src/cpu/cpumodel.cpp',
   'src/temperature/temperaturemodel.cpp',
@@ -191,11 +214,15 @@ sources = files(
   'src/graphics/sparkline.cpp',
   'src/platform/capslockmonitor.cpp',
   'src/network/networkmodel.cpp',
+  'src/network/networkprocessmodel.cpp',
   'src/networkmanager/networkmanagermodel.cpp',
   'src/battery/batterymodel.cpp',
   'src/disk/diskmodel.cpp',
   'src/bluetooth/bluetoothmodel.cpp',
   'src/powerprofiles/powerprofilesmodel.cpp',
+  'src/upower/upowermodel.cpp',
+  'src/user/usermodel.cpp',
+  'src/privacy/privacymodel.cpp',
   'src/calendar/calendarmodel.cpp',
   'src/wm/windowmanagerbackend.cpp',
   'src/wm/workspacemodel.cpp',
@@ -214,6 +241,13 @@ headers = files(
   'src/css/csstheme.h',
   'src/dbus/dbusservice.h',
   'src/qml/qbarpopupservice.h',
+  'src/qml/qbaripc.h',
+  'src/qml/jsonasync.h',
+  'src/qml/jstimers.h',
+  'src/qml/netfetch.h',
+  'src/qml/jsprocess.h',
+  'src/qml/localstorage.h',
+  'src/qml/modelcapsules.h',
   'src/brightness/brightnessmodel.h',
   'src/caffeine/caffeinemodel.h',
   'src/customtool/customtoolmodel.h',
@@ -226,11 +260,15 @@ headers = files(
   'src/graphics/sparkline.h',
   'src/platform/capslockmonitor.h',
   'src/network/networkmodel.h',
+  'src/network/networkprocessmodel.h',
   'src/networkmanager/networkmanagermodel.h',
   'src/battery/batterymodel.h',
   'src/disk/diskmodel.h',
   'src/bluetooth/bluetoothmodel.h',
   'src/powerprofiles/powerprofilesmodel.h',
+  'src/upower/upowermodel.h',
+  'src/user/usermodel.h',
+  'src/privacy/privacymodel.h',
   'src/calendar/calendarmodel.h',
   'src/wm/windowmanagerbackend.h',
   'src/wm/workspacemodel.h',
@@ -253,7 +291,16 @@ if wireplumber_dep.found()
   platform_args += ['-DQBAR_HAVE_WIREPLUMBER=1']
 endif
 
-qresources = [files('qml/qbar.qrc')]
+# Privacy module (optional): mic/camera in-use indicator via libpipewire. privacymodel.cpp
+# is always compiled (an inert stub without the define); the dep + define are added only when
+# libpipewire is present.
+pipewire_dep = dependency('libpipewire-0.3', required: get_option('privacy'))
+if pipewire_dep.found()
+  platform_deps += [pipewire_dep]
+  platform_args += ['-DQBAR_HAVE_PIPEWIRE=1']
+endif
+
+qresources = [files('qml/qbar.qrc'), files('data/qbar-defaults.qrc')]
 if popup_emboss_shader_enabled
   qresources += [popup_emboss_shader_qrc]
 endif
@@ -275,6 +322,74 @@ executable(
   pie: false,
   install: true,
 )
+
+# Tiny client for the JSON IPC — bind it to a key in your compositor
+# (e.g. `bindsym $mod+c exec qbar-ipc toggle cpu`).
+executable(
+  'qbar-ipc',
+  files('src/tools/qbaripccli.cpp'),
+  dependencies: [dependency('Qt6Core'), dependency('Qt6Network')],
+  install: true,
+)
+
+lockscreen_dep = dependency('pam', required: get_option('lockscreen'))
+if lockscreen_dep.found()
+  lockscreen_args = []
+  lockscreen_deps = [
+    dependency('Qt6Core'),
+    dependency('Qt6Gui'),
+    dependency('Qt6Qml'),
+    dependency('Qt6Quick'),
+    lockscreen_dep,
+  ]
+  if x11_dep.found()
+    lockscreen_args += ['-DQBAR_LOCK_HAVE_X11=1']
+    lockscreen_deps += [x11_dep]
+  endif
+
+  lockscreen_headers = files(
+    'src/lock/lockbackend.h',
+    'src/lock/lockcontroller.h',
+    'src/lock/pamauthenticator.h',
+    'src/lock/waylandlockbackend.h',
+    'src/lock/x11lockbackend.h',
+    'src/css/csstheme.h',
+  )
+  lockscreen_qt_sources = qt6.preprocess(
+    moc_headers: lockscreen_headers,
+    qresources: files('qml/qbar-lock.qrc'),
+  )
+  executable(
+    'qbar-lock',
+    files(
+      'src/lock/lockmain.cpp',
+      'src/lock/lockbackend.cpp',
+      'src/lock/lockcontroller.cpp',
+      'src/lock/pamauthenticator.cpp',
+      'src/lock/waylandlockbackend.cpp',
+      'src/lock/x11lockbackend.cpp',
+      'src/css/csstheme.cpp',
+      'src/css/valueparser.cpp',
+    ),
+    lockscreen_qt_sources,
+    cpp_args: lockscreen_args,
+    include_directories: include_directories('src'),
+    dependencies: lockscreen_deps,
+    install: true,
+  )
+  install_data(
+    'data/themes/bliss-98-lock.css',
+    install_dir: get_option('datadir') / 'qbar' / 'themes',
+  )
+  install_data(
+    'data/pam/qbar-lock',
+    install_dir: get_option('sysconfdir') / 'pam.d',
+  )
+  install_data(
+    'data/qbar-lock.desktop',
+    install_dir: get_option('datadir') / 'applications',
+  )
+endif
 
 install_data(
   'data/qbar.desktop',
@@ -360,6 +475,55 @@ jsonc_test_exe = executable(
 )
 
 test('jsonc', jsonc_test_exe)
+
+localstorage_test_moc = qt6.preprocess(
+  moc_headers: files(
+    'tests/test_localstorage.h',
+    'src/qml/localstorage.h',
+  ),
+)
+
+localstorage_test_exe = executable(
+  'test-localstorage',
+  files(
+    'tests/test_localstorage.cpp',
+    'src/qml/localstorage.cpp',
+  ),
+  localstorage_test_moc,
+  dependencies: [
+    dependency('Qt6Core'),
+    dependency('Qt6Qml'),
+    dependency('sqlite3'),
+    qt_test_dep,
+  ],
+  include_directories: include_directories('src'),
+)
+
+test('local-storage', localstorage_test_exe)
+
+jsonasync_test_moc = qt6.preprocess(
+  moc_headers: files(
+    'tests/test_jsonasync.h',
+    'src/qml/jsonasync.h',
+  ),
+)
+
+jsonasync_test_exe = executable(
+  'test-jsonasync',
+  files(
+    'tests/test_jsonasync.cpp',
+    'src/qml/jsonasync.cpp',
+  ),
+  jsonasync_test_moc,
+  dependencies: [
+    dependency('Qt6Core'),
+    dependency('Qt6Qml'),
+    qt_test_dep,
+  ],
+  include_directories: include_directories('src'),
+)
+
+test('json-async', jsonasync_test_exe)
 
 customtool_test_moc = qt6.preprocess(
   moc_headers: files(

@@ -135,6 +135,25 @@ double NetworkModel::computePeak(const QVariantList &history)
     return peak;
 }
 
+// Condense the 1 Hz samples into ~5s buckets, keeping ~5 minutes of them (a rotating ring).
+void NetworkModel::accumulate5m(double download, double upload)
+{
+    constexpr int kBucketSamples = 5;  // 5 × 1s = one 5s bucket
+    m_bucket5mDownSum += download;
+    m_bucket5mUpSum += upload;
+    ++m_bucket5mCount;
+    if (m_bucket5mCount >= kBucketSamples) {
+        m_download5m.append(m_bucket5mDownSum / m_bucket5mCount);
+        m_upload5m.append(m_bucket5mUpSum / m_bucket5mCount);
+        // Leave room for the live partial bucket the getter appends (kWindow5mPoints total).
+        while (m_download5m.size() > kWindow5mPoints - 1) m_download5m.removeFirst();
+        while (m_upload5m.size() > kWindow5mPoints - 1) m_upload5m.removeFirst();
+        m_bucket5mDownSum = 0.0;
+        m_bucket5mUpSum = 0.0;
+        m_bucket5mCount = 0;
+    }
+}
+
 void NetworkModel::onSampled(const NetworkSample &sample)
 {
     m_downloadRateBytesPerSecond = sample.downloadRate;
@@ -142,6 +161,7 @@ void NetworkModel::onSampled(const NetworkSample &sample)
     m_totalRateBytesPerSecond = sample.downloadRate + sample.uploadRate;
     appendHistory(&m_downloadRateHistory, sample.downloadRate);
     appendHistory(&m_uploadRateHistory, sample.uploadRate);
+    accumulate5m(sample.downloadRate, sample.uploadRate);
     m_downloadPeakBytesPerSecond = computePeak(m_downloadRateHistory);
     m_uploadPeakBytesPerSecond = computePeak(m_uploadRateHistory);
     emit statsChanged();

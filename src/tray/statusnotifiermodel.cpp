@@ -367,6 +367,13 @@ StatusNotifierModel::StatusNotifierModel(QObject *parent)
             SIGNAL(serviceOwnerChanged(QString,QString,QString)),
             this,
             SLOT(handleWatcherOwnerChanged(QString,QString,QString)));
+
+    // attentionRows derives from item statuses + the row set, so re-emit its change on any
+    // model mutation (status edits arrive as dataChanged, add/remove as rows in/out/reset).
+    connect(this, &QAbstractItemModel::dataChanged, this, &StatusNotifierModel::attentionRowsChanged);
+    connect(this, &QAbstractItemModel::rowsInserted, this, &StatusNotifierModel::attentionRowsChanged);
+    connect(this, &QAbstractItemModel::rowsRemoved, this, &StatusNotifierModel::attentionRowsChanged);
+    connect(this, &QAbstractItemModel::modelReset, this, &StatusNotifierModel::attentionRowsChanged);
 }
 
 int StatusNotifierModel::rowCount(const QModelIndex &parent) const
@@ -452,6 +459,17 @@ int StatusNotifierModel::protocolVersion() const
 int StatusNotifierModel::count() const
 {
     return m_items.size();
+}
+
+QVariantList StatusNotifierModel::attentionRows() const
+{
+    QVariantList rows;
+    for (int i = 0; i < m_items.size(); ++i) {
+        if (m_items.at(i).status == QLatin1String("NeedsAttention")) {
+            rows.append(i);
+        }
+    }
+    return rows;
 }
 
 void StatusNotifierModel::activate(int row)

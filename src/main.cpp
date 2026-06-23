@@ -1,7 +1,9 @@
 #include "barwindow.h"
 #include "config.h"
+#include "crashguard.h"
 #include "customtool/customtoolmodel.h"
 #include "graphics/sparkline.h"
+#include "qml/qbaripc.h"
 
 #include <QApplication>
 #include <QCalendarWidget>
@@ -22,6 +24,7 @@
 #include <QtQml/qqml.h>
 #include <algorithm>
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
@@ -71,6 +74,50 @@ QByteArray argValue(int argc, char *argv[], const char *name, const char *fallba
     }
 
     return QByteArray(fallback);
+}
+
+// --- Log verbosity -----------------------------------------------------------------
+// A normal run shows only Warning and above (clean output for a release); `-v` adds Info,
+// `-vv` adds Debug. The threshold is enforced by a message handler keyed on the message
+// TYPE — independent of per-category logging rules — so it's predictable.
+QtMsgType g_logThreshold = QtWarningMsg;
+
+int logRank(QtMsgType type)
+{
+    switch (type) {
+    case QtDebugMsg: return 0;
+    case QtInfoMsg: return 1;
+    case QtWarningMsg: return 2;
+    case QtCriticalMsg: return 3;
+    case QtFatalMsg: return 4;
+    }
+    return 4;
+}
+
+void qbarMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &message)
+{
+    if (logRank(type) >= logRank(g_logThreshold)) {
+        const QByteArray line = qFormatLogMessage(type, context, message).toLocal8Bit();
+        fputs(line.constData(), stderr);
+        fputc('\n', stderr);
+    }
+    if (type == QtFatalMsg) {
+        abort();
+    }
+}
+
+// -v / --verbose = +1 (Info), -vv = +2 (Debug); repeatable.
+int verbosityLevel(int argc, char *argv[])
+{
+    int level = 0;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "-v") == 0 || std::strcmp(argv[i], "--verbose") == 0) {
+            level += 1;
+        } else if (std::strcmp(argv[i], "-vv") == 0) {
+            level += 2;
+        }
+    }
+    return level;
 }
 
 void configureWaylandLayerShellEnvironment(int argc, char *argv[])
@@ -225,11 +272,20 @@ void configureCoreDumps()
 
 int main(int argc, char *argv[])
 {
+    const int verbosity = verbosityLevel(argc, argv);
+    g_logThreshold = verbosity >= 2 ? QtDebugMsg
+                   : verbosity == 1 ? QtInfoMsg
+                                    : QtWarningMsg;
+    qInstallMessageHandler(qbarMessageHandler);
+
     configureCoreDumps();
     configureWaylandLayerShellEnvironment(argc, argv);
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGLRhi);
 
     QApplication app(argc, argv);
+    // After QApplication so the Wayland platform plugin (and libQt6WaylandClient, where the
+    // recoverable doHandleFrameCallback lives) is loaded and dlsym can find it.
+    installCrashGuard();
     QCoreApplication::setApplicationName(QStringLiteral("qbar"));
     QCoreApplication::setOrganizationName(QStringLiteral("qbar"));
     QGuiApplication::setDesktopFileName(QStringLiteral("qbar"));
@@ -314,6 +370,9 @@ int main(int argc, char *argv[])
         bar->show();
         bars.append(bar);
     }
+
+    // JSON IPC over a QLocalSocket (open/toggle popups, e.g. from keyboard shortcuts).
+    QbarIpc::instance()->start();
 
     return app.exec();
 }

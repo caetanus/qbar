@@ -36,6 +36,13 @@ QBar.CssRect {
         return Qt.rgba(c.r, c.g, c.b, a)
     }
 
+    // Per-button CSS: `#taskbar button[.focused/.urgent]` (mirrors #workspaces button).
+    // Lets a theme style the running-app buttons — e.g. the bliss-xp raised/pressed
+    // Luna buttons — instead of the flat fallback tint below.
+    function buttonStyle(classes) {
+        return cssTheme && cssTheme.loaded ? cssTheme.resolveWith("taskbar", "button", classes) : ({})
+    }
+
     // Wheel cycles focus through the currently-visible windows in row order.
     // direction +1 = next, -1 = previous.
     function cycle(direction) {
@@ -137,14 +144,20 @@ QBar.CssRect {
                 height: root.height
                 width: visible ? Math.ceil(icon.width + 6 + label.width + 12) : 0
 
-                Rectangle {
+                // `#taskbar button` + state class for this window's status.
+                readonly property var btnClasses: entry.urgent ? ["urgent"]
+                    : entry.focused ? ["focused"] : []
+                readonly property var btnStyle: root.buttonStyle(entry.btnClasses)
+                // Flat tint when the theme doesn't style #taskbar button (unchanged behaviour).
+                readonly property color btnFallback: entry.urgent ? root.alphaColor(theme.accent, 0.35)
+                    : entry.focused ? root.alphaColor(theme.foreground, 0.16) : "transparent"
+
+                QBar.CssFill {
                     anchors.fill: parent
-                    radius: 3
-                    color: {
-                        if (entry.urgent) return root.alphaColor(theme.accent, 0.35)
-                        if (entry.focused) return root.alphaColor(theme.foreground, 0.16)
-                        return "transparent"
-                    }
+                    style: entry.btnStyle
+                    radius: entry.btnStyle["border-radius"]
+                        ? cssTheme.parseLength(entry.btnStyle["border-radius"], 3) : 3
+                    defaultColor: entry.btnFallback
                 }
 
                 Row {
@@ -171,9 +184,10 @@ QBar.CssRect {
                         width: Math.min(implicitWidth, root.maxTitleWidth)
                         elide: Text.ElideRight
                         text: entry.title.length > 0 ? entry.title : entry.appId
-                        color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"])
+                        color: entry.btnStyle["color"] ? cssTheme.parseColor(entry.btnStyle["color"])
+                            : cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"])
                             : (entry.focused ? theme.foreground : root.alphaColor(theme.foreground, 0.75))
-                        font.family: cssStyle["font-family"] || theme.fontFamily
+                        font.family: entry.btnStyle["font-family"] || cssStyle["font-family"] || theme.fontFamily
                         font.pointSize: theme.fontSize
                         font.bold: entry.focused
                     }

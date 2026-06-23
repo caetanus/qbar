@@ -1,8 +1,7 @@
 /*
-*
-* Catppuccin Mocha palette
-* Maintainer: rubyowo
-*
+* Catppuccin Macchiato — adapted from the Waybar theme by the Catppuccin org
+* (https://github.com/catppuccin/waybar, MIT; original maintainer: rubyowo).
+* Palette: https://github.com/catppuccin/catppuccin.
 */
 
 @define-color base   #24273a;
@@ -41,11 +40,11 @@ window#waybar    { background-color: rgba(0, 0, 0, 0.3);     }
 /* --- qbar gradient + drop-shadow test (uses @define-color vars) --- */
 
 #popup {
-    background: linear-gradient(135deg, @crust, @mauve);
-    border-color: @lavender;
+    background: linear-gradient(135deg, @mantle, @base);
+    border-color: @surface1;
     border-width: 1px;
-    text-shadow: 0px 1px 3px rgba(0, 0, 0, 0.9);
-    opacity: 0.92;
+    text-shadow: 0px 1px 3px rgba(0, 0, 0, 0.6);
+    opacity: 0.96;
 }
 
 #cpu-popup {

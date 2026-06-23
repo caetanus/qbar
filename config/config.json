@@ -1,0 +1,140 @@
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  qbar configuration                                                        ║
+// ║                                                                            ║
+// ║  This file is JSONC: // line comments and /* block */ comments are fine,   ║
+// ║  and trailing commas are allowed. Edit and save — qbar hot-reloads.        ║
+// ║                                                                            ║
+// ║  Live around with it: enable a commented line, save, watch it appear.      ║
+// ║  Full option reference: config.schema.json (sits next to this file, so     ║
+// ║  editors with JSON-schema support autocomplete + validate as you type).    ║
+// ║                                                                            ║
+// ║  SHAPE:                                                                     ║
+// ║    • A single { … } object  → one bar (this file).                         ║
+// ║    • An [ … ] array         → several bars (multi-monitor, top+bottom).    ║
+// ║      Array entries may be inline bar objects OR "path/to/bar.json"         ║
+// ║      strings (see the "include" note at the very bottom).                  ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+{
+    // Editor JSON-schema association (autocomplete + validation). Leave as-is.
+    "$schema": "./config.schema.json",
+
+    // ── Placement ───────────────────────────────────────────────────────────
+    "position": "top",          // "top" | "bottom"
+    "height": 30,
+    "spacing": 2,               // gap between applets (px)
+    // Want a floating bar? Set the edge gap in your theme's CSS (waybar idiom), e.g.
+    //   #qbar { margin-top: 8px; }        /* gap from the screen edge */
+    //   window#waybar { margin: 8px; }    /* shorthand also works */
+    // (left/right become content insets.) The bar sits flush by default.
+    "exclusiveZone": true,      // reserve space so windows don't sit under the bar
+    "layer": "top",             // wlr-layer: "background"|"bottom"|"top"|"overlay"
+    // "output": "DP-1",        // pin this bar to one monitor (name from `swaymsg -t get_outputs`)
+
+    // ── Theme ─────────────────────────────────────────────────────────────────
+    // A relative path resolves against this config dir (~/.config/qbar/). All the
+    // bundled themes were copied to ./themes/ on first run — swap the name and save.
+    // Try: nord, catppuccin-mocha, tokyo-night, gruvbox-dark, dracula, rose-pine,
+    //      everforest-dark, solarized-dark, paper-sun, bliss-xp, vinyl-dusk … (see ./themes/)
+    "styleSheet": "themes/nord.css",
+    // "baseStyleSheet": "themes/base.css",  // optional layer the theme cascades over
+
+    // Fallback colours (used by applets the CSS theme doesn't fully style, and as
+    // the basis for auto-contrast). The styleSheet above normally overrides the look.
+    "background": "#2e3440e6",
+    "foreground": "#d8dee9",
+    "accent": "#88c0d0",
+
+    "fontFamily": "Sans Serif",
+    "fontSize": 10,
+
+    // ── Modules ───────────────────────────────────────────────────────────────
+    // Three regions. A module is a builtin name ("Clock"), a "/variant" of one
+    // ("Sound/out"), a "CustomTool:custom/<id>" (see customTools below), or an
+    // inline group/drawer object (see the audio drawer on the right).
+    //
+    // Builtins available: Workspaces, I3Mode, Title, CPU, Memory, Network,
+    //   NetworkManager, Temperature, Disk, Battery, UPower, Sound, Media, Bluetooth,
+    //   PowerProfiles, Brightness, Caffeine, XInput, Privacy, User, Tray.
+
+    "modules-left": [
+        "Workspaces",
+        "CPU",
+        "Memory",
+        "Network"
+        // "Media"          // MPRIS now-playing (marquee + popup)
+        // "Title"          // focused-window title (or put it in modules-center)
+    ],
+
+    "modules-center": [
+        "Title"
+    ],
+
+    "modules-right": [
+        "Caffeine",
+        "Brightness",
+        "XInput",
+        "NetworkManager",
+        // Audio as a hover-expand drawer: collapsed it shows output volume; hover
+        // and it slides open to reveal the input (mic) control too.
+        { "audio": [ { "drawer": { "transition-duration": 120 } }, "Sound/out", "Sound/in" ] },
+        "Battery",
+        "Clock",
+        "Tray"
+        // "Disk"           // root filesystem usage
+        // "Temperature"    // CPU temp (auto-hides if no sensor)
+        // "Bluetooth"      // adapter + devices
+        // "PowerProfiles"  // power-saver / balanced / performance
+        // "UPower"         // peripheral batteries (mouse, headset…)
+        // "Privacy"        // mic/camera in-use indicator
+        // "User"           // username + session menu
+    ],
+
+    // ── Per-module options (optional) ─────────────────────────────────────────
+    "clock": { "format": "ddd dd MMM  HH:mm" },
+    "cpu":     { "format": ["cycle", "graph"], "text": "cpu" },
+    "memory":  { "format": ["cycle", "graph"], "text": "mem" },
+    "network": { "format": ["cycle", "graph"], "text": "net" },
+    // "taskbar": { "scope": "all", "middleClickClose": true, "rightClickMenu": true },
+
+    // ── Custom tools ──────────────────────────────────────────────────────────
+    // Two kinds:
+    //   • "source": a runtime QML widget (.qml) — full custom rendering, popups,
+    //     network, hot-reload. The three below are bundled (in ./widgets/, copied
+    //     on first run) — useful on their own AND as worked examples to learn from.
+    //   • "exec":   a script that prints text/JSON (waybar-compatible).
+    //
+    // Add the matching "CustomTool:custom/<id>" token to a modules-* list to show it.
+    "customTools": {
+        // ── bundled QML widgets (uncomment the entry AND its module token) ──
+
+        // Weather — current conditions + animated backdrop + forecast popup.
+        // "custom/weather": {
+        //     "source": "widgets/Weather.qml",
+        //     "cities": ["Lisboa", "São Paulo"],
+        //     "animatedBackground": true
+        // },
+
+        // Bitcoin — BTC ticker (Binance) + candlestick popup.
+        // "custom/btc": { "source": "widgets/Bitcoin.qml" },
+
+        // Speed test — click (or `qbar-ipc trigger speedtest-run`) to measure
+        // down/up/ping via Cloudflare; live readout + popup.
+        // "custom/speedtest": { "source": "widgets/SpeedTest.qml" }
+
+        // ── a trivial exec example (prints whoami; harmless) ──
+        // "custom/whoami": { "exec": "whoami", "interval": 0, "tooltip": false }
+    }
+
+    // ── Multi-monitor / splitting a big config ────────────────────────────────
+    // When you have several bars, make the TOP LEVEL an array. Entries can be inline
+    // objects or path strings ("include"), resolved relative to this dir. e.g.:
+    //
+    //   [
+    //     "bars/top-main.json",
+    //     "bars/bottom-main.json",
+    //     { "output": "HDMI-A-1", "position": "top", "styleSheet": "themes/dracula.css",
+    //       "modules-left": ["Workspaces"], "modules-right": ["Clock"] }
+    //   ]
+    //
+    // Each included file is itself a bar object (or an array of them).
+}

@@ -197,6 +197,24 @@ Item {
                 // #workspaces button:hover (combined with the current state) — drives
                 // the animated hover highlight overlay below.
                 readonly property var hoverStyle: root.buttonStyle(stateClasses.concat(["hover"]))
+
+                // CSS `transform` per state (rotate/scale), animated by the tile's CSS
+                // `transition`. On hover the tile rotates to `button:hover { transform }`;
+                // when urgent it wiggles ±(the `button.urgent { transform: rotate }` angle,
+                // default 5°). Hover rotation and the wiggle are summed so they don't fight.
+                readonly property bool hovered: workspaceMouseArea.containsMouse
+                readonly property var baseXform: (cssTheme && cssTheme.loaded)
+                    ? cssTheme.parseTransform(cssStyle["transform"] || "") : ({})
+                readonly property var hoverXform: (cssTheme && cssTheme.loaded)
+                    ? cssTheme.parseTransform(hoverStyle["transform"] || "") : ({})
+                readonly property real xformRotate: hovered ? (hoverXform.rotate || 0)
+                    : (attention ? 0 : (baseXform.rotate || 0))
+                readonly property real xformScale: hovered ? (hoverXform.scale || 1)
+                    : (baseXform.scale || 1)
+                readonly property real wiggleAmp: attention
+                    ? (Math.abs(baseXform.rotate || 0) > 0 ? Math.abs(baseXform.rotate) : 5) : 0
+                property real wiggleRotate: 0
+
                 readonly property real tilePaddingX: root.paddingX(cssStyle)
                 readonly property real tileMinWidth: root.cssPixels(cssStyle, "min-width", 0)
                 readonly property real tileRadius: root.cssPixels(cssStyle, "border-radius", 0)
@@ -219,15 +237,57 @@ Item {
                     ? cssTheme.keyframes(blinkAnim.name) : []
                 readonly property bool urgentBlinkEnabled: attention
                     && root.fillColorOf(blinkStyle).length > 0 && blinkFrames.length > 0
+                // background-color from the theme wins. If the theme styles #workspaces
+                // button but sets no background-color (e.g. the stock waybar theme leaves
+                // inactive buttons transparent), respect that — only fall back to qbar's
+                // built-in tints when the theme doesn't touch the button at all.
                 readonly property color tileBg: cssStyle["background-color"]
                     ? cssTheme.parseColor(cssStyle["background-color"])
-                    : (workspaceTile.attention ? "#ff5555" : visible ? "#526171" : "#273847")
+                    : (Object.keys(cssStyle).length > 0 ? "transparent"
+                        : (workspaceTile.attention ? "#ff5555" : visible ? "#526171" : "#273847"))
                 readonly property color tileFg: cssStyle["color"]
                     ? cssTheme.parseColor(cssStyle["color"])
                     : (workspaceTile.attention ? "#ffffff" : "#eef2f7")
 
                 width: Math.max(label.implicitWidth + tilePaddingX * 2, tileMinWidth)
                 color: "transparent"
+
+                // CSS transform: rotate (hover + wiggle, summed) about the tile centre, and
+                // scale. The rotate transition is the tile's CSS `transition` (QML easing);
+                // it's suspended while the wiggle runs so the two don't tug on the angle.
+                scale: workspaceTile.xformScale
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: workspaceTile.tileTransition.ms
+                        easing.type: workspaceTile.tileTransition.easing
+                    }
+                }
+                transform: Rotation {
+                    origin.x: workspaceTile.width / 2
+                    origin.y: workspaceTile.height / 2
+                    angle: workspaceTile.xformRotate + workspaceTile.wiggleRotate
+                    Behavior on angle {
+                        enabled: workspaceTile.wiggleRotate === 0
+                        NumberAnimation {
+                            duration: workspaceTile.tileTransition.ms
+                            easing.type: workspaceTile.tileTransition.easing
+                        }
+                    }
+                }
+
+                // Urgent wiggle: 0 → −amp → +amp → 0, pause, repeat (a CSS-amplitude wiggle).
+                SequentialAnimation {
+                    running: workspaceTile.attention && workspaceTile.wiggleAmp > 0
+                    loops: Animation.Infinite
+                    onRunningChanged: if (!running) workspaceTile.wiggleRotate = 0
+                    NumberAnimation { target: workspaceTile; property: "wiggleRotate"
+                        to: -workspaceTile.wiggleAmp; duration: 110; easing.type: Easing.OutSine }
+                    NumberAnimation { target: workspaceTile; property: "wiggleRotate"
+                        to: workspaceTile.wiggleAmp; duration: 220; easing.type: Easing.InOutSine }
+                    NumberAnimation { target: workspaceTile; property: "wiggleRotate"
+                        to: 0; duration: 110; easing.type: Easing.InSine }
+                    PauseAnimation { duration: 500 }
+                }
 
                 QBar.CssFill {
                     anchors.fill: parent

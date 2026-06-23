@@ -23,7 +23,9 @@ Text {
 
     color: (style && style["color"]) ? cssTheme.parseColor(style["color"]) : root.defaultColor
     font.family: (style && style["font-family"]) ? style["font-family"] : root.defaultFontFamily
-    font.pointSize: (style && style["font-size"]) ? cssTheme.parseLength(style["font-size"], theme.fontSize) : theme.fontSize
+    // The engine resolves CSS font-size → points (px→pt, em/rem, pt/bare); no unit math here.
+    font.pointSize: (style && style["font-size"])
+        ? cssTheme.parseFontSize(style["font-size"], theme.fontSize) : theme.fontSize
     verticalAlignment: Text.AlignVCenter
 
     // CSS `text-shadow` → drop-shadow layer.

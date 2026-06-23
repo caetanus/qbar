@@ -80,14 +80,31 @@ QStringList splitTopLevelWhitespace(const QString &text)
 
 bool parseLengthPx(const QString &token, double *out)
 {
-    QString t = token.trimmed();
-    if (t.endsWith(QLatin1String("px"), Qt::CaseInsensitive)) {
-        t = t.left(t.length() - 2);
+    // Normalize CSS length units to canonical (device-independent) pixels. px and a bare
+    // number are 1:1; pt → px at 96dpi (×96/72); em/rem → px against a 16px base (no font
+    // context here — fonts resolve em/rem themselves). This is the single length chokepoint
+    // every layout consumer (padding/margin/width/radius/border/box-shadow) goes through.
+    QString t = token.trimmed().toLower();
+    if (t.isEmpty()) {
+        return false;
+    }
+    double factor = 1.0;
+    if (t.endsWith(QLatin1String("px"))) {
+        t.chop(2);
+    } else if (t.endsWith(QLatin1String("pt"))) {
+        t.chop(2);
+        factor = 96.0 / 72.0;
+    } else if (t.endsWith(QLatin1String("rem"))) {
+        t.chop(3);
+        factor = 16.0;
+    } else if (t.endsWith(QLatin1String("em"))) {
+        t.chop(2);
+        factor = 16.0;
     }
     bool ok = false;
-    const double v = t.toDouble(&ok);
+    const double v = t.trimmed().toDouble(&ok);
     if (ok && out != nullptr) {
-        *out = v;
+        *out = v * factor;
     }
     return ok;
 }

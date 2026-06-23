@@ -1,4 +1,5 @@
-/* Rosé Pine — https://rosepinetheme.com */
+/* Rosé Pine — adapted from the Waybar theme by the Rosé Pine org
+   (https://github.com/rose-pine/waybar). Palette: https://rosepinetheme.com. */
 
 * { border: none; border-radius: 0; }
 window#waybar    { background-color: rgba(25, 23, 36, 0.90); border-radius: 8px; }

@@ -1,20 +1,11 @@
 #pragma once
 
 #include "config.h"
-#include "cpu/cpumodel.h"
-#include "temperature/temperaturemodel.h"
-#include "brightness/brightnessmodel.h"
+// Only the eager backends are referenced by member type here; the lazy ones live behind
+// ModelCapsules (src/qml/modelcapsules.cpp) and aren't needed in this header.
 #include "caffeine/caffeinemodel.h"
-#include "battery/batterymodel.h"
-#include "network/networkmodel.h"
-#include "networkmanager/networkmanagermodel.h"
-#include "disk/diskmodel.h"
-#include "bluetooth/bluetoothmodel.h"
-#include "powerprofiles/powerprofilesmodel.h"
 #include "sound/audiobackend.h"
-#include "mpris/mprismodel.h"
 #include "platform/capslockmonitor.h"
-#include "calendar/calendarmodel.h"
 #include "css/csstheme.h"
 #include "tray/statusnotifiermodel.h"
 #include "wm/windowmanagerbackend.h"
@@ -22,13 +13,22 @@
 #include <QByteArray>
 #include <QFileSystemWatcher>
 #include <QQuickView>
+#include <QSharedPointer>
 #include <QStringList>
 
+#include <functional>
+
 class QBarPopupService;
+class QNetworkAccessManager;
+class QTimer;
+class QUrl;
 
 class BarWindow final : public QQuickView {
     Q_OBJECT
     Q_PROPERTY(bool calendarAppAvailable READ calendarAppAvailable CONSTANT)
+    // Bumped whenever a runtime custom-widget QML file changes on disk; Bar.qml binds
+    // its widget Loaders to this and reloads them from disk on each bump (hot-reload).
+    Q_PROPERTY(int widgetReloadGeneration READ widgetReloadGeneration NOTIFY widgetReloadGenerationChanged)
 
 public:
     explicit BarWindow(const BarConfig &config, QWindow *parent = nullptr);
@@ -38,9 +38,20 @@ public slots:
     void openEvolutionCalendar();
     void cycleKeyboardLayout();
     void toggleCaffeine();
+    // Swap the CSS theme at runtime (IPC `set-css` — handy for previewing a theme). Accepts an
+    // http(s) URL, a file:// URL, or a path. (qbar-ipc resolves a bare/relative name to an
+    // absolute path against ITS OWN working directory before sending, since the daemon's cwd
+    // differs.) Returns false if empty or the file is missing.
+    bool setStyleSheet(const QString &path);
+    // Revert a `set-css` preview back to the theme the config file specifies (IPC `reset-css`).
+    bool resetStyleSheet();
 
 public:
     bool calendarAppAvailable() const;
+    int widgetReloadGeneration() const { return m_widgetReloadGeneration; }
+
+signals:
+    void widgetReloadGenerationChanged();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -53,40 +64,56 @@ private slots:
     void moveTestWindow();
     void handleQbarNodeFound(qint64 nodeId);
     void onConfigFileChanged(const QString &path);
+    void reloadConfigFromDisk();
+    void onWidgetFileChanged(const QString &path);
 
 private:
     void configureWindow();
+    void exposeModels();
     void loadCssTheme();
+    // Re-derive the bar's edge gap (CSS margin-top/bottom) into the qbarBarMargin* window
+    // properties the layer-shell plugin reads. Connected to CssTheme::loadedChanged so it runs
+    // on every (re)load — including the CSS hot-reload path that bypasses loadCssTheme().
+    void updateBarMarginsFromCss();
+    // Recursively resolve @import in `css` relative to `base` (http or file), fetching/
+    // reading each, then invoke `done` with the fully-inlined CSS. Async (http).
+    void resolveCssImports(const QString &css, const QUrl &base,
+                           QSharedPointer<QStringList> visited,
+                           std::function<void(const QString &)> done);
     void buildLayout();
     void positionAtTop();
     QRect targetBarGeometry() const;
     QString testWindowCriteria() const;
     void installTestWindowRule();
     void scheduleTestWindowRules();
+    void setupWidgetWatcher();
+    void refreshWidgetWatch();
+    void reloadWidgets();
+    QStringList runtimeWidgetFiles() const;
+    QByteArray widgetContentHash() const;
 
     BarConfig m_config;
+    // The styleSheet the config file specifies — preserved so `reset-css` can revert a
+    // `set-css` preview (which overwrites m_config.styleSheet). Tracks config hot-reloads.
+    QString m_configuredStyleSheet;
     QBarPopupService *m_popupService = nullptr;
     QString m_calendarPopupId;
     QString m_evolutionCalendarExecutable;
     WindowManagerBackend *m_wm = nullptr;
+    // Eager backends with direct C++ consumers; the rest are created lazily by ModelCapsules.
     StatusNotifierModel *m_trayModel = nullptr;
-    CpuModel *m_cpuModel = nullptr;
-    TemperatureModel *m_temperatureModel = nullptr;
-    NetworkModel *m_networkModel = nullptr;
-    NetworkManagerModel *m_networkManagerModel = nullptr;
-    BrightnessModel *m_brightnessModel = nullptr;
     CaffeineModel *m_caffeineModel = nullptr;
     AudioBackend *m_soundModel = nullptr;
-    MprisModel *m_mprisModel = nullptr;
     CapsLockMonitor *m_capsLockMonitor = nullptr;
-    CalendarModel *m_calendarModel = nullptr;
-    BatteryModel *m_batteryModel = nullptr;
-    DiskModel *m_diskModel = nullptr;
-    BluetoothModel *m_bluetoothModel = nullptr;
-    PowerProfilesModel *m_powerProfilesModel = nullptr;
     CssTheme *m_cssTheme = nullptr;
+    QNetworkAccessManager *m_cssNam = nullptr; // lazily created for set-css over http(s)
     QFileSystemWatcher *m_configWatcher = nullptr;
+    QTimer *m_configReloadTimer = nullptr; // debounces save-in-progress watcher events
     QByteArray m_configHash;
+    QFileSystemWatcher *m_widgetWatcher = nullptr;
+    QStringList m_widgetFiles;
+    QByteArray m_widgetHash;
+    int m_widgetReloadGeneration = 0;
     qint64 m_swayNodeId = -1;
     bool m_platformIntegrationApplied = false;
 };

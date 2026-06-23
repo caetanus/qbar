@@ -25,6 +25,9 @@ struct CssRule {
     QString requiredAncestorId;
     CssSimpleSelector selector;
     QVariantMap properties;
+    // Subset of `properties` declared `!important` — they win the cascade over
+    // non-important declarations regardless of specificity.
+    QVariantMap importantProperties;
 };
 
 class CssTheme : public QObject {
@@ -37,6 +40,10 @@ public:
     bool isLoaded() const { return m_loaded; }
 
     void load(const QString &path);
+    // Load several stylesheets as one cascade, in order (e.g. [baseStyleSheet, styleSheet]):
+    // each file's @imports are expanded relative to it, then they're concatenated so later
+    // files override earlier ones. Missing paths are skipped. All are watched for reload.
+    void loadLayered(const QStringList &paths);
     void loadFromString(const QString &css);
 
     // Resolve styles for an element (top-level selectors only). `pseudoElement`
@@ -70,6 +77,9 @@ public:
 
     // Parse a CSS length ("11px", "8") to pixels, or `fallback` when unparseable.
     Q_INVOKABLE qreal parseLength(const QString &value, qreal fallback) const;
+    // Resolve a CSS font-size to POINTS (px→pt ×72/96, em/rem×fallbackPt, pt/bare→pt),
+    // centrally — components consume the result directly, no per-component unit math.
+    Q_INVOKABLE qreal parseFontSize(const QString &value, qreal fallbackPt) const;
 
     // Parse `linear-gradient(<angle|to side>, <color> [<pos%>], ...)`.
     // Returns { "type": "linear", "angle": <deg, CSS convention>,
@@ -102,6 +112,12 @@ public:
     // easing (QEasingCurve::Type), iterations (int; -1 = infinite), direction }.
     Q_INVOKABLE QVariantMap parseAnimation(const QString &cssValue) const;
 
+    // Parse the CSS `transform` value into { rotate (degrees), scale, scaleX, scaleY,
+    // translateX (px), translateY (px) }. Supports rotate()/scale()/scaleX/scaleY/
+    // translate()/translateX/translateY; unrecognised functions are ignored. Absent
+    // components default to the identity (rotate 0, scale 1, translate 0).
+    Q_INVOKABLE QVariantMap parseTransform(const QString &cssValue) const;
+
     // Frames of a `@keyframes <name>` block: a list of { offset (0..1), properties },
     // sorted by offset. Empty when no such keyframes were defined.
     Q_INVOKABLE QVariantList keyframes(const QString &name) const;
@@ -116,6 +132,13 @@ public:
     // an imperative apply can't go stale. A component re-calls loadCss(this) when its own
     // cssClass changes. Dead targets are pruned automatically.
     Q_INVOKABLE void loadCss(QObject *target);
+
+    // A CSS "prelude" prepended (lowest priority) to the layered stylesheet on every load.
+    // It carries config-derived defaults translated to CSS — e.g. a group's drawer
+    // `transition-duration` becomes `#<name> { transition: <ms>ms }` — so the theme CSS
+    // stays the single source of truth and can override them. Stored across reloads; the
+    // caller re-loads (loadLayered) to apply. Setting the same value is a no-op.
+    void setStylePrelude(const QString &css);
 
 signals:
     void loadedChanged();
@@ -146,7 +169,8 @@ private:
     // a target's cssClass change is picked up on the next apply (reload or loadCss(this)).
     QList<QPointer<QObject>> m_bindings;
     bool m_loaded = false;
-    QString m_watchedPath;
+    QStringList m_requestedLayer;  // the paths last passed to loadLayered (for reloads)
+    QString m_stylePrelude;        // config-derived CSS prepended (lowest priority) on load
     QByteArray m_contentHash;
     QFileSystemWatcher *m_watcher = nullptr;
 };

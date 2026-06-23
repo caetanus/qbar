@@ -41,6 +41,14 @@ QBarPopupService::QBarPopupService(QQmlEngine *engine,
 QBarPopupService::~QBarPopupService()
 {
     closeAll();
+    const auto detached = m_detachedPopups;
+    m_detachedPopups.clear();
+    for (QQuickView *view : detached) {
+        if (view != nullptr) {
+            view->close();
+            view->deleteLater();
+        }
+    }
 }
 
 QString QBarPopupService::openPopup(const QUrl &source,
@@ -82,6 +90,7 @@ QString QBarPopupService::openPopup(const QUrl &source,
     context->setContextProperty(QStringLiteral("popupId"), id);
     context->setContextProperty(QStringLiteral("popupData"), properties);
     context->setContextProperty(QStringLiteral("contentSource"), source);
+    context->setContextProperty(QStringLiteral("detachedWindow"), false);
 
     QQmlComponent component(m_engine, popupShellSource());
     auto *shell = qobject_cast<QQuickItem *>(component.create(context));
@@ -112,21 +121,48 @@ QString QBarPopupService::openPopup(const QUrl &source,
     }
     // Args are global screen coordinates; the overlay surface starts at the
     // usable area's top-left (below a top bar), so subtract that origin.
-    shell->setX(x - m_overlayOrigin.x());
-    if (m_barBottom && m_barWindow != nullptr && m_barWindow->screen() != nullptr) {
+    // Clamp within the overlay so a popup anchored to an edge module (e.g. the rightmost
+    // applet) stays fully on-screen instead of spilling past the screen edge.
+    QScreen *screen = m_barWindow != nullptr ? m_barWindow->screen() : nullptr;
+    int localX = x - m_overlayOrigin.x();
+    if (screen != nullptr) {
+        const int overlayWidth = screen->availableGeometry().width();
+        localX = qBound(0, localX, qMax(0, overlayWidth - popupWidth));
+    }
+    shell->setX(localX);
+    if (m_barBottom && screen != nullptr) {
         // A bottom bar's window has no reliable global Y on Wayland, so the
         // anchor Y would land the popup near the top of the screen. Pin it to the
         // bar's edge instead: the overlay spans the screen down to the bar's top,
         // so place the popup flush against that bottom edge, growing upward.
-        const int overlayHeight = m_barWindow->screen()->geometry().height() - m_barHeight;
-        shell->setY(overlayHeight - popupHeight);
+        const int overlayHeight = screen->geometry().height() - m_barHeight;
+        shell->setY(qMax(0, overlayHeight - popupHeight));
     } else {
-        shell->setY(y - m_overlayOrigin.y());
+        int localY = y - m_overlayOrigin.y();
+        if (screen != nullptr) {
+            const int overlayHeight = screen->availableGeometry().height();
+            localY = qBound(0, localY, qMax(0, overlayHeight - popupHeight));
+        }
+        shell->setY(localY);
     }
 
     m_popups.insert(id, shell);
-    connect(shell, &QObject::destroyed, this, [this, id]() {
-        m_popups.remove(id);
+    m_popupSpecs.insert(id, PopupSpec{source, properties, QSize(popupWidth, popupHeight), QPoint(x, y)});
+    connect(shell, &QObject::destroyed, this, [this, id, shell]() {
+        if (m_detachingPopups.remove(id)) {
+            // Let the scene graph retire the old popup item before tearing down its
+            // Wayland overlay surface. Closing both in the same event-loop turn can
+            // leave a frame callback pointing at the retired shell surface.
+            QTimer::singleShot(50, this, [this]() {
+                if (m_popups.isEmpty() && m_openMenu == nullptr)
+                    destroyDismissOverlay();
+            });
+            return;
+        }
+        if (m_popups.value(id) == shell) {
+            m_popups.remove(id);
+            m_popupSpecs.remove(id);
+        }
         emit popupClosed(id);
     });
 
@@ -199,7 +235,7 @@ QString QBarPopupService::openTooltip(const QUrl &source,
 
     view->setPosition(x, y);
 
-    m_tooltips.insert(id, Popup{view});
+    m_tooltips.insert(id, Popup{view, QPoint(x, y)});
     m_tooltipHovered.insert(id, false);
     connect(view, &QObject::destroyed, this, [this, id]() {
         m_tooltips.remove(id);
@@ -220,6 +256,21 @@ QString QBarPopupService::openTooltip(const QUrl &source,
 
 void QBarPopupService::updatePopup(const QString &id, const QVariantMap &properties)
 {
+    if (QQuickView *view = m_detachedPopups.value(id)) {
+        QObject *target = view->rootObject();
+        if (target != nullptr) {
+            if (QObject *loader = target->findChild<QObject *>(QStringLiteral("qbarPopupLoader"))) {
+                if (QObject *loaded = loader->property("item").value<QObject *>())
+                    target = loaded;
+            }
+            for (auto it = properties.cbegin(); it != properties.cend(); ++it)
+                target->setProperty(it.key().toUtf8().constData(), it.value());
+        }
+        if (m_popupSpecs.contains(id))
+            m_popupSpecs[id].properties = properties;
+        return;
+    }
+
     QQuickItem *shell = m_popups.value(id);
     if (shell == nullptr) {
         return;
@@ -236,6 +287,8 @@ void QBarPopupService::updatePopup(const QString &id, const QVariantMap &propert
     for (auto it = properties.cbegin(); it != properties.cend(); ++it) {
         target->setProperty(it.key().toUtf8().constData(), it.value());
     }
+    if (m_popupSpecs.contains(id))
+        m_popupSpecs[id].properties = properties;
 
     const int width = qMax(1, target->property("implicitWidth").toInt());
     const int height = qMax(1, target->property("implicitHeight").toInt());
@@ -273,11 +326,20 @@ void QBarPopupService::updateTooltip(const QString &id, const QVariantMap &prope
 
     const int width = qMax(1, target->property("implicitWidth").toInt());
     const int height = qMax(1, target->property("implicitHeight").toInt());
+    // Re-anchor to the STABLE creation origin first: resizing recreates the xdg_popup and
+    // re-runs the positioner, and on a bottom bar (gravity grows upward) anchoring off the
+    // already-flipped window position would make the tooltip climb on every rewrite.
+    tooltip.view->setPosition(tooltip.anchor);
     tooltip.view->resize(width, height);
 }
 
 void QBarPopupService::closePopup(const QString &id)
 {
+    if (QQuickView *view = m_detachedPopups.value(id)) {
+        view->close();
+        view->deleteLater();
+        return;
+    }
     QQuickItem *shell = m_popups.value(id);
     if (shell == nullptr) {
         return;
@@ -292,6 +354,75 @@ void QBarPopupService::closePopup(const QString &id)
     QTimer::singleShot(popupAnimationDuration(), this, [this, id]() {
         forceClosePopup(id);
     });
+}
+
+bool QBarPopupService::detachPopup(const QString &id)
+{
+    QQuickItem *shell = m_popups.value(id);
+    if (shell == nullptr || !m_popupSpecs.contains(id) || m_engine == nullptr)
+        return m_detachedPopups.contains(id);
+
+    const PopupSpec spec = m_popupSpecs.value(id);
+    const bool wayland = QGuiApplication::platformName().contains(QStringLiteral("wayland"), Qt::CaseInsensitive);
+    const Qt::WindowFlags detachedType = wayland ? Qt::Window : Qt::Tool;
+    auto *view = createPopupView(
+        spec.source,
+        spec.properties,
+        id,
+        detachedType | Qt::WindowTitleHint | Qt::WindowSystemMenuHint
+            | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint,
+        QStringLiteral("QBar Detached"),
+        true);
+    if (view == nullptr)
+        return false;
+
+    // A widget can supply a friendlier detached-window title via QBar.Popup.windowTitle
+    // (carried in the payload); otherwise the generic "QBar Detached <id>" set above stands.
+    const QString detachedTitle = spec.properties.value(QStringLiteral("windowTitle")).toString();
+    if (!detachedTitle.isEmpty())
+        view->setTitle(detachedTitle);
+
+    view->setTransientParent(nullptr);
+    view->setResizeMode(QQuickView::SizeRootObjectToView);
+    view->resize(qMax(1, spec.size.width()), qMax(1, spec.size.height()));
+    QPoint position = spec.position;
+    if (QScreen *screen = m_barWindow != nullptr ? m_barWindow->screen() : QGuiApplication::primaryScreen()) {
+        const QRect area = screen->availableGeometry();
+        position.setX(area.x() + qMax(0, (area.width() - view->width()) / 2));
+        position.setY(area.y() + qMax(0, (area.height() - view->height()) / 2));
+    }
+    view->setPosition(position);
+
+    if (QObject *root = view->rootObject()) {
+        root->setProperty("animateBounds", false);
+        root->setProperty("targetWidth", spec.size.width());
+        root->setProperty("targetHeight", spec.size.height());
+        root->setProperty("popupClosing", false);
+    }
+
+    m_detachedPopups.insert(id, view);
+    connect(view, &QQuickWindow::closing, view, [view](QQuickCloseEvent *) {
+        view->deleteLater();
+    });
+    connect(view, &QObject::destroyed, this, [this, id, view]() {
+        if (m_detachedPopups.value(id) == view) {
+            m_detachedPopups.remove(id);
+            m_popupSpecs.remove(id);
+        }
+    });
+
+    m_detachingPopups.insert(id);
+    m_popups.take(id);
+    shell->deleteLater();
+
+    view->show();
+    view->raise();
+    view->requestActivate();
+    emit popupDetached(id);
+    // The anchored popup lifecycle ends at detach time. The independent window
+    // keeps its own internal id but no longer occupies QBar.Popup.popupId.
+    emit popupClosed(id);
+    return true;
 }
 
 void QBarPopupService::closeTooltip(const QString &id)
@@ -535,10 +666,17 @@ QWidget *QBarPopupService::popupParent() const
 
 QWindow *QBarPopupService::popupTransientParent() const
 {
+    // A tooltip belongs to its bar — the applet that triggered it lives there — so parent it to
+    // the bar window (its layer surface). NOT the focused window: a detached popup calls
+    // requestActivate() on detach and becomes the focus window, so using focusWindow() here
+    // made the tooltip an xdg-popup of the detached window and rendered into it, replacing its
+    // content. Fall back to focus/parent only when there is no bar (e.g. a standalone process).
+    if (m_barWindow != nullptr) {
+        return m_barWindow;
+    }
     if (auto *window = QGuiApplication::focusWindow()) {
         return window;
     }
-
     return qobject_cast<QWindow *>(parent());
 }
 
@@ -564,7 +702,8 @@ QQuickView *QBarPopupService::createPopupView(const QUrl &source,
                                               const QVariantMap &properties,
                                               const QString &id,
                                               Qt::WindowFlags flags,
-                                              const QString &titlePrefix)
+                                              const QString &titlePrefix,
+                                              bool detached)
 {
     if (m_engine == nullptr) {
         return nullptr;
@@ -572,17 +711,37 @@ QQuickView *QBarPopupService::createPopupView(const QUrl &source,
 
     auto *view = new QQuickView(m_engine, nullptr);
     view->setFlags(flags);
+    view->setProperty("qbarDetachedPopup", detached);
     view->setTitle(QStringLiteral("%1 %2").arg(titlePrefix, id));
     view->setColor(Qt::transparent);
     view->setResizeMode(QQuickView::SizeViewToRootObject);
-    applyPopupContext(view->rootContext());
-    view->rootContext()->setContextProperty(QStringLiteral("popupId"), id);
-    view->rootContext()->setContextProperty(QStringLiteral("popupData"), properties);
-    view->rootContext()->setContextProperty(QStringLiteral("contentSource"), source);
-    view->setSource(popupShellSource());
 
-    if (auto *transient = popupTransientParent()) {
-        view->setTransientParent(transient);
+    // Each popup view needs its OWN context for the per-popup properties. A QQuickView built on a
+    // SHARED QQmlEngine uses engine->rootContext() AS its root context, so setting contentSource/
+    // popupData on view->rootContext() clobbers the GLOBAL context: opening a tooltip would
+    // overwrite the contentSource a detached popup window is bound to, swapping the detached
+    // window's content for the tooltip's (confirmed by screenshot). Instantiate the shell into a
+    // dedicated child context (like openPopup does) so each view's properties are isolated.
+    auto *context = new QQmlContext(m_engine->rootContext(), view);
+    applyPopupContext(context);
+    context->setContextProperty(QStringLiteral("popupId"), id);
+    context->setContextProperty(QStringLiteral("popupData"), properties);
+    context->setContextProperty(QStringLiteral("contentSource"), source);
+    context->setContextProperty(QStringLiteral("detachedWindow"), detached);
+
+    auto *component = new QQmlComponent(m_engine, popupShellSource(), view);
+    auto *rootItem = qobject_cast<QQuickItem *>(component->create(context));
+    if (rootItem == nullptr) {
+        qWarning() << "[popup] failed to create view shell" << id << component->errorString();
+        delete view;
+        return nullptr;
+    }
+    view->setContent(popupShellSource(), component, rootItem);
+
+    if (!detached) {
+        if (auto *transient = popupTransientParent()) {
+            view->setTransientParent(transient);
+        }
     }
 
     return view;

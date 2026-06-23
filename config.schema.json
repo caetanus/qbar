@@ -32,6 +32,7 @@
     "animationEasing": { "type": "string", "description": "e.g. linear, inoutquad, outcubic." },
     "windowManagerBackend": { "type": "string", "enum": ["auto", "i3", "sway", "hyprland", "bspwm", "ewmh", "none"] },
     "styleSheet": { "type": "string", "description": "Path to a CSS theme." },
+    "baseStyleSheet": { "type": "string", "description": "Optional base CSS loaded before styleSheet (which cascades on top). Omit to disable." },
     "output": { "type": "string", "description": "Target monitor name." },
     "marginTop": { "type": "integer" },
     "marginBottom": { "type": "integer" },

@@ -34,6 +34,9 @@ struct BarConfig {
     QEasingCurve animationEasing = QEasingCurve::InOutQuad;
     QString windowManagerBackend = QStringLiteral("auto");
     QVariantMap customTools;
+    // waybar "group/<name>" definitions: { orientation, modules, drawer:{...} }. Bar.qml
+    // renders these as containers (optionally a hover-expand drawer / carousel).
+    QVariantMap groups;
     // Taskbar applet options: scope ("workspace"|"all"|"monitor"),
     // middleClickClose (bool), rightClickMenu (bool). Defaults set in config.cpp.
     QVariantMap taskbar;
@@ -46,6 +49,7 @@ struct BarConfig {
     QVariantMap memory;
     QVariantMap network;
     QString styleSheet;
+    QString baseStyleSheet;  // always loaded first; styleSheet cascades on top
     QString output;          // target monitor name (waybar: "output")
     int marginTop    = -1;   // -1 = inherit from margin
     int marginBottom = -1;
@@ -101,6 +105,9 @@ struct BarConfig {
 
 BarConfig loadConfig();
 QList<BarConfig> loadConfigs();
+// Parse a single bar object (one entry of the config array, or the whole object) into a
+// BarConfig — reused by the live config reload to pick up module/group/style changes.
+BarConfig parseBarObject(const QJsonObject &root);
 QString barPositionName(BarPosition position);
 QEasingCurve easingCurveFromName(const QString &name);
 QVariantMap parseCustomTools(const QJsonObject &root);
