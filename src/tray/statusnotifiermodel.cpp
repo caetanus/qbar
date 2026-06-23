@@ -659,9 +659,9 @@ void StatusNotifierModel::registerOwnWatcher()
 
     m_ownsWatcher = bus.registerObject(QString::fromLatin1(watcherPath),
                                        this,
-                                       QDBusConnection::ExportAllSlots
-                                           | QDBusConnection::ExportAllSignals
-                                           | QDBusConnection::ExportAllProperties);
+                                       QDBusConnection::ExportScriptableSlots
+                                           | QDBusConnection::ExportScriptableSignals
+                                           | QDBusConnection::ExportScriptableProperties);
     if (!m_ownsWatcher) {
         bus.unregisterService(QString::fromLatin1(watcherService));
         return;

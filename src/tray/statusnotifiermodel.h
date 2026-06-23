@@ -10,10 +10,10 @@ class QMenu;
 
 class StatusNotifierModel final : public QAbstractListModel, protected QDBusContext {
     Q_OBJECT
-    Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(int count READ count NOTIFY countChanged SCRIPTABLE false)
     // Row indices of items in the NeedsAttention state — the tray drawer keeps these visible
     // while collapsed. Re-emitted on any model change (see the constructor's connections).
-    Q_PROPERTY(QVariantList attentionRows READ attentionRows NOTIFY attentionRowsChanged)
+    Q_PROPERTY(QVariantList attentionRows READ attentionRows NOTIFY attentionRowsChanged SCRIPTABLE false)
     Q_CLASSINFO("D-Bus Interface", "org.kde.StatusNotifierWatcher")
     Q_PROPERTY(QStringList RegisteredStatusNotifierItems READ registeredStatusNotifierItems NOTIFY registeredStatusNotifierItemsChanged)
     Q_PROPERTY(bool IsStatusNotifierHostRegistered READ isStatusNotifierHostRegistered NOTIFY isStatusNotifierHostRegisteredChanged)
@@ -57,13 +57,13 @@ public:
 
 public slots:
     void start();
-    void RegisterStatusNotifierItem(const QString &service);
-    void RegisterStatusNotifierHost(const QString &service);
+    Q_SCRIPTABLE void RegisterStatusNotifierItem(const QString &service);
+    Q_SCRIPTABLE void RegisterStatusNotifierHost(const QString &service);
 
 signals:
-    void StatusNotifierItemRegistered(const QString &service);
-    void StatusNotifierItemUnregistered(const QString &service);
-    void StatusNotifierHostRegistered();
+    Q_SCRIPTABLE void StatusNotifierItemRegistered(const QString &service);
+    Q_SCRIPTABLE void StatusNotifierItemUnregistered(const QString &service);
+    Q_SCRIPTABLE void StatusNotifierHostRegistered();
     void registeredStatusNotifierItemsChanged();
     void isStatusNotifierHostRegisteredChanged();
     void countChanged();

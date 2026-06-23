@@ -547,6 +547,26 @@ customtool_test_exe = executable(
 
 test('custom-tool', customtool_test_exe)
 
+tray_test_moc = qt6.preprocess(
+  moc_headers: files(
+    'tests/test_tray.h',
+    'src/tray/statusnotifiermodel.h',
+  ),
+)
+
+tray_test_exe = executable(
+  'test-tray',
+  files(
+    'tests/test_tray.cpp',
+    'src/tray/statusnotifiermodel.cpp',
+  ),
+  tray_test_moc,
+  dependencies: qt_deps + [qt_test_dep],
+  include_directories: include_directories('src'),
+)
+
+test('tray-watcher', tray_test_exe)
+
 qml_test_moc = qt6.preprocess(
   moc_headers: files(
     'tests/qmltests.h',
