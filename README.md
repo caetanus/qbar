@@ -65,11 +65,57 @@ qbar uses **Meson** + **Ninja** and targets **Qt 6.5+**.
 | an **icon theme** with symbolic icons | the `themeicon://` provider (network/bt/battery glyphs) | `adwaita-icon-theme` (or any) | `adwaita-icon-theme` |
 | **evolution-data-server** daemon | the Calendar applet's `Sources` D-Bus service (the dev libs alone are not enough) | `evolution-data-server` | `evolution-data-server` |
 
-<details><summary>Distro package hints</summary>
+### Installing the dependencies
 
-- **Arch:** `meson ninja cmake qt6-base qt6-declarative qt6-svg qt6-websockets qt6-wayland sqlite libxkbcommon evolution-data-server libpulse wayland wlroots0.19 adwaita-icon-theme` (plus `wireplumber libpipewire pam libxcb xcb-util-wm` for the optional bits).
-- **Debian/Ubuntu:** `meson ninja-build cmake qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-declarative-private-dev qt6-svg-dev qt6-websockets-dev libsqlite3-dev libxkbcommon-dev libxkbregistry-dev libedataserver1.2-dev libecal2.0-dev libpulse-dev` to build; `qt6-svg-plugins qml6-module-qtwebsockets adwaita-icon-theme evolution-data-server` at runtime. A full, working reference setup lives in [`docker/`](docker).
-- **Fedora:** the `qt6-qt*-devel` packages (incl. `qt6-qtsvg-devel qt6-qtwebsockets-devel`), `meson ninja-build cmake sqlite-devel libxkbcommon-devel evolution-data-server-devel pulseaudio-libs-devel` (+ `wireplumber-devel pipewire-devel pam-devel libxcb-devel xcb-util-wm-devel`).
+Qt 6 is split across many packages and easy to get subtly wrong (it builds, then
+fails at runtime). These one-liners cover **build + runtime** in one go.
+
+**Arch** — Qt's QML modules, SVG plugin and the WebSockets module all ship inside
+the base Qt packages, so this is short:
+
+```bash
+sudo pacman -S --needed \
+  meson ninja cmake \
+  qt6-base qt6-declarative qt6-svg qt6-websockets \
+  sqlite xkbcommon-x11 libpulse evolution-data-server \
+  adwaita-icon-theme ttf-nerd-fonts-symbols ttf-roboto \
+  qt6-wayland wlroots0.19          # Wayland (drop for X11-only)
+# optional extras: wireplumber libpipewire pam libxcb xcb-util-wm
+```
+
+**Debian / Ubuntu** — Qt's QML modules and the SVG plugin are *separate* packages
+(this is the usual i3 pitfall), so they must be named explicitly:
+
+```bash
+# build
+sudo apt install \
+  meson ninja-build cmake pkg-config g++ \
+  qt6-base-dev qt6-base-private-dev \
+  qt6-declarative-dev qt6-declarative-private-dev \
+  qt6-svg-dev qt6-websockets-dev \
+  libsqlite3-dev libpulse-dev libxkbcommon-dev libxkbregistry-dev \
+  libedataserver1.2-dev libecal2.0-dev \
+  libxcb1-dev libxcb-ewmh-dev          # X11 (or libwayland-dev libwlroots-0.19-dev for Wayland)
+# runtime — the pieces apt won't pull in for you
+sudo apt install \
+  qt6-svg-plugins \
+  qml6-module-qtquick-controls qml6-module-qtquick-templates \
+  qml6-module-qtquick-effects qml6-module-qtquick-shapes \
+  qml6-module-qtquick-layouts qml6-module-qtwebsockets \
+  qml6-module-qtqml-workerscript \
+  adwaita-icon-theme evolution-data-server \
+  fonts-jetbrains-mono fonts-roboto fonts-font-awesome
+```
+
+> The exact, verified Debian setup (every package, in build order) is the
+> [`docker/Dockerfile`](docker/Dockerfile) — copy from there if in doubt.
+
+<details><summary>Fedora</summary>
+
+The `qt6-qt*-devel` packages (incl. `qt6-qtsvg-devel qt6-qtwebsockets-devel`),
+`meson ninja-build cmake sqlite-devel libxkbcommon-devel evolution-data-server-devel
+pulseaudio-libs-devel` (+ `wireplumber-devel pipewire-devel pam-devel libxcb-devel
+xcb-util-wm-devel`), plus `adwaita-icon-theme` and a Nerd Font at runtime.
 
 </details>
 
