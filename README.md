@@ -52,12 +52,24 @@ qbar uses **Meson** + **Ninja** and targets **Qt 6.5+**.
 
 **Build tools:** Meson, Ninja, a C++20 compiler, and (for the Wayland integration) `wayland-scanner` + `python3`.
 
-**Dependencies:** Qt 6 (Core, Gui, Widgets, Network, Qml, Quick, DBus, WaylandClient), `sqlite3`, `xkbregistry`, `libedataserver-1.2` + `libecal-2.0` (calendar), `libpulse`. Optional: `wayland-client` + `wlroots-0.19` (Wayland layer-shell), `xcb` + `xcb-ewmh` (X11), `wireplumber-0.5` (native audio backend), `libpipewire-0.3` (privacy mic/camera indicator), `pam` (lock screen).
+**Build dependencies (required):** Qt 6 (Core, Gui, Widgets, Network, Qml, Quick, DBus, **Svg**, **WebSockets**), `sqlite3`, `xkbregistry`, `libedataserver-1.2` + `libecal-2.0` (calendar), `libpulse`. Optional: `wayland-client` + `wlroots-0.19` (Wayland layer-shell), `xcb` + `xcb-ewmh` (X11), `wireplumber-0.5` (native audio backend), `libpipewire-0.3` (privacy mic/camera indicator), `pam` (lock screen).
+
+> Svg and WebSockets are **mandatory** even though qbar only imports them from QML — `meson.build` requires them so a build can't silently produce a bar that breaks at runtime (SVG icons failing, the Bitcoin widget not loading).
+
+**Runtime requirements (often missing on minimal installs — every one breaks a band of applets, not the whole bar):**
+
+| Need | Why | Arch | Debian/Ubuntu |
+|---|---|---|---|
+| Qt 6 QML modules: QtQuick, Controls, Templates, Effects, Shapes, Layouts, Window, WorkerScript, WebSockets | the applets/popups import them | `qt6-declarative` `qt6-websockets` | `qml6-module-qtquick*` `qml6-module-qtwebsockets` |
+| **Qt SVG image plugin** | every `.svg` icon (`"Unsupported image format"` without it) | `qt6-svg` | `qt6-svg-plugins` |
+| an **icon theme** with symbolic icons | the `themeicon://` provider (network/bt/battery glyphs) | `adwaita-icon-theme` (or any) | `adwaita-icon-theme` |
+| **evolution-data-server** daemon | the Calendar applet's `Sources` D-Bus service (the dev libs alone are not enough) | `evolution-data-server` | `evolution-data-server` |
 
 <details><summary>Distro package hints</summary>
 
-- **Arch:** `meson ninja qt6-base qt6-declarative qt6-wayland sqlite libxkbcommon evolution-data-server libpulse wayland wlroots0.19` (plus `wireplumber libpipewire pam libxcb xcb-util-wm` for the optional bits).
-- **Fedora:** the `qt6-qt*-devel` packages, `meson ninja-build sqlite-devel libxkbcommon-devel evolution-data-server-devel pulseaudio-libs-devel wayland-devel wlroots-devel` (+ `wireplumber-devel pipewire-devel pam-devel libxcb-devel xcb-util-wm-devel`).
+- **Arch:** `meson ninja cmake qt6-base qt6-declarative qt6-svg qt6-websockets qt6-wayland sqlite libxkbcommon evolution-data-server libpulse wayland wlroots0.19 adwaita-icon-theme` (plus `wireplumber libpipewire pam libxcb xcb-util-wm` for the optional bits).
+- **Debian/Ubuntu:** `meson ninja-build cmake qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-declarative-private-dev qt6-svg-dev qt6-websockets-dev libsqlite3-dev libxkbcommon-dev libxkbregistry-dev libedataserver1.2-dev libecal2.0-dev libpulse-dev` to build; `qt6-svg-plugins qml6-module-qtwebsockets adwaita-icon-theme evolution-data-server` at runtime. A full, working reference setup lives in [`docker/`](docker).
+- **Fedora:** the `qt6-qt*-devel` packages (incl. `qt6-qtsvg-devel qt6-qtwebsockets-devel`), `meson ninja-build cmake sqlite-devel libxkbcommon-devel evolution-data-server-devel pulseaudio-libs-devel` (+ `wireplumber-devel pipewire-devel pam-devel libxcb-devel xcb-util-wm-devel`).
 
 </details>
 
@@ -108,6 +120,12 @@ A theme is a single standard-CSS file pointed to by `styleSheet`. Elements are s
 id (`#cpu`, `#clock`, `#media-label`), with parts and states (`#cpu.graph`, `#workspaces button:active`).
 Supports gradients, `box-shadow` (incl. inset bevels), per-corner `border-radius`, and `transition`s.
 Edit the file and the bar restyles live — no restart. Browse [`config/themes/`](config/themes) for examples.
+
+**Fonts.** The bundled themes render glyphs/icons with a **Nerd Font** (or Font Awesome) and body text with a sans family. Install at least:
+
+- a **Nerd Font** — e.g. `ttf-jetbrains-mono-nerd` / `ttf-nerd-fonts-symbols` (Arch), `fonts-jetbrains-mono` + the [Nerd Fonts](https://www.nerdfonts.com/) symbols pack (Debian) — themes referencing `FontAwesome`/`Symbols Nerd Font` need this or icons show as tofu;
+- a clean **sans** for text — `ttf-roboto` or `noto-fonts` (Arch), `fonts-roboto` / `fonts-noto-core` (Debian). A theme whose `font-family` lists `FontAwesome` first relies on the *next* family for letters, so a real text font must be installed (otherwise the icon font, which lacks letters/digits, swallows the text).
+- `powerline-fonts` if a theme uses powerline separators.
 
 ## Custom widgets & tools
 

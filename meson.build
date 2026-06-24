@@ -15,14 +15,26 @@ qt6 = import('qt6')
 
 add_project_arguments('-fPIC', language: 'cpp')
 
+# Qt's canonical export is CMake, not pkg-config — resolve it through the qt6
+# module's dependency with an explicit modules list (method: 'cmake'), the
+# idiomatic meson approach, instead of distro-optional per-module .pc files.
+#
+# Svg and WebSockets are MANDATORY here even though qbar only imports them from
+# QML: requiring them at build time closes the "compiles fine, breaks at runtime"
+# trap on a stock i3 box (every .svg icon failing, the Bitcoin widget not loading).
+# On Arch qt6-svg / qt6-websockets ship the lib + image plugin + QML module as one
+# package, so a build that finds them is guaranteed the runtime pieces too.
+qt6_dep = dependency(
+  'qt6',
+  modules: [
+    'Core', 'Gui', 'Widgets', 'Network', 'Qml', 'Quick', 'DBus',
+    'Svg',         # SVG image support — themeicon + every .svg applet icon
+    'WebSockets',  # QtWebSockets QML import — Bitcoin ticker widget
+  ],
+)
+
 qt_deps = [
-  dependency('Qt6Core'),
-  dependency('Qt6Gui'),
-  dependency('Qt6Widgets'),
-  dependency('Qt6Network'),
-  dependency('Qt6Qml'),
-  dependency('Qt6Quick'),
-  dependency('Qt6DBus'),
+  qt6_dep,
   dependency('sqlite3'),
   dependency('xkbregistry'),
   dependency('libedataserver-1.2'),
@@ -30,7 +42,27 @@ qt_deps = [
   dependency('libpulse'),
 ]
 
-qsb_program = find_program('/usr/lib/qt6/bin/qsb', required: false)
+# Discover the Qt host tool dir + include root from whichever backend resolved
+# the dependency — qmake (config-tool) reports QT_HOST_BINS/QT_INSTALL_HEADERS,
+# pkg-config reports bindir/includedir. Never assumed (Debian's multiarch prefix
+# differs from Arch's /usr/include/qt6).
+qt_host_bins = qt6_dep.get_variable(
+  configtool: 'QT_HOST_BINS',
+  pkgconfig: 'bindir',
+  default_value: '',
+)
+qt_includedir = qt6_dep.get_variable(
+  configtool: 'QT_INSTALL_HEADERS',
+  pkgconfig: 'includedir',
+  default_value: '',
+)
+if qt_includedir == ''
+  error('Could not determine the Qt6 include directory from the Qt6Core dependency.')
+endif
+qsb_program = find_program('qsb', 'qsb-qt6', required: false)
+if not qsb_program.found() and qt_host_bins != ''
+  qsb_program = find_program(join_paths(qt_host_bins, 'qsb'), required: false)
+endif
 python3 = find_program('python3', required: true)
 popup_emboss_shader_enabled = qsb_program.found()
 popup_emboss_shader_qrc = []
@@ -73,8 +105,8 @@ endif
 
 qtgui_version = dependency('Qt6Gui').version()
 qtgui_private_include = include_directories(
-  '/usr/include/qt6/QtGui/' + qtgui_version,
-  '/usr/include/qt6/QtGui/' + qtgui_version + '/QtGui',
+  qt_includedir / 'QtGui' / qtgui_version,
+  qt_includedir / 'QtGui' / qtgui_version / 'QtGui',
 )
 
 x11_dep = dependency('xcb', required: get_option('x11'))
@@ -89,7 +121,10 @@ endif
 wayland_dep = dependency('wayland-client', required: get_option('wayland'))
 wlroots_dep = dependency('wlroots-0.19', required: get_option('wayland'))
 wayland_scanner = find_program('wayland-scanner', required: get_option('wayland'))
-if wayland_dep.found() and wlroots_dep.found() and wayland_scanner.found()
+wayland_protocols_dep = dependency('wayland-protocols', required: get_option('wayland'))
+if wayland_dep.found() and wlroots_dep.found() and wayland_scanner.found() and wayland_protocols_dep.found()
+  # Ask wayland-protocols where it installed its XML, rather than assuming /usr/share.
+  wl_protocols_dir = wayland_protocols_dep.get_variable(pkgconfig: 'pkgdatadir')
   layer_shell_protocol = files('protocols/wlr-layer-shell-unstable-v1.xml')
   layer_shell_header = custom_target(
     'wlr-layer-shell-client-header',
@@ -103,7 +138,7 @@ if wayland_dep.found() and wlroots_dep.found() and wayland_scanner.found()
     output: 'wlr-layer-shell-unstable-v1-protocol.c',
     command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
   )
-  xdg_shell_protocol = files('/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml')
+  xdg_shell_protocol = files(wl_protocols_dir / 'stable/xdg-shell/xdg-shell.xml')
   xdg_shell_header = custom_target(
     'xdg-shell-client-header',
     input: xdg_shell_protocol,
@@ -116,7 +151,7 @@ if wayland_dep.found() and wlroots_dep.found() and wayland_scanner.found()
     output: 'xdg-shell-protocol.c',
     command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
   )
-  idle_inhibit_protocol = files('/usr/share/wayland-protocols/unstable/idle-inhibit/idle-inhibit-unstable-v1.xml')
+  idle_inhibit_protocol = files(wl_protocols_dir / 'unstable/idle-inhibit/idle-inhibit-unstable-v1.xml')
   idle_inhibit_header = custom_target(
     'idle-inhibit-client-header',
     input: idle_inhibit_protocol,
@@ -138,12 +173,12 @@ if wayland_dep.found() and wlroots_dep.found() and wayland_scanner.found()
 
   qtwayland_version = dependency('Qt6WaylandClient').version()
   qtwayland_private_include = include_directories(
-    '/usr/include/qt6/QtCore/' + qtwayland_version,
-    '/usr/include/qt6/QtCore/' + qtwayland_version + '/QtCore',
-    '/usr/include/qt6/QtWaylandGlobal/' + qtwayland_version,
-    '/usr/include/qt6/QtWaylandGlobal/' + qtwayland_version + '/QtWaylandGlobal',
-    '/usr/include/qt6/QtWaylandClient/' + qtwayland_version,
-    '/usr/include/qt6/QtWaylandClient/' + qtwayland_version + '/QtWaylandClient',
+    qt_includedir / 'QtCore' / qtwayland_version,
+    qt_includedir / 'QtCore' / qtwayland_version / 'QtCore',
+    qt_includedir / 'QtWaylandGlobal' / qtwayland_version,
+    qt_includedir / 'QtWaylandGlobal' / qtwayland_version / 'QtWaylandGlobal',
+    qt_includedir / 'QtWaylandClient' / qtwayland_version,
+    qt_includedir / 'QtWaylandClient' / qtwayland_version / 'QtWaylandClient',
   )
 
   plugin_headers = files('src/wayland-shell-integration/qbar-layer-shell/qbarlayershellintegration.h')
@@ -450,6 +485,7 @@ css_test_exe = executable(
   dependencies: [
     dependency('Qt6Core'),
     dependency('Qt6Gui'),
+    dependency('Qt6Qml'),
     qt_test_dep,
   ],
 )

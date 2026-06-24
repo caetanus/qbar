@@ -781,7 +781,11 @@ void BarWindow::configureWindow()
     setProperty("qbarBarPosition", barPositionName(m_config.position));
     setProperty("qbarBarExclusive", m_config.exclusiveZone);
     // (Bar edge margins are derived from CSS in loadCssTheme(), once m_cssTheme exists.)
-    const int windowHeight = !m_config.waylandLayerShell && m_config.height < 50 ? 50 : m_config.height;
+    // Honour the configured height on every backend. The x11 dock reserves
+    // exactly config.height via _NET_WM_STRUT, so forcing a 50px floor here only
+    // made the window taller than its reserved strut — leaving the applets
+    // floating in an oversized bar. Match the window to the configured height.
+    const int windowHeight = m_config.height;
     setMinimumHeight(windowHeight);
     setMaximumHeight(windowHeight);
     Qt::WindowFlags flags = Qt::Window | Qt::FramelessWindowHint;
@@ -938,7 +942,7 @@ QRect BarWindow::targetBarGeometry() const
     }
 
     const auto area = m_config.waylandLayerShell ? screen->availableGeometry() : screen->geometry();
-    const int targetHeight = !m_config.waylandLayerShell && m_config.height < 50 ? 50 : m_config.height;
+    const int targetHeight = m_config.height;
     const int y = m_config.position == BarPosition::Bottom
         ? area.y() + area.height() - targetHeight
         : area.y();
@@ -953,8 +957,7 @@ QString BarWindow::testWindowCriteria() const
         return QStringLiteral("[con_id=%1]").arg(m_swayNodeId);
     }
 
-    const QString pidCriteria = QStringLiteral("[pid=%1]").arg(static_cast<qlonglong>(getpid()));
-    return QStringLiteral("%1; [app_id=\"qbar\"]; [title=\"QBar\"]").arg(pidCriteria);
+    return QStringLiteral("[class=\"qbar\"]; [instance=\"qbar\"]; [title=\"QBar\"]");
 }
 
 void BarWindow::applyTestWindowRules()
@@ -970,14 +973,19 @@ void BarWindow::applyTestWindowRules()
         return;
     }
 
-    const QString pidCriteria = QStringLiteral("[pid=%1]").arg(static_cast<qlonglong>(getpid()));
-    const QString appCriteria = QStringLiteral("[app_id=\"qbar\"]");
+    // i3 and sway (for XWayland windows) both accept class/instance/title
+    // criteria. Neither accepts the i3-invalid [pid=…] nor the wayland-only
+    // [app_id=…]; on i3 those are unknown tokens that make it reject the whole
+    // batched command as a parse error, so the bar never gets floated/unbordered.
+    // The native-sway case is handled above via [con_id=…].
+    const QString classCriteria = QStringLiteral("[class=\"qbar\"]");
+    const QString instanceCriteria = QStringLiteral("[instance=\"qbar\"]");
     const QString titleCriteria = QStringLiteral("[title=\"QBar\"]");
     m_wm->runCommand(QStringLiteral(
                          "%1 floating enable; %1 sticky enable; %1 border none; "
                          "%2 floating enable; %2 sticky enable; %2 border none; "
                          "%3 floating enable; %3 sticky enable; %3 border none")
-                         .arg(pidCriteria, appCriteria, titleCriteria));
+                         .arg(classCriteria, instanceCriteria, titleCriteria));
     QTimer::singleShot(80, this, SLOT(moveTestWindow()));
 }
 
@@ -1001,19 +1009,19 @@ void BarWindow::moveTestWindow()
         return;
     }
 
-    const QString pidCriteria = QStringLiteral("[pid=%1]").arg(static_cast<qlonglong>(getpid()));
-    const QString appCriteria = QStringLiteral("[app_id=\"qbar\"]");
+    const QString classCriteria = QStringLiteral("[class=\"qbar\"]");
+    const QString instanceCriteria = QStringLiteral("[instance=\"qbar\"]");
     const QString titleCriteria = QStringLiteral("[title=\"QBar\"]");
     m_wm->runCommand(QStringLiteral(
                          "%1 resize set width %2 px height %3 px; %1 move absolute position %4 %5; "
                          "%6 resize set width %2 px height %3 px; %6 move absolute position %4 %5; "
                          "%7 resize set width %2 px height %3 px; %7 move absolute position %4 %5")
-                         .arg(pidCriteria)
+                         .arg(classCriteria)
                          .arg(target.width())
                          .arg(target.height())
                          .arg(target.x())
                          .arg(moveY)
-                         .arg(appCriteria)
+                         .arg(instanceCriteria)
                          .arg(titleCriteria));
 }
 
@@ -1031,14 +1039,14 @@ void BarWindow::installTestWindowRule()
     }
 
     const QRect target = targetBarGeometry();
-    const QString pidCriteria = QStringLiteral("[pid=%1]").arg(static_cast<qlonglong>(getpid()));
-    const QString appCriteria = QStringLiteral("[app_id=\"qbar\"]");
+    const QString classCriteria = QStringLiteral("[class=\"qbar\"]");
+    const QString instanceCriteria = QStringLiteral("[instance=\"qbar\"]");
     const QString titleCriteria = QStringLiteral("[title=\"QBar\"]");
     Q_UNUSED(target);
     const QString action = QStringLiteral("floating enable, sticky enable, border none");
 
     m_wm->runCommand(QStringLiteral("for_window %1 %2; for_window %3 %2; for_window %4 %2")
-                         .arg(pidCriteria, action, appCriteria, titleCriteria));
+                         .arg(classCriteria, action, instanceCriteria, titleCriteria));
 }
 
 void BarWindow::scheduleTestWindowRules()

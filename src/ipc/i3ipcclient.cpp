@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
 #include <QProcessEnvironment>
 #include <QDebug>
 #include <xkbcommon/xkbregistry.h>
@@ -689,6 +690,21 @@ QString I3IpcClient::socketPath() const
     const QString i3Socket = environment.value(QStringLiteral("I3SOCK"));
     if (!i3Socket.isEmpty() && QFileInfo::exists(i3Socket)) {
         return i3Socket;
+    }
+
+    // i3 — unlike sway — does not export its socket path into the environment.
+    // The canonical discovery, used by i3-msg and i3bar, is `i3 --get-socketpath`
+    // (which itself reads the I3_SOCKET_PATH property off the X root window).
+    // Without this fallback the IPC never connects on a stock i3 session and the
+    // bar is stuck on its placeholder workspaces.
+    QProcess i3proc;
+    i3proc.start(QStringLiteral("i3"), {QStringLiteral("--get-socketpath")});
+    if (i3proc.waitForFinished(2000) && i3proc.exitStatus() == QProcess::NormalExit
+        && i3proc.exitCode() == 0) {
+        const QString path = QString::fromUtf8(i3proc.readAllStandardOutput()).trimmed();
+        if (!path.isEmpty() && QFileInfo::exists(path)) {
+            return path;
+        }
     }
 
     return {};

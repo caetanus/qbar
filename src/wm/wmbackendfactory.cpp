@@ -8,6 +8,7 @@
 
 #include <QDebug>
 #include <QFileInfo>
+#include <QProcess>
 #include <QProcessEnvironment>
 
 namespace {
@@ -21,7 +22,24 @@ bool i3SwayAvailable()
     }
 
     const QString i3Socket = environment.value(QStringLiteral("I3SOCK"));
-    return !i3Socket.isEmpty() && QFileInfo::exists(i3Socket);
+    if (!i3Socket.isEmpty() && QFileInfo::exists(i3Socket)) {
+        return true;
+    }
+
+    // i3 does not export I3SOCK; fall back to `i3 --get-socketpath` (reads the
+    // X root-window I3_SOCKET_PATH atom) so auto-detection works on a stock i3
+    // where neither env var is set.
+    QProcess i3proc;
+    i3proc.start(QStringLiteral("i3"), {QStringLiteral("--get-socketpath")});
+    if (i3proc.waitForFinished(2000) && i3proc.exitStatus() == QProcess::NormalExit
+        && i3proc.exitCode() == 0) {
+        const QString path = QString::fromUtf8(i3proc.readAllStandardOutput()).trimmed();
+        if (!path.isEmpty() && QFileInfo::exists(path)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 } // namespace

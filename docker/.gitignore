@@ -1,0 +1,6 @@
+# Generated at run time by the repro session — not source.
+*.png
+*.log
+*.log.mark
+*.mark
+config.schema.json

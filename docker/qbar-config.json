@@ -1,0 +1,126 @@
+// qbar — i3/Xorg repro of the user's live sway multi-bar config.
+// Same layout/themes as ~/.config/qbar/config.json, adapted for i3:
+//   • waylandLayerShell:false (X11 strut/dock instead of wlr-layer-shell)
+//   • windowManager.backend "i3"
+//   • absolute container paths (/src is the mounted repo; assets copied to /src/docker)
+[
+    {
+        "layer": "top",
+        "windowManager": { "backend": "i3" },
+        "baseStyleSheet": "/src/docker/waybar-style.css",
+        "styleSheet": "/src/config/themes/macchiato.css",
+        "position": "top",
+        "height": 28,
+        "margin": 30,
+        "spacing": 2,
+        "exclusiveZone": true,
+        "waylandLayerShell": false,
+        "popupKeyboardFocus": true,
+        "background": "#263038af",
+        "foreground": "#eef2f7",
+        "accent": "#63b3ed",
+        "fontFamily": "Sans Serif",
+        "fontSize": 10,
+        "trayItemPadding": 2,
+        "animationDuration": 200,
+        "animationEasing": "inoutquad",
+        "modules-left": [
+            "Workspaces",
+            "I3Mode",
+            "CPU",
+            "Memory",
+            "Network",
+            "Media"
+        ],
+        "modules-center": [
+            "Title"
+        ],
+        "modules-right": [
+            "Caffeine",
+            "Brightness",
+            "XInput",
+            "NetworkManager",
+            "Temperature",
+            { "audio": [ { "drawer": { "transition-duration": 100 } }, "Sound/out", "Sound/in" ] },
+            "Battery",
+            "CustomTool:custom/test",
+            "CustomTool:custom/btc",
+            "Clock",
+            "Tray",
+            "User"
+        ],
+        "cpu": { "format": ["cycle", "graph"], "text": "cpu" },
+        "memory": { "format": ["cycle", "graph"], "text": "mem" },
+        "network": { "format": ["cycle", "graph"], "text": "net" },
+        "customTools": {
+            "custom/test": {
+                "exec": "date '+⏱ %H:%M:%S'",
+                "interval": 1,
+                "tooltip": false
+            },
+            "custom/btc": {
+                "source": "/src/config/widgets/Bitcoin.qml",
+                "return-type": "json",
+                "interval": 10,
+                "show-empty": false,
+                "format-icons": { "up": "▲", "down": "▼" },
+                "exec-if": ":",
+                "tooltip": false,
+                "format": "{} ({percentage:.1f}%)"
+            }
+        }
+    },
+    {
+        "layer": "top",
+        "windowManager": { "backend": "i3" },
+        "styleSheet": "/src/config/themes/catppuccin-latte.css",
+        "position": "bottom",
+        "height": 26,
+        "margin": 30,
+        "spacing": 2,
+        "exclusiveZone": true,
+        "waylandLayerShell": false,
+        "popupKeyboardFocus": false,
+        "background": "#eff1f5e6",
+        "foreground": "#4c4f69",
+        "accent": "#1e66f5",
+        "fontFamily": "Sans Serif",
+        "fontSize": 10,
+        "modules-left": [
+            "Disk",
+            "Bluetooth",
+            "PowerProfiles",
+            "UPower"
+        ],
+        "modules-center": [
+            "Taskbar"
+        ],
+        "modules-right": [
+            "CustomTool:custom/weather",
+            "CustomTool:custom/speedtest",
+            "Clock"
+        ],
+        "taskbar": {
+            "scope": "all",
+            "middleClickClose": true,
+            "rightClickMenu": true
+        },
+        "customTools": {
+            "custom/weather": {
+                "source": "/src/config/widgets/Weather.qml",
+                "cities": ["Salto", "São Paulo", "Lisboa"],
+                "metrics": [
+                    "temperature_2m",
+                    "apparent_temperature",
+                    "relative_humidity_2m",
+                    "wind_speed_10m",
+                    "precipitation"
+                ],
+                "animatedBackground": true
+            },
+            "custom/speedtest": {
+                "source": "/src/config/widgets/SpeedTest.qml"
+            }
+        }
+    }
+]
