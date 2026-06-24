@@ -15,7 +15,7 @@ QBar.CssRect {
     id: root
     cssId: "dock"
     height: theme.height
-    color: "transparent"
+    // Transparent by default (CssRect.defaultColor) — a theme may still style #dock.
 
     readonly property int iconBase: Math.round(theme.height * 0.78)
     readonly property int spacing: 6
