@@ -67,13 +67,26 @@ Item {
                 required property string appId
                 required property string title
                 required property bool focused
+                required property bool urgent
 
                 width: root.baseSize                 // uniform slot — icon scales within/over it
                 height: root.baseSize
                 transformOrigin: Item.Bottom         // grow-in animation rises from the bar edge
                 readonly property real centerX: x + width / 2   // row-local, stable (uniform slots)
                 readonly property real sz: root.iconSize(centerX)
-                opacity: cell.focused ? 1.0 : 0.72
+                opacity: cell.focused || cell.urgent ? 1.0 : 0.72
+
+                // Urgent windows bounce for attention (macOS dock idiom): the icon hops
+                // up out of the bar and settles, repeating while the window stays urgent.
+                property real bounceY: 0
+                SequentialAnimation {
+                    running: cell.urgent
+                    loops: Animation.Infinite
+                    onRunningChanged: if (!running) cell.bounceY = 0
+                    NumberAnimation { target: cell; property: "bounceY"; to: -root.barHeight * 0.6; duration: 260; easing.type: Easing.OutQuad }
+                    NumberAnimation { target: cell; property: "bounceY"; to: 0; duration: 420; easing.type: Easing.OutBounce }
+                    PauseAnimation { duration: 900 }
+                }
 
                 Image {
                     id: icon
@@ -86,6 +99,7 @@ Item {
                     fillMode: Image.PreserveAspectFit
                     source: cell.appId.length > 0 ? "image://themeicon/" + cell.appId : ""
                     visible: status === Image.Ready
+                    transform: Translate { y: cell.bounceY }
                     Behavior on width  { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
                     Behavior on height { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
                 }
@@ -98,6 +112,7 @@ Item {
                     color: theme.foreground
                     font.family: theme.fontFamily
                     font.pointSize: Math.max(8, Math.round(cell.sz * 0.4))
+                    transform: Translate { y: cell.bounceY }
                 }
 
                 // Focused/running indicator: accent underline for the focused window,
