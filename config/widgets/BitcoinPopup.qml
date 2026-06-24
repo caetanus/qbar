@@ -1109,6 +1109,14 @@ Item {
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
 
+                    // Open the strip scrolled to the end: the longer windows (…1d, 1w,
+                    // 1y) show by default, the sub-day fractionals are tucked off-screen
+                    // to the LEFT — scroll left to reach them. callLater so the Row's
+                    // width is final first.
+                    Component.onCompleted: Qt.callLater(function () {
+                        toolbar.contentX = Math.max(0, toolbar.contentWidth - toolbar.width)
+                    })
+
                     Row {
                         id: controlsRow
                         spacing: 6
