@@ -110,14 +110,24 @@ sudo apt install \
 > The exact, verified Debian setup (every package, in build order) is the
 > [`docker/Dockerfile`](docker/Dockerfile) — copy from there if in doubt.
 
-<details><summary>Fedora</summary>
+**Fedora** — like Arch, the QML modules and the SVG image plugin ship inside the
+base Qt packages, so the `-devel` set pulls the runtime libs in as dependencies:
 
-The `qt6-qt*-devel` packages (incl. `qt6-qtsvg-devel qt6-qtwebsockets-devel`),
-`meson ninja-build cmake sqlite-devel libxkbcommon-devel evolution-data-server-devel
-pulseaudio-libs-devel` (+ `wireplumber-devel pipewire-devel pam-devel libxcb-devel
-xcb-util-wm-devel`), plus `adwaita-icon-theme` and a Nerd Font at runtime.
+```bash
+sudo dnf install \
+  meson ninja-build cmake gcc-c++ \
+  qt6-qtbase-devel qt6-qtbase-private-devel \
+  qt6-qtdeclarative-devel qt6-qtsvg-devel qt6-qtwebsockets-devel \
+  sqlite-devel libxkbcommon-devel \
+  evolution-data-server-devel pulseaudio-libs-devel \
+  libxcb-devel xcb-util-wm-devel \
+  adwaita-icon-theme jetbrains-mono-fonts-all google-roboto-fonts fontawesome-fonts \
+  qt6-qtwayland-devel wlroots-devel          # Wayland (drop for X11-only)
+# optional extras: wireplumber-devel pipewire-devel pam-devel
+```
 
-</details>
+> A true Nerd Font (patched glyphs) isn't in Fedora's repos — grab one from
+> [nerdfonts.com](https://www.nerdfonts.com/) if a theme needs the extra icons.
 
 ```bash
 meson setup build
