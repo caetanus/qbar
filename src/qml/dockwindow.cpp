@@ -138,9 +138,10 @@ void DockWindow::applyGeometry()
     const int headroom = headroomFor(m_barWindow);
     const int surfaceH = barH + headroom;
     const bool bottom = barIsBottom(m_barWindow);
-    // Side headroom so the hover-grown row (icons get bigger than the reserved slot)
-    // isn't clipped at the slot's left/right edges; the row stays centred over the slot.
-    const int sideH = barH;
+    // Side headroom so the hover-grown row (the whole dock grows past the reserved
+    // slot's width) isn't clipped at the slot edges; the row stays centred over the
+    // slot. Half the slot each side ≈ room for the dock to ~double in width on hover.
+    const int sideH = std::max(barH, m_slot.width() / 2);
     const int dockW = m_slot.width() + (2 * sideH);
 
     if (onX11()) {
