@@ -87,6 +87,10 @@ endif
 
 platform_deps = []
 platform_sources = []
+# Q_OBJECT headers whose .cpp is platform-gated must be moc'd ONLY when that
+# platform is built — otherwise the moc unit references a constructor/dtor/vtable
+# that the (excluded) .cpp never provides, breaking the link on the other platform.
+platform_moc_headers = []
 platform_generated = []
 platform_args = []
 platform_includes = []
@@ -119,6 +123,7 @@ if x11_dep.found() and xcb_ewmh_dep.found() and xcb_xkb_dep.found() and xcb_scre
     'src/platform/x11barintegration.cpp',
     'src/platform/x11keyboardlayout.cpp',
   )
+  platform_moc_headers += files('src/platform/x11keyboardlayout.h')
   platform_includes += qtgui_private_include
   platform_args += ['-DQBAR_HAVE_X11=1']
 endif
@@ -299,7 +304,6 @@ headers = files(
   'src/mpris/mprismodel.h',
   'src/graphics/sparkline.h',
   'src/platform/capslockmonitor.h',
-  'src/platform/x11keyboardlayout.h',
   'src/network/networkmodel.h',
   'src/network/networkprocessmodel.h',
   'src/networkmanager/networkmanagermodel.h',
@@ -347,7 +351,7 @@ if popup_emboss_shader_enabled
 endif
 
 qt_sources = qt6.preprocess(
-  moc_headers: headers,
+  moc_headers: headers + platform_moc_headers,
   qresources: qresources,
 )
 
