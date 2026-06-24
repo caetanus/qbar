@@ -118,6 +118,7 @@ private:
     void resetSamples(const QVector<Sample> &samples);
     void updateProcessStats(const QVector<ProcessSample> &processes, qint64 totalDiff);
     qint64 readProcessRssKb(int pid) const;
+    qint64 readProcessPssKb(int pid) const;
 
     int m_usage = 0;
     double m_clockMhz = 0.0;

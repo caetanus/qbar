@@ -321,6 +321,40 @@ qint64 CpuModel::readProcessRssKb(int pid) const
     return 0;
 }
 
+qint64 CpuModel::readProcessPssKb(int pid) const
+{
+    // PSS (Proportional Set Size) from smaps_rollup: shared pages (libraries, shared
+    // memory) are split across the processes that map them, so a Qt app no longer
+    // looks like it owns every toolkit it merely shares. RSS counts shared pages in
+    // full for *every* process — that's why a 190 MB app reads as 900 MB. Returns 0
+    // when smaps_rollup is unreadable (pre-4.14 kernels, or another user's process
+    // without privilege) so the caller can fall back to RSS.
+    QFile rollup(QStringLiteral("/proc/%1/smaps_rollup").arg(pid));
+    if (!rollup.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return 0;
+    }
+
+    const QString content = QString::fromUtf8(rollup.readAll());
+    const QStringList lines = content.split(QChar::LineFeed, Qt::SkipEmptyParts);
+    for (const QString &rawLine : lines) {
+        const QString line = rawLine.trimmed();
+        if (!line.startsWith(QStringLiteral("Pss:"))) {
+            continue;
+        }
+
+        const QStringList parts = line.split(QChar::Space, Qt::SkipEmptyParts);
+        if (parts.size() < 2) {
+            return 0;
+        }
+
+        bool ok = false;
+        const qint64 pssKb = parts.at(1).toLongLong(&ok);
+        return ok ? qMax<qint64>(0, pssKb) : 0;
+    }
+
+    return 0;
+}
+
 int CpuModel::readRunningProcesses() const
 {
     QFile file(QStringLiteral("/proc/stat"));
@@ -585,12 +619,18 @@ void CpuModel::updateProcessStats(const QVector<ProcessSample> &processes, qint6
     topMemoryProcesses.reserve(topMemoryCount);
     for (int i = 0; i < topMemoryCount; ++i) {
         const RankedProcess &process = memoryRanked.at(i);
+        // Ranking stays on the cheap RSS (read for every process during sampling),
+        // but we DISPLAY the honest PSS for the handful actually shown — only a few
+        // smaps_rollup page-table walks per tick. Fall back to RSS where PSS is
+        // unavailable (old kernel / another user's process).
+        const qint64 pssKb = readProcessPssKb(process.pid);
+        const qint64 memKb = pssKb > 0 ? pssKb : process.rssKb;
         QVariantMap item;
         item.insert(QStringLiteral("pid"), process.pid);
         item.insert(QStringLiteral("name"), process.name);
-        item.insert(QStringLiteral("memoryKb"), process.rssKb);
-        item.insert(QStringLiteral("memoryMiB"), process.rssKb / 1024.0);
-        item.insert(QStringLiteral("usage"), process.rssKb > 0 ? (process.rssKb / 1024.0) : 0.0);
+        item.insert(QStringLiteral("memoryKb"), memKb);
+        item.insert(QStringLiteral("memoryMiB"), memKb / 1024.0);
+        item.insert(QStringLiteral("usage"), memKb > 0 ? (memKb / 1024.0) : 0.0);
         topMemoryProcesses.append(item);
     }
 
