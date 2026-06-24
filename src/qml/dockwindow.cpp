@@ -140,8 +140,10 @@ void DockWindow::applyGeometry()
     const bool bottom = barIsBottom(m_barWindow);
 
     if (onX11()) {
-        // Absolute placement: align the surface's bar-edge side with the slot and
-        // extend it away from that edge by `headroom` for the magnification overflow.
+        // The dock behaves like an in-bar applet: the surface covers the bar's slot
+        // (so base icons sit IN the bar, vertically centred like any applet) and
+        // extends away from the bar by `headroom` so the magnification can overflow
+        // ON TOP of the bar without clipping.
         const int top = bottom ? (m_slot.bottom() + 1 - surfaceH) : m_slot.top();
         m_view->setGeometry(QRect(m_slot.x(), top, m_slot.width(), surfaceH));
         return;

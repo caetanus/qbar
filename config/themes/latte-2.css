@@ -1,0 +1,48 @@
+/* Catppuccin Latte 2 — same palette as catppuccin-latte, but the bar's CENTER is
+   transparent so the macOS-style Dock (its own window) floats over a see-through gap.
+   The left/right module groups keep the Latte fill as rounded pills; the whole-bar
+   background is turned off so nothing paints behind the centre.
+   Adapted from the Catppuccin Waybar theme (https://github.com/catppuccin/waybar, MIT). */
+
+/* Whole-bar background OFF — the regions below paint their own, leaving the centre clear. */
+window#waybar  { background-color: transparent; }
+
+/* Left/right groups: the Latte fill, as rounded pills. */
+#left, #right  { background-color: rgba(239, 241, 245, 0.85); border-radius: 8px; padding: 0 8px; }
+
+/* The centre — where the Dock lives — stays transparent. */
+#center        { background-color: transparent; }
+#dock          { background-color: transparent; }
+
+#clock         { color: #4c4f69; background-color: transparent; }
+#battery       { color: #40a02b; background-color: transparent; }
+#battery.charging  { color: #40a02b; background-color: transparent; }
+#battery.full      { color: #40a02b; background-color: transparent; }
+#battery.critical  { color: #d20f39; background-color: rgba(210, 15, 57, 0.18); }
+#cpu           { color: #1e66f0; background-color: transparent; }
+#memory        { color: #8839ef; background-color: transparent; }
+#nm-applet       { color: #209fb5; background-color: transparent; }
+#network-io    { color: #04a5e5; background-color: transparent; }
+#network-io.download { color: #df8e1d; fill: rgba(223, 142, 29, 0.22); }
+#network-io.upload { color: #fe640b; fill: rgba(254, 100, 11, 0.26); }
+#network-io.arrowDown { color: #df8e1d; }
+#network-io.arrowUp { color: #fe640b; }
+#pulseaudio    { color: #179299; background-color: transparent; }
+#pulseaudio.muted  { color: #acb0be; background-color: transparent; }
+#backlight     { color: #df8e1d; background-color: transparent; }
+#temperature   { color: #fe640b; background-color: transparent; }
+#disk          { color: #8839ef; background-color: transparent; }
+#bluetooth     { color: #1e66f5; background-color: transparent; }
+#power-profiles-daemon { color: #40a02b; background-color: transparent; }
+#keyboard      { color: #7287fd; background-color: transparent; }
+#tray          { background-color: transparent; }
+#title         { color: #4c4f69; background-color: transparent; }
+#caffeine      { color: #acb0be; background-color: transparent; }
+#caffeine.active { color: #df8e1d; background-color: rgba(223, 142, 29, 0.18); }
+#custom-dollar { color: #40a02b; background-color: transparent; }
+#custom-btc    { color: #fe640b; background-color: transparent; }
+
+#workspaces button          { color: #9ca0b0; background-color: transparent; }
+#workspaces button.focused  { color: #4c4f69; background-color: rgba(76, 79, 105, 0.12); }
+#workspaces button.visible  { color: #5c5f77; background-color: rgba(92, 95, 119, 0.06); }
+#workspaces button.urgent   { color: #eff1f5; background-color: #d20f39; }
