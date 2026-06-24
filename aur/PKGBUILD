@@ -1,0 +1,78 @@
+# Maintainer: Marcelo A Caetano (github.com/caetanus)
+#
+# Prototype AUR package — builds qbar straight from the GitHub master branch
+# until a tagged release exists. Install locally with:
+#     makepkg -si        (run inside this directory)
+# or via an AUR helper pointed at the local dir, e.g.  yay -B ./aur
+pkgname=qbar-git
+_pkgname=qbar
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Qt6/QML status bar for Wayland (wlr-layer-shell) and X11, with live CSS theming'
+arch=('x86_64')
+url='https://github.com/caetanus/qbar'
+license=('MIT')
+# Batteries included: everything qbar needs to run *correctly* on Arch is a hard
+# dep, so `yay -S qbar-git` never lands you in the "builds, then half the applets
+# silently break at runtime" trap (missing SVG plugin / icon theme / fonts / EDS
+# daemon). Both display backends are pulled in so it works on Wayland and X11.
+depends=(
+  'qt6-base'
+  'qt6-declarative'     # QtQuick + Controls/Templates/Effects/Shapes/Layouts QML modules
+  'qt6-svg'             # SVG image plugin — themeicon + every .svg applet icon
+  'qt6-websockets'      # QtWebSockets QML import — Bitcoin ticker widget
+  'qt6-wayland'         # Wayland (wlr-layer-shell) support
+  'wlroots0.19'         # Wayland layer-shell integration plugin (runtime)
+  'xcb-util-wm'         # X11 dock/strut (EWMH) integration
+  'sqlite'
+  'libxkbcommon'        # provides xkbregistry
+  'libpulse'
+  'evolution-data-server'  # libedataserver + libecal AND the Sources daemon (Calendar applet)
+  'adwaita-icon-theme'  # symbolic status icons served via themeicon://
+  'hicolor-icon-theme'
+  'ttf-nerd-fonts-symbols' # glyph icons the bundled themes render
+  'ttf-roboto'          # clean sans text font the bundled themes expect
+)
+optdepends=(
+  'wireplumber: native WirePlumber audio backend (else libpulse)'
+  'libpipewire: privacy mic/camera in-use indicator'
+  'pam: qbar-lock lock screen'
+  'ttf-jetbrains-mono-nerd: full JetBrains Mono Nerd Font for ricing (AUR)'
+)
+makedepends=(
+  'git'
+  'meson'
+  'ninja'
+  'wlroots0.19'         # Wayland integration links against it
+  'wayland-protocols'
+  'qt6-wayland'
+  'libxcb'              # X11 integration
+  'xcb-util-wm'
+)
+provides=('qbar')
+conflicts=('qbar')
+source=("$_pkgname::git+https://github.com/caetanus/qbar.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/$_pkgname"
+  # Tagged: 1.2.3.r45.gabcdef — untagged: 0.1.0.r<commits>.g<hash>
+  git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' \
+    || printf '0.1.0.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  # Build both display backends and every supported WM backend so one package
+  # serves any Arch setup (sway/hyprland on Wayland, i3/bspwm/anything-EWMH on X11).
+  meson setup build "$_pkgname" \
+    --prefix=/usr \
+    --buildtype=release \
+    -Dwayland=enabled \
+    -Dx11=enabled \
+    -Dwm_backends=i3,hyprland,bspwm,ewmh
+  meson compile -C build
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+}
