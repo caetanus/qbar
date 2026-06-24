@@ -1,12 +1,14 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QDBusAbstractAdaptor>
 #include <QDBusContext>
 #include <QDBusServiceWatcher>
 #include <QPointer>
 #include <QStringList>
 
 class QMenu;
+class StatusNotifierWatcherAdaptor;
 
 class StatusNotifierModel final : public QAbstractListModel, protected QDBusContext {
     Q_OBJECT
@@ -14,10 +16,6 @@ class StatusNotifierModel final : public QAbstractListModel, protected QDBusCont
     // Row indices of items in the NeedsAttention state — the tray drawer keeps these visible
     // while collapsed. Re-emitted on any model change (see the constructor's connections).
     Q_PROPERTY(QVariantList attentionRows READ attentionRows NOTIFY attentionRowsChanged)
-    Q_CLASSINFO("D-Bus Interface", "org.kde.StatusNotifierWatcher")
-    Q_PROPERTY(QStringList RegisteredStatusNotifierItems READ registeredStatusNotifierItems NOTIFY registeredStatusNotifierItemsChanged)
-    Q_PROPERTY(bool IsStatusNotifierHostRegistered READ isStatusNotifierHostRegistered NOTIFY isStatusNotifierHostRegisteredChanged)
-    Q_PROPERTY(int ProtocolVersion READ protocolVersion CONSTANT)
 
 public:
     enum Role {
@@ -116,6 +114,38 @@ private:
     QList<Item> m_items;
     QDBusServiceWatcher m_watcher;
     QPointer<QMenu> m_openMenu;
+    StatusNotifierWatcherAdaptor *m_watcherAdaptor = nullptr;
     bool m_ownsWatcher = false;
     bool m_hostRegistered = false;
+};
+
+// Exports only the org.kde.StatusNotifierWatcher interface on D-Bus, forwarding to the model.
+// Registering the QAbstractListModel directly would make QtDBus walk every inherited
+// QAbstractItemModel method/signal (QModelIndex, QVariant, QFlags...), which it cannot marshal —
+// producing a flood of "Type not registered with QtDBus" warnings. An adaptor scopes the export.
+class StatusNotifierWatcherAdaptor final : public QDBusAbstractAdaptor {
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.kde.StatusNotifierWatcher")
+    Q_PROPERTY(QStringList RegisteredStatusNotifierItems READ registeredStatusNotifierItems)
+    Q_PROPERTY(bool IsStatusNotifierHostRegistered READ isStatusNotifierHostRegistered)
+    Q_PROPERTY(int ProtocolVersion READ protocolVersion)
+
+public:
+    explicit StatusNotifierWatcherAdaptor(StatusNotifierModel *model);
+
+    QStringList registeredStatusNotifierItems() const;
+    bool isStatusNotifierHostRegistered() const;
+    int protocolVersion() const;
+
+public slots:
+    void RegisterStatusNotifierItem(const QString &service);
+    void RegisterStatusNotifierHost(const QString &service);
+
+signals:
+    void StatusNotifierItemRegistered(const QString &service);
+    void StatusNotifierItemUnregistered(const QString &service);
+    void StatusNotifierHostRegistered();
+
+private:
+    StatusNotifierModel *m_model;
 };

@@ -376,6 +376,44 @@ StatusNotifierModel::StatusNotifierModel(QObject *parent)
     connect(this, &QAbstractItemModel::modelReset, this, &StatusNotifierModel::attentionRowsChanged);
 }
 
+StatusNotifierWatcherAdaptor::StatusNotifierWatcherAdaptor(StatusNotifierModel *model)
+    : QDBusAbstractAdaptor(model)
+    , m_model(model)
+{
+    setAutoRelaySignals(false);
+    connect(model, &StatusNotifierModel::StatusNotifierItemRegistered,
+            this, &StatusNotifierWatcherAdaptor::StatusNotifierItemRegistered);
+    connect(model, &StatusNotifierModel::StatusNotifierItemUnregistered,
+            this, &StatusNotifierWatcherAdaptor::StatusNotifierItemUnregistered);
+    connect(model, &StatusNotifierModel::StatusNotifierHostRegistered,
+            this, &StatusNotifierWatcherAdaptor::StatusNotifierHostRegistered);
+}
+
+QStringList StatusNotifierWatcherAdaptor::registeredStatusNotifierItems() const
+{
+    return m_model->registeredStatusNotifierItems();
+}
+
+bool StatusNotifierWatcherAdaptor::isStatusNotifierHostRegistered() const
+{
+    return m_model->isStatusNotifierHostRegistered();
+}
+
+int StatusNotifierWatcherAdaptor::protocolVersion() const
+{
+    return m_model->protocolVersion();
+}
+
+void StatusNotifierWatcherAdaptor::RegisterStatusNotifierItem(const QString &service)
+{
+    m_model->RegisterStatusNotifierItem(service);
+}
+
+void StatusNotifierWatcherAdaptor::RegisterStatusNotifierHost(const QString &service)
+{
+    m_model->RegisterStatusNotifierHost(service);
+}
+
 int StatusNotifierModel::rowCount(const QModelIndex &parent) const
 {
     return parent.isValid() ? 0 : m_items.size();
@@ -657,11 +695,12 @@ void StatusNotifierModel::registerOwnWatcher()
         return;
     }
 
-    m_ownsWatcher = bus.registerObject(QString::fromLatin1(watcherPath),
-                                       this,
-                                       QDBusConnection::ExportAllSlots
-                                           | QDBusConnection::ExportAllSignals
-                                           | QDBusConnection::ExportAllProperties);
+    if (!m_watcherAdaptor) {
+        m_watcherAdaptor = new StatusNotifierWatcherAdaptor(this);
+    }
+
+    // Default flags export only the adaptors, not this model's own (QAbstractItemModel) meta-object.
+    m_ownsWatcher = bus.registerObject(QString::fromLatin1(watcherPath), this);
     if (!m_ownsWatcher) {
         bus.unregisterService(QString::fromLatin1(watcherService));
         return;
