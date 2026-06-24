@@ -50,6 +50,15 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: root.spacing
 
+        // Smooth a window opening/closing: the new icon grows in from the bar edge and
+        // the neighbours slide over, instead of popping in and snapping the row.
+        add: Transition {
+            NumberAnimation { property: "scale"; from: 0.0; to: 1.0; duration: 160; easing.type: Easing.OutBack }
+        }
+        move: Transition {
+            NumberAnimation { properties: "x,y"; duration: 160; easing.type: Easing.OutCubic }
+        }
+
         Repeater {
             model: windowModel ? windowModel : 0
             delegate: Item {
@@ -61,6 +70,7 @@ Item {
 
                 width: root.baseSize                 // uniform slot — icon scales within/over it
                 height: root.baseSize
+                transformOrigin: Item.Bottom         // grow-in animation rises from the bar edge
                 readonly property real centerX: x + width / 2   // row-local, stable (uniform slots)
                 readonly property real sz: root.iconSize(centerX)
                 opacity: cell.focused ? 1.0 : 0.72
