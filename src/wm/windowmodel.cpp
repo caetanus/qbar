@@ -80,6 +80,52 @@ QHash<int, QByteArray> WindowModel::roleNames() const
     };
 }
 
+QList<int> WindowModel::changedRoles(const Window &current, const Window &incoming)
+{
+    QList<int> roles;
+    if (current.title != incoming.title) {
+        roles.append(TitleRole);
+    }
+    if (current.appId != incoming.appId) {
+        roles.append(AppIdRole);
+    }
+    if (current.workspaceName != incoming.workspaceName) {
+        roles.append(WorkspaceNameRole);
+    }
+    if (current.monitor != incoming.monitor) {
+        roles.append(MonitorRole);
+    }
+    if (current.focused != incoming.focused) {
+        roles.append(FocusedRole);
+    }
+    if (current.urgent != incoming.urgent) {
+        roles.append(UrgentRole);
+    }
+    return roles;
+}
+
+int WindowModel::indexOfWindow(qint64 id, int from) const
+{
+    for (int i = qMax(0, from); i < m_windows.size(); ++i) {
+        if (m_windows.at(i).id == id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void WindowModel::updateWindowAt(int row, const Window &incoming)
+{
+    const QList<int> roles = changedRoles(m_windows.at(row), incoming);
+    if (roles.isEmpty()) {
+        return;
+    }
+
+    m_windows[row] = incoming;
+    const QModelIndex idx = index(row, 0);
+    emit dataChanged(idx, idx, roles);
+}
+
 bool WindowModel::isEmpty() const
 {
     return m_windows.isEmpty();
@@ -95,53 +141,40 @@ void WindowModel::replace(QList<Window> windows)
     windows = groupByWorkspace(windows);
     const bool wasEmpty = m_windows.isEmpty();
 
-    // In-place update when the set of window ids is unchanged (only titles/focus/
-    // urgency shifted), to avoid a full reset that would drop selection/animation.
-    bool sameShape = m_windows.size() == windows.size();
-    if (sameShape) {
-        for (int i = 0; i < windows.size(); ++i) {
-            if (m_windows.at(i).id != windows.at(i).id) {
-                sameShape = false;
+    for (int row = m_windows.size() - 1; row >= 0; --row) {
+        bool stillPresent = false;
+        for (const Window &incoming : std::as_const(windows)) {
+            if (incoming.id == m_windows.at(row).id) {
+                stillPresent = true;
                 break;
             }
         }
-    }
-
-    if (sameShape) {
-        for (int i = 0; i < windows.size(); ++i) {
-            const Window &current = m_windows.at(i);
-            const Window &incoming = windows.at(i);
-            QList<int> roles;
-            if (current.title != incoming.title) {
-                roles.append(TitleRole);
-            }
-            if (current.appId != incoming.appId) {
-                roles.append(AppIdRole);
-            }
-            if (current.workspaceName != incoming.workspaceName) {
-                roles.append(WorkspaceNameRole);
-            }
-            if (current.monitor != incoming.monitor) {
-                roles.append(MonitorRole);
-            }
-            if (current.focused != incoming.focused) {
-                roles.append(FocusedRole);
-            }
-            if (current.urgent != incoming.urgent) {
-                roles.append(UrgentRole);
-            }
-            if (!roles.isEmpty()) {
-                m_windows[i] = incoming;
-                const QModelIndex idx = index(i, 0);
-                emit dataChanged(idx, idx, roles);
-            }
+        if (!stillPresent) {
+            beginRemoveRows(QModelIndex(), row, row);
+            m_windows.removeAt(row);
+            endRemoveRows();
         }
-        return;
     }
 
-    beginResetModel();
-    m_windows = std::move(windows);
-    endResetModel();
+    for (int targetRow = 0; targetRow < windows.size(); ++targetRow) {
+        const Window &incoming = windows.at(targetRow);
+        const int currentRow = indexOfWindow(incoming.id, targetRow);
+
+        if (currentRow < 0) {
+            beginInsertRows(QModelIndex(), targetRow, targetRow);
+            m_windows.insert(targetRow, incoming);
+            endInsertRows();
+            continue;
+        }
+
+        if (currentRow != targetRow) {
+            beginMoveRows(QModelIndex(), currentRow, currentRow, QModelIndex(), targetRow);
+            m_windows.move(currentRow, targetRow);
+            endMoveRows();
+        }
+
+        updateWindowAt(targetRow, incoming);
+    }
 
     if (wasEmpty != m_windows.isEmpty()) {
         emit emptyChanged();

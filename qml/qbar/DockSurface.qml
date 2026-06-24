@@ -25,6 +25,8 @@ Item {
     property bool hovered: false
     property real cursorX: -1e6                          // cursor X in row coords (<0 → unknown)
     property real influence: root.hoverHeight * 2.6      // fisheye falloff radius (px)
+    property real slotCenterX: width / 2                 // set by DockWindow; surface stays stable
+    property real slotWidth: 0                           // visual width reserved by Dock.qml
 
     // Uniform baseline: bar height at rest → hoverHeight on hover, animated.
     property real baseSize: root.hovered ? Math.max(root.barHeight, root.hoverHeight) : root.barHeight
@@ -44,88 +46,95 @@ Item {
         return root.baseSize + (root.peakHeight - root.baseSize) * t
     }
 
-    Row {
+    ListView {
         id: row
         anchors.bottom: parent.bottom               // the bar edge
-        anchors.horizontalCenter: parent.horizontalCenter
+        x: Math.round(root.slotCenterX - width / 2)
+        width: Math.max(1, contentWidth, root.slotWidth - 16)
+        height: root.peakHeight + 6
+        orientation: ListView.Horizontal
+        interactive: false
+        boundsBehavior: Flickable.StopAtBounds
+        clip: false
         spacing: root.spacing
+        model: windowModel ? windowModel : 0
 
         // Smooth a window opening/closing: the new icon grows in from the bar edge and
         // the neighbours slide over, instead of popping in and snapping the row.
         add: Transition {
             NumberAnimation { property: "scale"; from: 0.0; to: 1.0; duration: 160; easing.type: Easing.OutBack }
         }
-        move: Transition {
+        remove: Transition {
+            NumberAnimation { property: "scale"; to: 0.0; duration: 140; easing.type: Easing.InCubic }
+        }
+        displaced: Transition {
             NumberAnimation { properties: "x,y"; duration: 160; easing.type: Easing.OutCubic }
         }
 
-        Repeater {
-            model: windowModel ? windowModel : 0
-            delegate: Item {
-                id: cell
-                required property var windowId
-                required property string appId
-                required property string title
-                required property bool focused
-                required property bool urgent
+        delegate: Item {
+            id: cell
+            required property var windowId
+            required property string appId
+            required property string title
+            required property bool focused
+            required property bool urgent
 
-                width: root.baseSize                 // uniform slot — icon scales within/over it
-                height: root.baseSize
-                transformOrigin: Item.Bottom         // grow-in animation rises from the bar edge
-                readonly property real centerX: x + width / 2   // row-local, stable (uniform slots)
-                readonly property real sz: root.iconSize(centerX)
-                opacity: cell.focused || cell.urgent ? 1.0 : 0.72
+            width: root.baseSize                 // uniform slot — icon scales within/over it
+            height: row.height
+            transformOrigin: Item.Bottom         // grow-in/out animation uses the bar edge
+            readonly property real centerX: x + width / 2   // content-local, stable (uniform slots)
+            readonly property real sz: root.iconSize(centerX)
+            opacity: cell.focused || cell.urgent ? 1.0 : 0.72
 
-                // Urgent windows bounce for attention (macOS dock idiom): the icon hops
-                // up out of the bar and settles, repeating while the window stays urgent.
-                property real bounceY: 0
-                SequentialAnimation {
-                    running: cell.urgent
-                    loops: Animation.Infinite
-                    onRunningChanged: if (!running) cell.bounceY = 0
-                    NumberAnimation { target: cell; property: "bounceY"; to: -root.barHeight * 0.6; duration: 260; easing.type: Easing.OutQuad }
-                    NumberAnimation { target: cell; property: "bounceY"; to: 0; duration: 420; easing.type: Easing.OutBounce }
-                    PauseAnimation { duration: 900 }
-                }
+            // Urgent windows bounce for attention (macOS dock idiom): the icon hops
+            // up out of the bar and settles, repeating while the window stays urgent.
+            property real bounceY: 0
+            SequentialAnimation {
+                running: cell.urgent
+                loops: Animation.Infinite
+                onRunningChanged: if (!running) cell.bounceY = 0
+                NumberAnimation { target: cell; property: "bounceY"; to: -root.barHeight * 0.6; duration: 260; easing.type: Easing.OutQuad }
+                NumberAnimation { target: cell; property: "bounceY"; to: 0; duration: 420; easing.type: Easing.OutBounce }
+                PauseAnimation { duration: 900 }
+            }
 
-                Image {
-                    id: icon
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottom: parent.bottom
-                    width: cell.sz
-                    height: cell.sz
-                    sourceSize.width: Math.ceil(root.peakHeight)
-                    sourceSize.height: Math.ceil(root.peakHeight)
-                    fillMode: Image.PreserveAspectFit
-                    source: cell.appId.length > 0 ? "image://themeicon/" + cell.appId : ""
-                    visible: status === Image.Ready
-                    transform: Translate { y: cell.bounceY }
-                    Behavior on width  { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
-                    Behavior on height { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
-                }
+            Image {
+                id: icon
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                width: cell.sz
+                height: cell.sz
+                sourceSize.width: Math.ceil(root.peakHeight)
+                sourceSize.height: Math.ceil(root.peakHeight)
+                fillMode: Image.PreserveAspectFit
+                source: cell.appId.length > 0 ? "image://themeicon/" + cell.appId : ""
+                visible: status === Image.Ready
+                transform: Translate { y: cell.bounceY }
+                Behavior on width  { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
+                Behavior on height { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
+            }
 
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottom: parent.bottom
-                    visible: !icon.visible
-                    text: cell.appId.length > 0 ? cell.appId.charAt(0).toUpperCase() : "?"
-                    color: theme.foreground
-                    font.family: theme.fontFamily
-                    font.pointSize: Math.max(8, Math.round(cell.sz * 0.4))
-                    transform: Translate { y: cell.bounceY }
-                }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                visible: !icon.visible
+                text: cell.appId.length > 0 ? cell.appId.charAt(0).toUpperCase() : "?"
+                color: theme.foreground
+                font.family: theme.fontFamily
+                font.pointSize: Math.max(8, Math.round(cell.sz * 0.4))
+                transform: Translate { y: cell.bounceY }
+            }
 
-                // Focused/running indicator: accent underline for the focused window,
-                // a faint dot for the other running windows.
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottom: parent.bottom
-                    width: cell.focused ? Math.round(cell.width * 0.5) : 3
-                    height: 3
-                    radius: 1.5
-                    color: cell.focused ? theme.accent : Qt.rgba(1, 1, 1, 0.45)
-                    Behavior on width { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-                }
+            // Focused/running indicator: accent underline for the focused window,
+            // a faint dot for the other running windows.
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                width: cell.focused ? Math.round(cell.width * 0.5) : 3
+                height: 3
+                radius: 1.5
+                color: cell.focused ? theme.accent : Qt.rgba(1, 1, 1, 0.45)
+                Behavior on width { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
             }
         }
     }
@@ -135,21 +144,21 @@ Item {
     MouseArea {
         id: hover
         anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: Math.max(row.width + 2 * root.spacing, root.barHeight)
+        width: Math.max(row.width + 2 * root.spacing, root.barHeight, root.slotWidth)
+        x: Math.round(root.slotCenterX - width / 2)
         height: root.peakHeight + 6
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton
         onContainsMouseChanged: root.hovered = containsMouse
-        onPositionChanged: function (m) { root.cursorX = hover.mapToItem(row, m.x, m.y).x }
+        onPositionChanged: function (m) { root.cursorX = hover.mapToItem(row.contentItem, m.x, m.y).x }
         onExited: root.cursorX = -1e6
         onClicked: function (m) {
             if (!wm)
                 return
-            var rx = hover.mapToItem(row, m.x, m.y).x
-            for (var i = 0; i < row.children.length; i++) {
-                var c = row.children[i]
+            var rx = hover.mapToItem(row.contentItem, m.x, m.y).x
+            for (var i = 0; i < row.contentItem.children.length; i++) {
+                var c = row.contentItem.children[i]
                 if (c.windowId === undefined)
                     continue
                 if (rx >= c.x && rx < c.x + c.width) {

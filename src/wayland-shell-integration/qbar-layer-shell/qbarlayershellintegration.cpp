@@ -238,7 +238,9 @@ bool QBarLayerShellSurface::eventFilter(QObject *watched, QEvent *event)
     if (event->type() == QEvent::DynamicPropertyChange && m_layerSurface != nullptr) {
         const QByteArray name = static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName();
         if (name == "qbarBarMarginTop" || name == "qbarBarMarginBottom"
-            || name == "qbarDockX" || name == "qbarDockWidth" || name == "qbarDockHeight") {
+            || name == "qbarDockX" || name == "qbarDockWidth" || name == "qbarDockHeight"
+            || name == "qbarDockInputX" || name == "qbarDockInputY"
+            || name == "qbarDockInputWidth" || name == "qbarDockInputHeight") {
             applyLayerState();
             wl_surface_commit(wlSurface());
         }
@@ -399,6 +401,16 @@ void QBarLayerShellSurface::applyLayerState()
                 m_layerSurface, bottom ? 0 : edgeMargin, 0, bottom ? edgeMargin : 0, dockX);
             zwlr_layer_surface_v1_set_keyboard_interactivity(
                 m_layerSurface, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+            if (window() != nullptr && window()->display() != nullptr && window()->display()->compositor() != nullptr) {
+                wl_region *region = window()->display()->compositor()->create_region();
+                wl_region_add(region,
+                              dockWin->property("qbarDockInputX").toInt(),
+                              dockWin->property("qbarDockInputY").toInt(),
+                              std::max(1, dockWin->property("qbarDockInputWidth").toInt()),
+                              std::max(1, dockWin->property("qbarDockInputHeight").toInt()));
+                wl_surface_set_input_region(wlSurface(), region);
+                wl_region_destroy(region);
+            }
             return;
         }
     }

@@ -22,15 +22,33 @@ QBar.CssRect {
     readonly property int iconCell: theme.height
     readonly property int spacing: 6
     readonly property int count: counter.count
+    property int visualCount: count
 
-    property int preferredWidth: count > 0
-        ? count * iconCell + (count - 1) * spacing + 16
+    property int preferredWidth: visualCount > 0
+        ? visualCount * iconCell + (visualCount - 1) * spacing + 16
         : 0
     width: Math.max(1, preferredWidth)
 
     signal preferredWidthUpdated(int width)
     onPreferredWidthChanged: { preferredWidthUpdated(preferredWidth); Qt.callLater(report) }
     Component.onCompleted: { preferredWidthUpdated(preferredWidth); Qt.callLater(report) }
+
+    onCountChanged: {
+        if (count >= visualCount) {
+            shrinkTimer.stop()
+            visualCount = count
+            Qt.callLater(report)
+        } else {
+            shrinkTimer.restart()
+        }
+    }
+
+    Timer {
+        id: shrinkTimer
+        interval: 160
+        repeat: false
+        onTriggered: root.visualCount = root.count
+    }
 
     // Counts the windows without drawing anything (Repeater.count == model rows).
     Repeater { id: counter; model: windowModel ? windowModel : 0; delegate: Item {} }

@@ -3,6 +3,7 @@
 #include <QGuiApplication>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQuickItem>
 #include <QQuickView>
 #include <QScreen>
 #include <QWindow>
@@ -138,11 +139,19 @@ void DockWindow::applyGeometry()
     const int headroom = headroomFor(m_barWindow);
     const int surfaceH = barH + headroom;
     const bool bottom = barIsBottom(m_barWindow);
-    // Side headroom so the hover-grown row (the whole dock grows past the reserved
-    // slot's width) isn't clipped at the slot edges; the row stays centred over the
-    // slot. Half the slot each side ≈ room for the dock to ~double in width on hover.
-    const int sideH = std::max(barH, m_slot.width() / 2);
-    const int dockW = m_slot.width() + (2 * sideH);
+    QScreen *screen = m_view->screen();
+    if (screen == nullptr) {
+        screen = m_barWindow != nullptr ? m_barWindow->screen() : nullptr;
+    }
+    const QRect screenGeometry = screen != nullptr ? screen->geometry() : QRect(m_slot.x(), m_slot.y(), m_slot.width(), surfaceH);
+    const int dockW = std::max(1, screenGeometry.width());
+    const int dockX = screenGeometry.x();
+    const qreal slotCenterX = m_slot.x() + (m_slot.width() / 2.0) - dockX;
+
+    if (QQuickItem *root = m_view->rootObject()) {
+        root->setProperty("slotCenterX", slotCenterX);
+        root->setProperty("slotWidth", m_slot.width());
+    }
 
     if (onX11()) {
         // The dock behaves like an in-bar applet: the surface covers the bar's slot
@@ -150,17 +159,42 @@ void DockWindow::applyGeometry()
         // extends away from the bar by `headroom` so the hover-grow can overflow ON
         // TOP of the bar without clipping.
         const int top = bottom ? (m_slot.bottom() + 1 - surfaceH) : m_slot.top();
-        m_view->setGeometry(QRect(m_slot.x() - sideH, top, dockW, surfaceH));
+        const QRect geometry(dockX, top, dockW, surfaceH);
+        if (m_view->geometry() != geometry) {
+            m_view->setGeometry(geometry);
+        }
         return;
     }
 
-    // Wayland: the layer-shell integration reads these and anchors a fixed-size
-    // surface to the bar edge + left, offset by qbarDockX. Setting them after the
-    // surface exists posts a dynamic-property change the integration re-applies.
-    QScreen *screen = m_view->screen();
-    const int outputX = screen != nullptr ? screen->geometry().x() : 0;
-    m_view->setProperty("qbarDockX", std::max(0, m_slot.x() - outputX - sideH));
-    m_view->setProperty("qbarDockWidth", dockW);
-    m_view->setProperty("qbarDockHeight", surfaceH);
-    m_view->resize(dockW, surfaceH);
+    // Wayland: keep the layer-shell surface stable across window-list changes. Moving
+    // the icon row inside QML avoids a layer-shell reconfigure on every slot-width
+    // animation frame, which otherwise shows up as flicker on some compositors.
+    if (m_view->property("qbarDockX").toInt() != 0) {
+        m_view->setProperty("qbarDockX", 0);
+    }
+    if (m_view->property("qbarDockWidth").toInt() != dockW) {
+        m_view->setProperty("qbarDockWidth", dockW);
+    }
+    if (m_view->property("qbarDockHeight").toInt() != surfaceH) {
+        m_view->setProperty("qbarDockHeight", surfaceH);
+    }
+    const int inputW = std::max(1, m_slot.width());
+    const int inputH = std::min(surfaceH, std::max(barH, static_cast<int>(std::round(barH * 2.8))));
+    const int inputX = static_cast<int>(std::round(slotCenterX - inputW / 2.0));
+    const int inputY = surfaceH - inputH;
+    if (m_view->property("qbarDockInputX").toInt() != inputX) {
+        m_view->setProperty("qbarDockInputX", inputX);
+    }
+    if (m_view->property("qbarDockInputY").toInt() != inputY) {
+        m_view->setProperty("qbarDockInputY", inputY);
+    }
+    if (m_view->property("qbarDockInputWidth").toInt() != inputW) {
+        m_view->setProperty("qbarDockInputWidth", inputW);
+    }
+    if (m_view->property("qbarDockInputHeight").toInt() != inputH) {
+        m_view->setProperty("qbarDockInputHeight", inputH);
+    }
+    if (m_view->size() != QSize(dockW, surfaceH)) {
+        m_view->resize(dockW, surfaceH);
+    }
 }

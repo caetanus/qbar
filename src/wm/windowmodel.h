@@ -50,5 +50,9 @@ signals:
     void emptyChanged();
 
 private:
+    static QList<int> changedRoles(const Window &current, const Window &incoming);
+    int indexOfWindow(qint64 id, int from = 0) const;
+    void updateWindowAt(int row, const Window &incoming);
+
     QList<Window> m_windows;
 };
