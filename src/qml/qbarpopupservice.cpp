@@ -83,6 +83,12 @@ QString QBarPopupService::openPopup(const QUrl &source,
         return {};
     }
 
+    if (m_dismissOverlay != nullptr) {
+        m_dismissOverlay->setProperty(
+            "qbarOverlayKeyboard",
+            m_overlayKeyboardFocus || properties.value(QStringLiteral("keyboardFocus")).toBool());
+    }
+
     // One popup at a time: opening a popup dismisses any other open popup. The
     // destroyed handler removes them from m_popups and emits popupClosed; we
     // keep the overlay alive since a new popup is taking their place.

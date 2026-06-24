@@ -15,6 +15,7 @@
     <file>applets/CustomTool.qml</file>
     <file>applets/I3Mode.qml</file>
     <file>applets/Media.qml</file>
+    <file>applets/Dock.qml</file>
     <file>applets/Memory.qml</file>
     <file>applets/Network.qml</file>
     <file>applets/NetworkManager.qml</file>
@@ -26,6 +27,7 @@
     <file>applets/Tray.qml</file>
     <file>applets/Workspaces.qml</file>
     <file>applets/XInput.qml</file>
+    <file>qbar/DockSurface.qml</file>
     <file>qbar/MenuPopup.qml</file>
     <file>qbar/Popup.qml</file>
     <file>qbar/DismissOverlay.qml</file>

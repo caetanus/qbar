@@ -155,11 +155,15 @@ QtWaylandClient::QWaylandShellSurface *QBarLayerShellIntegration::createShellSur
         && window->window()->property("qbarOverlay").toBool();
     const bool detached = window != nullptr && window->window() != nullptr
         && window->window()->property("qbarDetachedPopup").toBool();
+    // The dock is also a Qt::Tool window (→ carries the Qt::Popup bit) but must be a
+    // sized layer surface, not an xdg_popup — exclude it from the popup test too.
+    const bool dock = window != nullptr && window->window() != nullptr
+        && window->window()->property("qbarDock").toBool();
     if (detached) {
         qDebug() << "QBar layer-shell create detached xdg_toplevel surface";
         return new QBarXdgToplevelSurface(this, window);
     }
-    if (!overlay && window != nullptr && window->window() != nullptr
+    if (!overlay && !dock && window != nullptr && window->window() != nullptr
         && (window->window()->flags() & Qt::Popup) == Qt::Popup) {
         qDebug() << "QBar layer-shell create popup surface";
         return new QBarXdgPopupSurface(this, window);
@@ -190,11 +194,15 @@ QBarLayerShellSurface::QBarLayerShellSurface(QBarLayerShellIntegration *integrat
             output = screen->output();
         }
     }
+    // The dock floats on the OVERLAY layer so its magnified icons draw above the bar
+    // (and everything else); the bar and popup backdrop stay on TOP.
+    const bool isDock = window != nullptr && window->window() != nullptr
+        && window->window()->property("qbarDock").toBool();
     m_layerSurface = zwlr_layer_shell_v1_get_layer_surface(
         integration->layerShell(),
         wlSurface(),
         output,
-        ZWLR_LAYER_SHELL_V1_LAYER_TOP,
+        isDock ? ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY : ZWLR_LAYER_SHELL_V1_LAYER_TOP,
         "qbar");
     zwlr_layer_surface_v1_add_listener(m_layerSurface, &layerSurfaceListener, this);
     applyLayerState();
@@ -229,7 +237,11 @@ bool QBarLayerShellSurface::eventFilter(QObject *watched, QEvent *event)
 {
     if (event->type() == QEvent::DynamicPropertyChange && m_layerSurface != nullptr) {
         const QByteArray name = static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName();
-        if (name == "qbarBarMarginTop" || name == "qbarBarMarginBottom") {
+        if (name == "qbarBarMarginTop" || name == "qbarBarMarginBottom"
+            || name == "qbarOverlayKeyboard"
+            || name == "qbarDockX" || name == "qbarDockWidth" || name == "qbarDockHeight"
+            || name == "qbarDockInputX" || name == "qbarDockInputY"
+            || name == "qbarDockInputWidth" || name == "qbarDockInputHeight") {
             applyLayerState();
             wl_surface_commit(wlSurface());
         }
@@ -356,6 +368,52 @@ void QBarLayerShellSurface::applyLayerState()
                 ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
                 : ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
         return;
+    }
+
+    // The dock (flagged via "qbarDock" by DockWindow) is a fixed-size surface floated
+    // over the bar's reserved slot: anchored to the bar edge + left, offset by
+    // qbarDockX, sized to the slot width × (bar height + magnification headroom). It
+    // reserves nothing — the in-bar proxy applet already holds the space — so its
+    // exclusive zone is 0.
+    {
+        const QWindow *dockWin = window() != nullptr ? window()->window() : nullptr;
+        if (dockWin != nullptr && dockWin->property("qbarDock").toBool()) {
+            const bool bottom = dockWin->property("qbarBarPosition").toString() == QLatin1String("bottom");
+            const int dockX = dockWin->property("qbarDockX").toInt();
+            const int dockW = dockWin->property("qbarDockWidth").toInt();
+            const int dockH = dockWin->property("qbarDockHeight").toInt();
+            const int edgeMargin = bottom
+                ? dockWin->property("qbarBarMarginBottom").toInt()
+                : dockWin->property("qbarBarMarginTop").toInt();
+            const uint32_t vAnchor = bottom
+                ? ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
+                : ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP;
+            zwlr_layer_surface_v1_set_anchor(m_layerSurface, vAnchor | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT);
+            zwlr_layer_surface_v1_set_size(
+                m_layerSurface, static_cast<uint32_t>(std::max(1, dockW)), static_cast<uint32_t>(std::max(1, dockH)));
+            // -1 (not 0): ignore other surfaces' exclusive zones so the dock anchors
+            // DIRECTLY to the bar edge and OVERLAPS the bar, instead of being pushed
+            // off the top of the bar's reserved strip. The dock sits exactly where the
+            // proxy applet would inside the bar; the in-bar proxy already holds the slot.
+            zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, -1);
+            // (top, right, bottom, left) — left positions the surface at the slot's x;
+            // the bar-edge margin keeps it flush with a floating bar.
+            zwlr_layer_surface_v1_set_margin(
+                m_layerSurface, bottom ? 0 : edgeMargin, 0, bottom ? edgeMargin : 0, dockX);
+            zwlr_layer_surface_v1_set_keyboard_interactivity(
+                m_layerSurface, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+            if (window() != nullptr && window()->display() != nullptr && window()->display()->compositor() != nullptr) {
+                wl_region *region = window()->display()->compositor()->create_region();
+                wl_region_add(region,
+                              dockWin->property("qbarDockInputX").toInt(),
+                              dockWin->property("qbarDockInputY").toInt(),
+                              std::max(1, dockWin->property("qbarDockInputWidth").toInt()),
+                              std::max(1, dockWin->property("qbarDockInputHeight").toInt()));
+                wl_surface_set_input_region(wlSurface(), region);
+                wl_region_destroy(region);
+            }
+            return;
+        }
     }
 
     // Per-window geometry (set by BarWindow from its BarConfig) wins over the

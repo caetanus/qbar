@@ -16,6 +16,7 @@ Item {
     property int gap: 0
     property string placement: "below"
     property string horizontalAlignment: "left"
+    property bool keyboardFocus: false
     // When set, this popup is reachable over the JSON IPC by this name
     // (e.g. `{"command":"toggle","popup":"cpu"}` from a keyboard shortcut).
     property string name: ""
@@ -81,6 +82,14 @@ Item {
             for (var k in payload)
                 pl[k] = payload[k]
             pl.windowTitle = windowTitle
+        }
+        if (keyboardFocus) {
+            if (pl === payload) {
+                pl = {}
+                for (var p in payload)
+                    pl[p] = payload[p]
+            }
+            pl.keyboardFocus = true
         }
         popupId = kind === "tooltip"
             ? qbarPopups.openTooltip(source, pl, point.x, point.y, popupWidth, popupHeight, popupId)

@@ -3,6 +3,7 @@
 #include "src/wm/bspwmbackend.h"
 #include "src/wm/hyprlandbackend.h"
 #include "src/wm/nullbackend.h"
+#include "src/wm/windowmodel.h"
 #include "src/wm/workspacemodel.h"
 #include "src/wm/wmbackendfactory.h"
 
@@ -35,6 +36,60 @@ void WindowManagerTests::workspaceModelUpdatesRoles()
     QCOMPARE(resetSpy.count(), 1);
     QCOMPARE(dataSpy.count(), 2);
     QCOMPARE(model.data(model.index(1, 0), WorkspaceModel::FocusedRole).toBool(), true);
+}
+
+void WindowManagerTests::windowModelMutatesIncrementally()
+{
+    WindowModel model;
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+    QSignalSpy insertedSpy(&model, &QAbstractItemModel::rowsInserted);
+    QSignalSpy removedSpy(&model, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy movedSpy(&model, &QAbstractItemModel::rowsMoved);
+    QSignalSpy dataSpy(&model, &QAbstractItemModel::dataChanged);
+
+    model.replace({
+        {.id = 1, .title = QStringLiteral("Terminal"), .appId = QStringLiteral("foot"), .workspaceName = QStringLiteral("1"), .monitor = QString()},
+        {.id = 2, .title = QStringLiteral("Browser"), .appId = QStringLiteral("firefox"), .workspaceName = QStringLiteral("1"), .monitor = QString()},
+    });
+
+    QCOMPARE(resetSpy.count(), 0);
+    QCOMPARE(insertedSpy.count(), 2);
+    QCOMPARE(model.rowCount(), 2);
+
+    model.replace({
+        {.id = 1, .title = QStringLiteral("Terminal"), .appId = QStringLiteral("foot"), .workspaceName = QStringLiteral("1"), .monitor = QString()},
+        {.id = 3, .title = QStringLiteral("Editor"), .appId = QStringLiteral("code"), .workspaceName = QStringLiteral("1"), .monitor = QString()},
+        {.id = 2, .title = QStringLiteral("Browser"), .appId = QStringLiteral("firefox"), .workspaceName = QStringLiteral("1"), .monitor = QString()},
+    });
+
+    QCOMPARE(resetSpy.count(), 0);
+    QCOMPARE(insertedSpy.count(), 3);
+    QCOMPARE(model.rowCount(), 3);
+    QCOMPARE(model.data(model.index(1, 0), WindowModel::IdRole).toLongLong(), 3);
+
+    model.replace({
+        {.id = 3, .title = QStringLiteral("Editor"), .appId = QStringLiteral("code"), .workspaceName = QStringLiteral("1"), .monitor = QString(), .focused = true},
+        {.id = 1, .title = QStringLiteral("Terminal"), .appId = QStringLiteral("foot"), .workspaceName = QStringLiteral("1"), .monitor = QString()},
+        {.id = 2, .title = QStringLiteral("Browser"), .appId = QStringLiteral("firefox"), .workspaceName = QStringLiteral("1"), .monitor = QString()},
+    });
+
+    QCOMPARE(resetSpy.count(), 0);
+    QCOMPARE(movedSpy.count(), 1);
+    QCOMPARE(dataSpy.count(), 1);
+    QCOMPARE(model.rowCount(), 3);
+    QCOMPARE(model.data(model.index(0, 0), WindowModel::IdRole).toLongLong(), 3);
+    QCOMPARE(model.data(model.index(0, 0), WindowModel::FocusedRole).toBool(), true);
+
+    model.replace({
+        {.id = 3, .title = QStringLiteral("Editor"), .appId = QStringLiteral("code"), .workspaceName = QStringLiteral("1"), .monitor = QString(), .focused = true},
+        {.id = 2, .title = QStringLiteral("Browser"), .appId = QStringLiteral("firefox"), .workspaceName = QStringLiteral("1"), .monitor = QString()},
+    });
+
+    QCOMPARE(resetSpy.count(), 0);
+    QCOMPARE(removedSpy.count(), 1);
+    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(model.data(model.index(0, 0), WindowModel::IdRole).toLongLong(), 3);
+    QCOMPARE(model.data(model.index(0, 0), WindowModel::FocusedRole).toBool(), true);
 }
 
 void WindowManagerTests::i3WorkspaceJsonIsParsed()

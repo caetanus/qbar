@@ -17,6 +17,18 @@ Item {
     implicitHeight: 432
     width: implicitWidth
     height: implicitHeight
+    focus: true
+
+    Shortcut {
+        sequences: ["Ctrl+Z"]
+        onActivated: root.undoDrawing()
+    }
+    Keys.onPressed: function(event) {
+        if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Z) {
+            root.undoDrawing()
+            event.accepted = true
+        }
+    }
 
     // From the widget's payload.
     property real price: 0
@@ -157,7 +169,12 @@ Item {
     property real dragStartPricePan: 0
     property string interactionMode: "pan" // pan | free | line | fib | hline
     property var drawings: []
+    property var undoStack: []
     property int movingHlineIndex: -1  // hline grabbed for dragging in pan+Shift edit mode
+    property int shiftEditIndex: -1
+    property real shiftEditStartX: 0
+    property real shiftEditStartY: 0
+    property bool shiftEditMoved: false
     property int editHoverIndex: -1    // drawing under the cursor while Shift-editing (highlight)
     // Box zoom: drag a rectangle (zoom mode) to frame a time+price region; "1:1" clears it.
     property bool manualPriceRange: false // an explicit Y window is set → recomputeScale defers
@@ -432,14 +449,47 @@ Item {
         return { time: root.timeAtHistoryIndex(historyIndex), price: price }
     }
 
+    function yForPrice(price) {
+        var priceH = root.pricePaneHeight()
+        var range = (root.maxP - root.minP) || 1
+        var normalized
+        if (root.logScale) {
+            var logMin = root.log10(Math.max(1e-9, root.minP))
+            var logRange = root.log10(Math.max(1e-9, root.maxP)) - logMin
+            normalized = (root.log10(Math.max(1e-9, price)) - logMin) / (logRange || 1)
+        } else {
+            normalized = (price - root.minP) / range
+        }
+        return priceH - normalized * (priceH - 4) - 2 + root.pricePanPixels
+    }
+
+    function hlineSnapStep(price) {
+        if (!isFinite(price) || price <= 0)
+            return 1
+        var magnitude = Math.pow(10, Math.floor(root.log10(price)))
+        return Math.max(1, magnitude / 10)
+    }
+
+    function hlinePoint(px, py) {
+        var point = root.drawingPoint(px, py)
+        var step = root.hlineSnapStep(point.price)
+        var snapped = Math.round(point.price / step) * step
+        var snapY = root.yForPrice(snapped)
+        if (Math.abs(snapY - py) <= 9)
+            point.price = snapped
+        return point
+    }
+
     function beginDrawing(px, py) {
-        root.draftPoints = [root.drawingPoint(px, py)]
+        root.draftPoints = [root.interactionMode === "hline"
+            ? root.hlinePoint(px, py) : root.drawingPoint(px, py)]
     }
 
     function updateDrawing(px, py) {
         if (root.draftPoints.length === 0)
             return
-        var point = root.drawingPoint(px, py)
+        var point = root.interactionMode === "hline"
+            ? root.hlinePoint(px, py) : root.drawingPoint(px, py)
         if (root.interactionMode === "free")
             root.draftPoints = root.draftPoints.concat([point])
         else if (root.interactionMode === "hline")
@@ -452,11 +502,13 @@ Item {
         root.updateDrawing(px, py)
         // A horizontal S/R line needs just one point (the price); the others need two.
         var minPoints = root.interactionMode === "hline" ? 1 : 2
-        if (root.draftPoints.length >= minPoints)
+        if (root.draftPoints.length >= minPoints) {
+            root.pushUndo()
             root.drawings = root.drawings.concat([{
                 type: root.interactionMode,
                 points: root.draftPoints
             }])
+        }
         root.draftPoints = []
     }
 
@@ -466,9 +518,47 @@ Item {
     }
 
     function clearDrawings() {
+        root.pushUndo()
         root.drawings = []
         root.draftPoints = []
         root.interactionMode = "pan"
+    }
+
+    function cloneDrawings(value) {
+        return JSON.parse(JSON.stringify(value || []))
+    }
+
+    function pushUndo() {
+        var stack = root.undoStack.slice(0)
+        stack.push(root.cloneDrawings(root.drawings))
+        if (stack.length > 50)
+            stack.shift()
+        root.undoStack = stack
+    }
+
+    function undoDrawing() {
+        if (root.zoomBoxActive) {
+            root.zoomBoxActive = false
+            return
+        }
+        if (root.draftPoints.length > 0) {
+            root.draftPoints = []
+            return
+        }
+        if (root.draggingChart) {
+            root.draggingChart = false
+            return
+        }
+        if (root.undoStack.length === 0)
+            return
+        var stack = root.undoStack.slice(0)
+        var previous = stack.pop()
+        root.undoStack = stack
+        root.movingHlineIndex = -1
+        root.shiftEditIndex = -1
+        root.shiftEditMoved = false
+        root.restoringDrawings = false
+        root.drawings = root.cloneDrawings(previous)
     }
 
     // Distance from point (px,py) to the segment (x1,y1)-(x2,y2). (Math.hypot is avoided for
@@ -529,6 +619,7 @@ Item {
     function deleteDrawing(idx) {
         if (idx < 0 || idx >= root.drawings.length)
             return
+        root.pushUndo()
         var copy = root.drawings.slice(0)
         copy.splice(idx, 1)
         root.drawings = copy // onDrawingsChanged repaints + persists
@@ -542,7 +633,7 @@ Item {
         if (d.type !== "hline")
             return
         var copy = root.drawings.slice(0)
-        copy[idx] = { type: "hline", points: [{ time: d.points[0].time, price: root.drawingPoint(0, py).price }] }
+        copy[idx] = { type: "hline", points: [{ time: d.points[0].time, price: root.hlinePoint(0, py).price }] }
         root.drawings = copy
     }
 
@@ -596,6 +687,7 @@ Item {
         root.restoringDrawings = true
         root.drawings = []
         root.draftPoints = []
+        root.undoStack = []
         root.restoringDrawings = false
         LocalStorage.getItem(root.drawingsStorageKey(root.period))
     }
@@ -1239,12 +1331,10 @@ Item {
                         if (mouse.modifiers & Qt.ShiftModifier) {
                             var idx = root.drawingAt(mouse.x, mouse.y)
                             if (idx >= 0) {
-                                if (root.drawings[idx].type === "hline") {
-                                    root.movingHlineIndex = idx
-                                    root.restoringDrawings = true // suppress per-move persistence
-                                } else {
-                                    root.deleteDrawing(idx)
-                                }
+                                root.shiftEditIndex = idx
+                                root.shiftEditStartX = mouse.x
+                                root.shiftEditStartY = mouse.y
+                                root.shiftEditMoved = false
                                 root.hoverIndex = -1
                                 return
                             }
@@ -1264,6 +1354,19 @@ Item {
                     root.hoverY = mouse.y
                     if (root.zoomBoxActive) {
                         root.zoomBoxEndX = mouse.x; root.zoomBoxEndY = mouse.y
+                    } else if (root.shiftEditIndex >= 0) {
+                        var dx = mouse.x - root.shiftEditStartX
+                        var dy = mouse.y - root.shiftEditStartY
+                        if (!root.shiftEditMoved && dx * dx + dy * dy >= 16) {
+                            root.shiftEditMoved = true
+                            if (root.drawings[root.shiftEditIndex].type === "hline") {
+                                root.pushUndo()
+                                root.movingHlineIndex = root.shiftEditIndex
+                                root.restoringDrawings = true // suppress per-move persistence
+                            }
+                        }
+                        if (root.movingHlineIndex >= 0)
+                            root.moveHlineTo(root.movingHlineIndex, mouse.y)
                     } else if (root.movingHlineIndex >= 0) {
                         root.moveHlineTo(root.movingHlineIndex, mouse.y)
                     } else if (root.draggingChart) {
@@ -1280,6 +1383,16 @@ Item {
                     if (root.zoomBoxActive) {
                         root.zoomBoxActive = false
                         root.applyZoomBox()
+                    } else if (root.shiftEditIndex >= 0) {
+                        if (root.movingHlineIndex >= 0) {
+                            root.movingHlineIndex = -1
+                            root.restoringDrawings = false
+                            root.persistDrawings(root.period, root.drawings)
+                        } else if (!root.shiftEditMoved) {
+                            root.deleteDrawing(root.shiftEditIndex)
+                        }
+                        root.shiftEditIndex = -1
+                        root.shiftEditMoved = false
                     } else if (root.movingHlineIndex >= 0) {
                         root.movingHlineIndex = -1
                         root.restoringDrawings = false
@@ -1296,6 +1409,8 @@ Item {
                 onCanceled: {
                     root.draggingChart = false
                     root.zoomBoxActive = false
+                    root.shiftEditIndex = -1
+                    root.shiftEditMoved = false
                     if (root.movingHlineIndex >= 0) {
                         root.movingHlineIndex = -1
                         root.restoringDrawings = false
