@@ -27,6 +27,7 @@ Item {
     property real influence: root.hoverHeight * 2.6      // fisheye falloff radius (px)
     property real slotCenterX: width / 2                 // set by DockWindow; surface stays stable
     property real slotWidth: 0                           // visual width reserved by Dock.qml
+    property real edgePadding: Math.max(root.peakHeight, root.influence * 0.5)
 
     // Uniform baseline: bar height at rest → hoverHeight on hover, animated.
     property real baseSize: root.hovered ? Math.max(root.barHeight, root.hoverHeight) : root.barHeight
@@ -144,7 +145,7 @@ Item {
     MouseArea {
         id: hover
         anchors.bottom: parent.bottom
-        width: Math.max(row.width + 2 * root.spacing, root.barHeight, root.slotWidth)
+        width: Math.max(row.width + 2 * root.edgePadding, root.barHeight, root.slotWidth + 2 * root.edgePadding)
         x: Math.round(root.slotCenterX - width / 2)
         height: root.peakHeight + 6
         hoverEnabled: true
