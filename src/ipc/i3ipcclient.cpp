@@ -176,6 +176,12 @@ void collectWindows(const QJsonObject &node, const QString &output, const QStrin
         currentOutput = node.value(QStringLiteral("name")).toString();
     } else if (type == QStringLiteral("workspace")) {
         currentWorkspace = node.value(QStringLiteral("name")).toString();
+        // Scratchpad windows are stashed/hidden — they're not tasks on any visible
+        // workspace, so skip the whole "__i3_scratch" subtree (the Scratchpad applet
+        // surfaces them via scratchpadCount instead).
+        if (currentWorkspace == QStringLiteral("__i3_scratch")) {
+            return;
+        }
     }
 
     if (isWindowNode(node) && !isQbarWindowNode(node)) {
