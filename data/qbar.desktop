@@ -1,8 +1,13 @@
 [Desktop Entry]
 Type=Application
 Name=QBar
+GenericName=Status Bar
+Comment=Wayland/X11 status bar
 Exec=qbar
 Icon=application-x-executable
+Terminal=false
 StartupNotify=false
+StartupWMClass=qbar
 NoDisplay=true
-Categories=Utility;
+Categories=System;
+Keywords=bar;panel;statusbar;tray;wayland;
