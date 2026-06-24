@@ -18,6 +18,17 @@
 #include <QWidget>
 #include <QTimer>
 
+namespace {
+// On X11 we want popup/tooltip/overlay windows to be override-redirect — i3 then
+// never manages them: no taskbar entry, no title leaking into the focused-window
+// readout, no focus stealing, and (crucially) it never repositions them, so they
+// land exactly where we place them. Qt::BypassWindowManagerHint is that flag.
+bool onX11()
+{
+    return QGuiApplication::platformName().startsWith(QLatin1String("xcb"));
+}
+} // namespace
+
 QBarPopupService::QBarPopupService(QQmlEngine *engine,
                                    QVariantMap theme,
                                    QObject *workspaceModel,
@@ -119,32 +130,28 @@ QString QBarPopupService::openPopup(const QUrl &source,
         x = position.x();
         y = position.y();
     }
-    // Args are global screen coordinates; the overlay surface starts at the
-    // usable area's top-left (below a top bar), so subtract that origin.
-    // Clamp within the overlay so a popup anchored to an edge module (e.g. the rightmost
-    // applet) stays fully on-screen instead of spilling past the screen edge.
+    // x,y are global screen coordinates. Compute the target in global coords —
+    // clamped to the usable area (the screen minus THIS bar's reserved strip) and
+    // to the screen edges — then convert to overlay-local by subtracting the
+    // overlay origin. This is robust on i3/X11 (where availableGeometry doesn't
+    // exclude the bar) and on Wayland alike, since the bar gap is derived from the
+    // known bar height instead of the WM's work area.
     QScreen *screen = m_barWindow != nullptr ? m_barWindow->screen() : nullptr;
-    int localX = x - m_overlayOrigin.x();
-    if (screen != nullptr) {
-        const int overlayWidth = screen->availableGeometry().width();
-        localX = qBound(0, localX, qMax(0, overlayWidth - popupWidth));
-    }
-    shell->setX(localX);
-    if (m_barBottom && screen != nullptr) {
-        // A bottom bar's window has no reliable global Y on Wayland, so the
-        // anchor Y would land the popup near the top of the screen. Pin it to the
-        // bar's edge instead: the overlay spans the screen down to the bar's top,
-        // so place the popup flush against that bottom edge, growing upward.
-        const int overlayHeight = screen->geometry().height() - m_barHeight;
-        shell->setY(qMax(0, overlayHeight - popupHeight));
-    } else {
-        int localY = y - m_overlayOrigin.y();
-        if (screen != nullptr) {
-            const int overlayHeight = screen->availableGeometry().height();
-            localY = qBound(0, localY, qMax(0, overlayHeight - popupHeight));
-        }
-        shell->setY(localY);
-    }
+    const QRect screenRect = screen != nullptr ? screen->geometry() : QRect(0, 0, popupWidth, popupHeight);
+    const int usableTop = m_barBottom ? screenRect.top() : screenRect.top() + m_barHeight;
+    const int usableBottom = m_barBottom ? screenRect.bottom() + 1 - m_barHeight : screenRect.bottom() + 1;
+
+    const int gx = qBound(screenRect.left(),
+                          x,
+                          qMax(screenRect.left(), screenRect.left() + screenRect.width() - popupWidth));
+    // A bottom bar grows its popups upward, flush against the bar's top edge; a top
+    // bar drops them down from the anchor. Either way they stay inside the usable band.
+    int gy = m_barBottom ? usableBottom - popupHeight
+                         : qBound(usableTop, y, qMax(usableTop, usableBottom - popupHeight));
+    gy = qBound(usableTop, gy, qMax(usableTop, usableBottom - popupHeight));
+
+    shell->setX(gx - m_overlayOrigin.x());
+    shell->setY(gy - m_overlayOrigin.y());
 
     m_popups.insert(id, shell);
     m_popupSpecs.insert(id, PopupSpec{source, properties, QSize(popupWidth, popupHeight), QPoint(x, y)});
@@ -189,10 +196,15 @@ QString QBarPopupService::openTooltip(const QUrl &source,
     const QString id = nextId(requestedId);
     forceCloseTooltip(id);
 
+    Qt::WindowFlags tooltipFlags =
+        Qt::ToolTip | Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint;
+    if (onX11()) {
+        tooltipFlags |= Qt::BypassWindowManagerHint;  // i3 must not manage/list/move it
+    }
     auto *view = createPopupView(source,
                                  properties,
                                  id,
-                                 Qt::ToolTip | Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint,
+                                 tooltipFlags,
                                  QStringLiteral("QBar Tooltip"));
     if (view == nullptr) {
         return {};
@@ -227,10 +239,21 @@ QString QBarPopupService::openTooltip(const QUrl &source,
     // to grow (a bottom bar grows up); the env alone misreads a config-driven bar.
     view->setProperty("qbarBarPosition", QString::fromLatin1(m_barBottom ? "bottom" : "top"));
     view->setProperty("qbarBarHeight", m_barHeight);
-    if (m_barBottom && m_barWindow != nullptr && m_barWindow->screen() != nullptr) {
-        const QRect screenGeom = m_barWindow->screen()->geometry();
-        const int barTop = screenGeom.y() + screenGeom.height() - m_barHeight;
-        y = barTop;
+
+    // Tooltips are standalone windows placed in global coordinates. Keep them inside
+    // the screen and clear of THIS bar: under a top bar they hang below it, under a
+    // bottom bar they sit fully above it (bottom edge at the bar's top — the old code
+    // anchored the *top* there, so the tooltip landed on the bar).
+    QScreen *tipScreen = m_barWindow != nullptr ? m_barWindow->screen() : QGuiApplication::primaryScreen();
+    if (tipScreen != nullptr) {
+        const QRect s = tipScreen->geometry();
+        const int usableTop = m_barBottom ? s.top() : s.top() + m_barHeight;
+        const int usableBottom = m_barBottom ? s.bottom() + 1 - m_barHeight : s.bottom() + 1;
+        x = qBound(s.left(), x, qMax(s.left(), s.left() + s.width() - tooltipWidth));
+        if (m_barBottom) {
+            y = usableBottom - tooltipHeight;
+        }
+        y = qBound(usableTop, y, qMax(usableTop, usableBottom - tooltipHeight));
     }
 
     view->setPosition(x, y);
@@ -585,7 +608,13 @@ void QBarPopupService::ensureDismissOverlay()
 
     auto *view = new QQuickView(m_engine, nullptr);
     view->setTitle(QStringLiteral("QBar Popup Overlay"));
-    view->setFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::NoDropShadowWindowHint);
+    Qt::WindowFlags overlayFlags =
+        Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::NoDropShadowWindowHint;
+    if (onX11()) {
+        // Override-redirect: i3 won't manage, list, or reposition the overlay.
+        overlayFlags |= Qt::BypassWindowManagerHint;
+    }
+    view->setFlags(overlayFlags);
     view->setColor(Qt::transparent);
     view->setResizeMode(QQuickView::SizeRootObjectToView);
     // Marks this window for the layer-shell integration so it spans the whole
@@ -619,15 +648,25 @@ void QBarPopupService::ensureDismissOverlay()
     }
     if (screen != nullptr) {
         view->setScreen(screen);
-        const QRect area = screen->availableGeometry();
-        view->setGeometry(area);
-        // The overlay layer-surface starts below the bar — its top margin equals
-        // the bar height. availableGeometry on Wayland may report (0,0) instead
-        // of (0, barHeight), which would add an extra bar-height gap to every
-        // popup, so derive the origin from the same per-bar geometry the layer
-        // margin uses.
-        const int topInset = (!bottomBar && exclusive) ? barHeight : 0;
-        m_overlayOrigin = QPoint(area.left(), topInset);
+        if (onX11()) {
+            // i3's _NET_WORKAREA doesn't reliably exclude the bar (unlike a Wayland
+            // layer-shell exclusive zone), so availableGeometry() ≈ the full screen.
+            // Cover the whole screen and place popups in plain global coordinates;
+            // the bar gap is enforced per-popup against the known bar height instead.
+            const QRect full = screen->geometry();
+            view->setGeometry(full);
+            m_overlayOrigin = full.topLeft();
+        } else {
+            const QRect area = screen->availableGeometry();
+            view->setGeometry(area);
+            // The overlay layer-surface starts below the bar — its top margin equals
+            // the bar height. availableGeometry on Wayland may report (0,0) instead
+            // of (0, barHeight), which would add an extra bar-height gap to every
+            // popup, so derive the origin from the same per-bar geometry the layer
+            // margin uses.
+            const int topInset = (!bottomBar && exclusive) ? barHeight : 0;
+            m_overlayOrigin = QPoint(area.left(), topInset);
+        }
     }
 
     if (auto *root = view->rootObject()) {
