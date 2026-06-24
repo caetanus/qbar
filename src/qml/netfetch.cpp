@@ -94,6 +94,14 @@ NetReply *NetFetch::request(const QString &url, const QVariantMap &options)
         reply = m_nam->sendCustomRequest(req, method.toUtf8(), body);
     }
 
+    // Recover from QNAM's dead-connection trap: when the network drops, a pooled
+    // keep-alive socket goes stale, and QNAM keeps reusing it so every later
+    // request times out against a dead connection *forever* — even after the
+    // network is back. On any transport error, flush the connection cache so the
+    // next request dials a fresh connection and polling widgets self-heal.
+    connect(reply, &QNetworkReply::errorOccurred, m_nam,
+            [this](QNetworkReply::NetworkError) { m_nam->clearConnectionCache(); });
+
     const bool discardBody = options.value(QStringLiteral("discardBody")).toBool();
     auto *netReply = new NetReply(reply, discardBody, this);
     // Parent + explicit CppOwnership: the wrapper outlives the JS return and frees itself

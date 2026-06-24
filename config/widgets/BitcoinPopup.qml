@@ -834,18 +834,37 @@ Item {
                 console.warn("btc ws parse failed:", e)
             }
         }
+        // Reconnect ladder: 5 → 10 → 15s, then 30s forever. Keep trying until the
+        // stream is back — never give up — and reset the ladder on a clean connect.
+        property int retry: 0
+        readonly property var backoff: [5000, 10000, 15000, 30000]
         onStatusChanged: {
-            if (liveSocket.status === WebSocket.Error)
-                console.warn("btc ws error:", liveSocket.errorString)
-            else if (liveSocket.status === WebSocket.Closed && root.visible)
-                liveReconnect.restart() // network blip → retry
+            if (liveSocket.status === WebSocket.Open) {
+                liveSocket.retry = 0
+                // connectLiveStream() toggles active off→on; the transient Closed
+                // queues a reconnect — now that we're Open, cancel it.
+                liveReconnect.stop()
+            } else if (liveSocket.status === WebSocket.Error
+                       || liveSocket.status === WebSocket.Closed) {
+                if (liveSocket.status === WebSocket.Error)
+                    console.warn("btc ws error:", liveSocket.errorString)
+                if (root.visible && !liveReconnect.running) {
+                    liveReconnect.interval =
+                        liveSocket.backoff[Math.min(liveSocket.retry, liveSocket.backoff.length - 1)]
+                    liveReconnect.restart()
+                }
+            }
         }
     }
     Timer {
         id: liveReconnect
-        interval: 3000
         repeat: false
-        onTriggered: if (root.visible) root.connectLiveStream()
+        onTriggered: {
+            if (!root.visible)
+                return
+            liveSocket.retry++   // escalate the ladder if this attempt fails too
+            root.connectLiveStream()
+        }
     }
 
     // When detached into its own toplevel, mirror the live header (pair + price + change) into the

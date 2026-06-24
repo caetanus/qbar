@@ -29,15 +29,44 @@ QBar.CssRect {
     readonly property bool up: changePct >= 0
     readonly property color tint: up ? "#33b864" : "#e8546a"
 
+    // Resilience state: ride out transient network drops without flashing back to
+    // "…", and retry fast (with backoff) until it recovers instead of waiting a
+    // whole poll interval each time.
+    property bool loaded: false        // got at least one good tick
+    property bool stale: false         // last fetch failed but we still have a value
+    property bool _inFlight: false     // a request is outstanding
+    property bool _failed: false       // last attempt failed → use the fast retry cadence
+    readonly property int _pollMs: 30000   // healthy poll interval
+    readonly property int _retryMs: 5000   // while failing: keep retrying this often, forever
+
     function refresh() {
-        Fetch.fetch("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT")
+        if (root._inFlight)            // never pile up overlapping requests
+            return
+        root._inFlight = true
+        Fetch.fetch("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT", { timeout: 10000 })
             .then((r) => r.json())
             .then((d) => {
                 root.price = parseFloat(d.lastPrice)
                 root.changePct = parseFloat(d.priceChangePercent)
+                root.loaded = true
+                root.stale = false
+                root._failed = false
             })
             .catch((e) => {
                 console.warn("btc widget: ticker fetch failed:", e)
+                root._failed = true
+                if (root.loaded)
+                    root.stale = true
+            })
+            // Runs after success OR a handled failure (.catch resolves to a value),
+            // so it's our single "settled" hook. The next attempt is scheduled FROM
+            // here (request completion), never on a free-running clock: on success,
+            // poll again in 30s; while failing, keep retrying every 5s until it comes
+            // back. A slow/hung request can't overlap the next tick.
+            .then(() => {
+                root._inFlight = false
+                pollTimer.interval = root._failed ? root._retryMs : root._pollMs
+                pollTimer.restart()
             })
     }
 
@@ -46,10 +75,12 @@ QBar.CssRect {
         refresh()
     }
 
+    // Single-shot, re-armed by refresh() once each request settles — so a slow or
+    // hung fetch can't overlap the next tick.
     Timer {
-        interval: 30000
-        running: true
-        repeat: true
+        id: pollTimer
+        interval: root._pollMs
+        repeat: false
         onTriggered: root.refresh()
     }
 
@@ -77,7 +108,10 @@ QBar.CssRect {
         QBar.CssText {
             cssId: "custom-btc"
             anchors.verticalCenter: parent.verticalCenter
-            text: root.price > 0
+            // Keep showing the last good price during outages; dim it while stale so
+            // it's visibly not-live, and show "…" only before the first good tick.
+            opacity: root.stale ? 0.5 : 1.0
+            text: root.loaded
                 ? (root.price / 1000).toFixed(2) + " (" + root.changePct.toFixed(1) + "%)"
                 : "…"
         }
