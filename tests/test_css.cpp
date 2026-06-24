@@ -3,6 +3,8 @@
 #include "src/css/csstheme.h"
 
 #include <QEasingCurve>
+#include <QJSEngine>
+#include <QJSValue>
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
@@ -264,6 +266,29 @@ void CssThemeTests::parsesKeyframesAndAnimation()
     QCOMPARE(anim2.value(QStringLiteral("duration")).toInt(), 2000);
     QCOMPARE(anim2.value(QStringLiteral("iterations")).toInt(), 3);
     QCOMPARE(anim2.value(QStringLiteral("direction")).toString(), QStringLiteral("alternate"));
+}
+
+void CssThemeTests::appliesArrayCssClassFromQJSValue()
+{
+    // QML declares state as `cssClass: active ? ["active"] : []`. Read back via QObject::property
+    // that array arrives as a QJSValue (NOT a QVariantList), so the engine must unwrap it —
+    // otherwise every state class is silently dropped and only the base rule ever applies.
+    CssTheme theme;
+    theme.loadFromString(QStringLiteral(
+        "#caffeine { background-color: #000000; }"
+        "#caffeine.active { background-color: #ffffff; }"));
+
+    CssTargetStub stub;
+    stub.m_cssId = QStringLiteral("caffeine");
+    theme.loadCss(&stub);
+    QCOMPARE(stub.m_style.value(QStringLiteral("background-color")).toString(), QStringLiteral("#000000"));
+
+    // A real QJSValue array, exactly as a QML `var` property yields.
+    QJSEngine engine;
+    const QJSValue jsArray = engine.evaluate(QStringLiteral("['active']"));
+    QVERIFY(jsArray.isArray());
+    stub.setProperty("cssClass", QVariant::fromValue(jsArray)); // emits NOTIFY → reverse-slot reapply
+    QCOMPARE(stub.m_style.value(QStringLiteral("background-color")).toString(), QStringLiteral("#ffffff"));
 }
 
 QTEST_GUILESS_MAIN(CssThemeTests)

@@ -19,8 +19,8 @@ window#waybar    { background-color: rgba(0, 0, 0, 1.0); border-radius: 8px; }
 #keyboard      { color: #ff00ff; background-color: #000000; }
 #tray          { background-color: #000000; }
 #title         { color: #aaaaaa; background-color: transparent; }
-#caffeine      { color: #444444; background-color: #000000; }
-#caffeine.active { color: #ffff00; background-color: #000000; }
+#caffeine      { color: #444444; background-color: transparent; }
+#caffeine.active { color: #ffff00; background-color: rgba(255, 255, 0, 0.18); }
 #custom-dollar { color: #00ff00; background-color: #000000; }
 #custom-btc    { color: #ff8800; background-color: #000000; }
 

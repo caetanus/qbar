@@ -45,6 +45,8 @@
     <file>qbar/Fetch.js</file>
     <file>qbar/Json.js</file>
     <file>icons/caffeine-cup-empty-white.svg</file>
+    <file>icons/caffeine-cup-empty-black.svg</file>
+    <file>icons/caffeine-cup-full-white.svg</file>
     <file>icons/caffeine-cup-full-black.svg</file>
     <file>popups/BatteryPopup.qml</file>
     <file>popups/UPowerPopup.qml</file>

@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QJSValue>
 #include <QMetaMethod>
 #include <QMetaProperty>
 #include <QRegularExpression>
@@ -546,6 +547,11 @@ static QStringList cssVariantToStringList(const QVariant &v)
 {
     if (!v.isValid())
         return {};
+    // A QML `var` array (e.g. `cssClass: active ? ["active"] : []`) arrives here wrapped as a
+    // QJSValue, NOT a QVariantList — unwrap it to its variant form before coercing, otherwise
+    // it falls through to toString() (empty) and every state class is silently dropped.
+    if (v.metaType().id() == qMetaTypeId<QJSValue>())
+        return cssVariantToStringList(v.value<QJSValue>().toVariant());
     if (v.metaType().id() == QMetaType::QStringList)
         return v.toStringList();
     if (v.metaType().id() == QMetaType::QVariantList) {

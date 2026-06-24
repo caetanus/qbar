@@ -42,4 +42,5 @@ private slots:
     void parsesCssDurationsAndEasings();
     void loadCssAppliesReappliesAndPrunes();
     void parsesKeyframesAndAnimation();
+    void appliesArrayCssClassFromQJSValue();
 };

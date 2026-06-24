@@ -20,8 +20,8 @@ window#waybar    { background-color: rgba(40, 42, 54, 0.90); border-radius: 8px;
 #keyboard      { color: #bd93f9; background-color: #282a36; }
 #tray          { background-color: #282a36; }
 #title         { color: #f8f8f2; background-color: transparent; }
-#caffeine      { color: #44475a; background-color: #282a36; }
-#caffeine.active { color: #f1fa8c; background-color: #282a36; }
+#caffeine      { color: #44475a; background-color: transparent; }
+#caffeine.active { color: #f1fa8c; background-color: rgba(241, 250, 140, 0.18); }
 #custom-dollar { color: #50fa7b; background-color: #282a36; }
 #custom-btc    { color: #ffb86c; background-color: #282a36; }
 

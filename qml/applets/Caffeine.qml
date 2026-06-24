@@ -40,7 +40,7 @@ QBar.CssRect {
         height: 23
         style: root.cssStyle
         fallbackSource: root.active
-            ? "qrc:/icons/caffeine-cup-full-black.svg"
+            ? "qrc:/icons/caffeine-cup-full-white.svg"
             : "qrc:/icons/caffeine-cup-empty-white.svg"
         color: root.iconColor
     }

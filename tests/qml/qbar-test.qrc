@@ -17,6 +17,8 @@
     <file alias="qbar/Contrast.js">../../qml/qbar/Contrast.js</file>
     <file alias="qbar/Format.js">../../qml/qbar/Format.js</file>
     <file alias="icons/caffeine-cup-empty-white.svg">../../qml/icons/caffeine-cup-empty-white.svg</file>
+    <file alias="icons/caffeine-cup-empty-black.svg">../../qml/icons/caffeine-cup-empty-black.svg</file>
+    <file alias="icons/caffeine-cup-full-white.svg">../../qml/icons/caffeine-cup-full-white.svg</file>
     <file alias="icons/caffeine-cup-full-black.svg">../../qml/icons/caffeine-cup-full-black.svg</file>
     <file alias="popups/BatteryPopup.qml">../../qml/popups/BatteryPopup.qml</file>
     <file alias="popups/CalendarPopup.qml">../../qml/popups/CalendarPopup.qml</file>
