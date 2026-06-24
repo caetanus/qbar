@@ -17,12 +17,14 @@ QBar.CssRect {
     height: theme.height
     // Transparent by default (CssRect.defaultColor) — a theme may still style #dock.
 
-    readonly property int iconBase: Math.round(theme.height * 0.78)
+    // At rest the dock fills the bar height (one bar-height slot per window); keep this
+    // in sync with DockSurface.qml so the reserved width matches the resting dock.
+    readonly property int iconCell: theme.height
     readonly property int spacing: 6
     readonly property int count: counter.count
 
     property int preferredWidth: count > 0
-        ? count * iconBase + (count - 1) * spacing + 16
+        ? count * iconCell + (count - 1) * spacing + 16
         : 0
     width: Math.max(1, preferredWidth)
 

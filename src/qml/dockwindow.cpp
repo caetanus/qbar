@@ -138,14 +138,18 @@ void DockWindow::applyGeometry()
     const int headroom = headroomFor(m_barWindow);
     const int surfaceH = barH + headroom;
     const bool bottom = barIsBottom(m_barWindow);
+    // Side headroom so the hover-grown row (icons get bigger than the reserved slot)
+    // isn't clipped at the slot's left/right edges; the row stays centred over the slot.
+    const int sideH = barH;
+    const int dockW = m_slot.width() + (2 * sideH);
 
     if (onX11()) {
         // The dock behaves like an in-bar applet: the surface covers the bar's slot
         // (so base icons sit IN the bar, vertically centred like any applet) and
-        // extends away from the bar by `headroom` so the magnification can overflow
-        // ON TOP of the bar without clipping.
+        // extends away from the bar by `headroom` so the hover-grow can overflow ON
+        // TOP of the bar without clipping.
         const int top = bottom ? (m_slot.bottom() + 1 - surfaceH) : m_slot.top();
-        m_view->setGeometry(QRect(m_slot.x(), top, m_slot.width(), surfaceH));
+        m_view->setGeometry(QRect(m_slot.x() - sideH, top, dockW, surfaceH));
         return;
     }
 
@@ -154,8 +158,8 @@ void DockWindow::applyGeometry()
     // surface exists posts a dynamic-property change the integration re-applies.
     QScreen *screen = m_view->screen();
     const int outputX = screen != nullptr ? screen->geometry().x() : 0;
-    m_view->setProperty("qbarDockX", m_slot.x() - outputX);
-    m_view->setProperty("qbarDockWidth", m_slot.width());
+    m_view->setProperty("qbarDockX", std::max(0, m_slot.x() - outputX - sideH));
+    m_view->setProperty("qbarDockWidth", dockW);
     m_view->setProperty("qbarDockHeight", surfaceH);
-    m_view->resize(m_slot.width(), surfaceH);
+    m_view->resize(dockW, surfaceH);
 }
