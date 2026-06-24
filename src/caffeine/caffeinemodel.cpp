@@ -20,6 +20,11 @@
 #include "idle-inhibit-unstable-v1-client-protocol.h"
 #endif
 
+#ifdef QBAR_HAVE_X11
+#include <xcb/screensaver.h>
+#include <xcb/xcb.h>
+#endif
+
 namespace {
 
 #ifdef QBAR_HAVE_WAYLAND
@@ -141,6 +146,13 @@ bool CaffeineModel::inhibit(bool enabled)
             return true;
         }
 
+        // On X11 this is the one that actually keeps the screen awake: login1 only
+        // blocks logind's idle action (auto-suspend), not the X server's own
+        // screensaver/DPMS blanking.
+        if (inhibitX11()) {
+            return true;
+        }
+
         if (inhibitLogin1()) {
             return true;
         }
@@ -194,6 +206,45 @@ bool CaffeineModel::inhibitWayland()
 
     m_backend = Backend::WaylandIdleInhibit;
     qWarning() << "[caffeine] inhibited via wayland idle-inhibit";
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool CaffeineModel::inhibitX11()
+{
+#ifdef QBAR_HAVE_X11
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"))) {
+        return false;  // a real Wayland session uses the idle-inhibit path above
+    }
+    if (m_x11Conn != nullptr) {
+        return true;  // already suspended
+    }
+
+    xcb_connection_t *conn = xcb_connect(nullptr, nullptr);
+    if (conn == nullptr || xcb_connection_has_error(conn) != 0) {
+        if (conn != nullptr) {
+            xcb_disconnect(conn);
+        }
+        return false;
+    }
+
+    const xcb_query_extension_reply_t *ext = xcb_get_extension_data(conn, &xcb_screensaver_id);
+    if (ext == nullptr || ext->present == 0) {
+        qWarning() << "[caffeine] MIT-SCREEN-SAVER extension unavailable";
+        xcb_disconnect(conn);
+        return false;
+    }
+
+    // Suspend the X screen saver (and, on Xorg, DPMS blanking with it). The suspend
+    // lasts only while this client connection stays open, so we hold m_x11Conn until
+    // release().
+    xcb_screensaver_suspend(conn, 1);
+    xcb_flush(conn);
+    m_x11Conn = conn;
+    m_backend = Backend::X11ScreenSaver;
+    qWarning() << "[caffeine] inhibited via X11 screensaver suspend";
     return true;
 #else
     return false;
@@ -290,6 +341,15 @@ void CaffeineModel::release()
         }
         m_cookie = 0;
     }
+#ifdef QBAR_HAVE_X11
+    else if (m_backend == Backend::X11ScreenSaver && m_x11Conn != nullptr) {
+        xcb_screensaver_suspend(m_x11Conn, 0);
+        xcb_flush(m_x11Conn);
+        xcb_disconnect(m_x11Conn);  // closing the connection also clears the suspend
+        m_x11Conn = nullptr;
+        qWarning() << "[caffeine] X11 screensaver suspend released";
+    }
+#endif
 
     m_backend = Backend::None;
 }
@@ -307,6 +367,8 @@ bool CaffeineModel::backendActive() const
         return m_login1Fd.isValid();
     case Backend::ScreenSaver:
         return m_cookie != 0;
+    case Backend::X11ScreenSaver:
+        return m_x11Conn != nullptr;
     case Backend::None:
         return false;
     }

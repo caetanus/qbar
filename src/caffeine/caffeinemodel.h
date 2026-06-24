@@ -27,11 +27,13 @@ private:
     enum class Backend {
         None,
         WaylandIdleInhibit,
+        X11ScreenSaver,
         Login1,
         ScreenSaver,
     };
 
     bool inhibitWayland();
+    bool inhibitX11();
     bool inhibit(bool enabled);
     bool inhibitLogin1();
     bool inhibitScreenSaver(const QString &service, const QString &path, const QString &interfaceName);
@@ -46,6 +48,9 @@ private:
     Backend m_backend = Backend::None;
     struct zwp_idle_inhibit_manager_v1 *m_idleInhibitManager = nullptr;
     struct zwp_idle_inhibitor_v1 *m_idleInhibitor = nullptr;
+    // The MIT-SCREEN-SAVER suspend is tied to this connection — keep it open while
+    // inhibiting, since closing it auto-clears the suspend.
+    struct xcb_connection_t *m_x11Conn = nullptr;
     QDBusUnixFileDescriptor m_login1Fd;
     uint m_cookie = 0;
 };

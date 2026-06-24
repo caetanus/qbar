@@ -112,8 +112,9 @@ qtgui_private_include = include_directories(
 x11_dep = dependency('xcb', required: get_option('x11'))
 xcb_ewmh_dep = dependency('xcb-ewmh', required: get_option('x11'))
 xcb_xkb_dep = dependency('xcb-xkb', required: get_option('x11'))
-if x11_dep.found() and xcb_ewmh_dep.found() and xcb_xkb_dep.found()
-  platform_deps += [x11_dep, xcb_ewmh_dep, xcb_xkb_dep]
+xcb_screensaver_dep = dependency('xcb-screensaver', required: get_option('x11'))
+if x11_dep.found() and xcb_ewmh_dep.found() and xcb_xkb_dep.found() and xcb_screensaver_dep.found()
+  platform_deps += [x11_dep, xcb_ewmh_dep, xcb_xkb_dep, xcb_screensaver_dep]
   platform_sources += files(
     'src/platform/x11barintegration.cpp',
     'src/platform/x11keyboardlayout.cpp',
