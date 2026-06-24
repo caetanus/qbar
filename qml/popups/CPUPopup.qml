@@ -25,6 +25,7 @@ Item {
     readonly property color cpuBlue: "#7dd3fc"
     readonly property color cpuHot: "#fda4af"
     readonly property color memoryGreen: "#bef264"
+    readonly property color memoryCache: "#7dd3fc"  // reclaimable cache/buffers segment
     readonly property color swapPink: "#f9a8d4"
     readonly property color loadAmber: "#fcd34d"
     readonly property real loadScale: Math.max(1, cpu ? cpu.coreCount : 1)
@@ -453,6 +454,89 @@ Item {
                                 font.bold: true
                                 text: root.memoryMode ? "cpu history" : "memory history"
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // RAM breakdown (memory popup only): the honest 3-way split — in use by
+        // processes, reclaimable cache/buffers, and truly free — so cache/buffers
+        // aren't miscounted as "used". used = total - MemAvailable; free = MemFree;
+        // the middle segment is the reclaimable remainder.
+        Rectangle {
+            id: ramBar
+            visible: root.memoryMode
+            width: contentColumn.width
+            height: visible ? 58 : 0
+            radius: 4
+            color: root.panelBackground
+            border.color: root.panelBorder
+            border.width: 1
+
+            readonly property real memTotal: cpu ? cpu.memoryTotalBytes : 0
+            readonly property real memUsed: cpu ? cpu.memoryUsedBytes : 0
+            readonly property real memFree: cpu ? cpu.memoryFreeBytes : 0
+            readonly property real memCache: Math.max(0, memTotal - memUsed - memFree)
+            function frac(v) { return ramBar.memTotal > 0 ? v / ramBar.memTotal : 0 }
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 8
+
+                Rectangle {
+                    width: parent.width
+                    height: 12
+                    radius: 3
+                    color: Qt.rgba(0, 0, 0, 0.22)
+                    clip: true
+
+                    Rectangle {
+                        id: ramUsedSeg
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: parent.width * ramBar.frac(ramBar.memUsed)
+                        color: root.memoryGreen
+                        Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                    }
+                    Rectangle {
+                        anchors.left: ramUsedSeg.right
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: parent.width * ramBar.frac(ramBar.memCache)
+                        color: root.memoryCache
+                        Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                    }
+                }
+
+                Row {
+                    width: parent.width
+                    spacing: 16
+
+                    Row {
+                        spacing: 5
+                        Rectangle { width: 8; height: 8; radius: 2; color: root.memoryGreen; anchors.verticalCenter: parent.verticalCenter }
+                        PopupText {
+                            color: root.panelTextSoft; font.family: theme.fontFamily; font.pointSize: theme.fontSize - 1
+                            text: "used " + root.formatMemoryKb(ramBar.memUsed / 1024)
+                        }
+                    }
+                    Row {
+                        spacing: 5
+                        Rectangle { width: 8; height: 8; radius: 2; color: root.memoryCache; anchors.verticalCenter: parent.verticalCenter }
+                        PopupText {
+                            color: root.panelTextSoft; font.family: theme.fontFamily; font.pointSize: theme.fontSize - 1
+                            text: "cache " + root.formatMemoryKb(ramBar.memCache / 1024)
+                        }
+                    }
+                    Row {
+                        spacing: 5
+                        Rectangle { width: 8; height: 8; radius: 2; color: Qt.rgba(1, 1, 1, 0.25); anchors.verticalCenter: parent.verticalCenter }
+                        PopupText {
+                            color: root.panelTextSoft; font.family: theme.fontFamily; font.pointSize: theme.fontSize - 1
+                            text: "free " + root.formatMemoryKb(ramBar.memFree / 1024)
                         }
                     }
                 }

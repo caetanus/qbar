@@ -94,6 +94,11 @@ qint64 CpuModel::memoryTotalBytes() const
     return m_memoryTotalKb * 1024;
 }
 
+qint64 CpuModel::memoryFreeBytes() const
+{
+    return m_memoryFreeKb * 1024;
+}
+
 QVariantList CpuModel::memoryUsageHistory() const
 {
     return m_memoryUsageHistory;
@@ -383,7 +388,7 @@ int CpuModel::readRunningProcesses() const
     return 0;
 }
 
-int CpuModel::readMemoryUsage(qint64 *usedKb, qint64 *totalKb) const
+int CpuModel::readMemoryUsage(qint64 *usedKb, qint64 *totalKb, qint64 *freeKb) const
 {
     QFile file(QStringLiteral("/proc/meminfo"));
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -433,6 +438,11 @@ int CpuModel::readMemoryUsage(qint64 *usedKb, qint64 *totalKb) const
     }
     if (totalKb != nullptr) {
         *totalKb = memTotal;
+    }
+    if (freeKb != nullptr) {
+        // Truly free (MemFree), not "available": the gap between free and available
+        // is reclaimable cache/buffers, which the popup paints as its own segment.
+        *freeKb = qBound<qint64>(0, memFree, memTotal);
     }
     return qBound(0, static_cast<int>((used * 100.0) / memTotal), 100);
 }
@@ -701,10 +711,12 @@ void CpuModel::refresh()
     const QVector<ProcessSample> processes = readProcessSamples();
     qint64 memUsedKb = 0;
     qint64 memTotalKb = 0;
-    const int memoryUsage = readMemoryUsage(&memUsedKb, &memTotalKb);
-    if (memUsedKb != m_memoryUsedKb || memTotalKb != m_memoryTotalKb) {
+    qint64 memFreeKb = 0;
+    const int memoryUsage = readMemoryUsage(&memUsedKb, &memTotalKb, &memFreeKb);
+    if (memUsedKb != m_memoryUsedKb || memTotalKb != m_memoryTotalKb || memFreeKb != m_memoryFreeKb) {
         m_memoryUsedKb = memUsedKb;
         m_memoryTotalKb = memTotalKb;
+        m_memoryFreeKb = memFreeKb;
         emit memoryStatsChanged();
     }
     const int swapUsage = readSwapUsage();

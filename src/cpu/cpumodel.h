@@ -23,6 +23,7 @@ class CpuModel final : public QObject {
     Q_PROPERTY(int memoryUsage READ memoryUsage NOTIFY memoryStatsChanged)
     Q_PROPERTY(qint64 memoryUsedBytes READ memoryUsedBytes NOTIFY memoryStatsChanged)
     Q_PROPERTY(qint64 memoryTotalBytes READ memoryTotalBytes NOTIFY memoryStatsChanged)
+    Q_PROPERTY(qint64 memoryFreeBytes READ memoryFreeBytes NOTIFY memoryStatsChanged)
     Q_PROPERTY(QVariantList memoryUsageHistory READ memoryUsageHistory NOTIFY memoryStatsChanged)
     Q_PROPERTY(int swapUsage READ swapUsage NOTIFY memoryStatsChanged)
     Q_PROPERTY(QVariantList swapUsageHistory READ swapUsageHistory NOTIFY memoryStatsChanged)
@@ -48,6 +49,7 @@ public:
     int memoryUsage() const;
     qint64 memoryUsedBytes() const;
     qint64 memoryTotalBytes() const;
+    qint64 memoryFreeBytes() const;
     QVariantList memoryUsageHistory() const;
     int swapUsage() const;
     QVariantList swapUsageHistory() const;
@@ -106,7 +108,8 @@ private:
     LoadAverageSample readLoadAverage() const;
     QVector<ProcessSample> readProcessSamples() const;
     int readRunningProcesses() const;
-    int readMemoryUsage(qint64 *usedKb = nullptr, qint64 *totalKb = nullptr) const;
+    int readMemoryUsage(qint64 *usedKb = nullptr, qint64 *totalKb = nullptr,
+                        qint64 *freeKb = nullptr) const;
     int readSwapUsage() const;
     double readClockMhz() const;
     void refresh();
@@ -134,6 +137,7 @@ private:
     int m_memoryUsage = 0;
     qint64 m_memoryUsedKb = 0;
     qint64 m_memoryTotalKb = 0;
+    qint64 m_memoryFreeKb = 0;
     QVariantList m_memoryUsageHistory;
     int m_swapUsage = 0;
     QVariantList m_swapUsageHistory;
