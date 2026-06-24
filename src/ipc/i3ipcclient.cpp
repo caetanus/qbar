@@ -205,6 +205,43 @@ void collectWindows(const QJsonObject &node, const QString &output, const QStrin
     }
 }
 
+int countLeafWindows(const QJsonObject &node)
+{
+    int count = (isWindowNode(node) && !isQbarWindowNode(node)) ? 1 : 0;
+    for (const auto &c : node.value(QStringLiteral("nodes")).toArray()) {
+        count += countLeafWindows(c.toObject());
+    }
+    for (const auto &c : node.value(QStringLiteral("floating_nodes")).toArray()) {
+        count += countLeafWindows(c.toObject());
+    }
+    return count;
+}
+
+// Count windows stashed in the scratchpad. Both i3 and sway expose it as the special
+// workspace "__i3_scratch" (under the "__i3" output); its children are the hidden
+// scratchpad windows.
+int scratchpadWindowCount(const QJsonObject &node)
+{
+    if (node.value(QStringLiteral("name")).toString() == QStringLiteral("__i3_scratch")) {
+        int count = 0;
+        for (const auto &c : node.value(QStringLiteral("nodes")).toArray()) {
+            count += countLeafWindows(c.toObject());
+        }
+        for (const auto &c : node.value(QStringLiteral("floating_nodes")).toArray()) {
+            count += countLeafWindows(c.toObject());
+        }
+        return count;
+    }
+    int total = 0;
+    for (const auto &c : node.value(QStringLiteral("nodes")).toArray()) {
+        total += scratchpadWindowCount(c.toObject());
+    }
+    for (const auto &c : node.value(QStringLiteral("floating_nodes")).toArray()) {
+        total += scratchpadWindowCount(c.toObject());
+    }
+    return total;
+}
+
 QString normalizedLayoutCode(const QString &layout)
 {
     QString value = layout.trimmed().toLower();
@@ -353,6 +390,11 @@ qint64 I3IpcClient::focusedContainerId() const
 QString I3IpcClient::bindingMode() const
 {
     return m_bindingMode;
+}
+
+int I3IpcClient::scratchpadCount() const
+{
+    return m_scratchpadCount;
 }
 
 void I3IpcClient::start()
@@ -602,6 +644,7 @@ void I3IpcClient::handleMessage(quint32 type, const QByteArray &payload, bool ev
             const QJsonObject tree = document.object();
             setCurrentWindowTitle(focusedWindowTitle(tree));
             setFocusedContainerId(focusedContainerNodeId(tree));
+            setScratchpadCount(scratchpadWindowCount(tree));
             QList<WindowModel::Window> windows;
             collectWindows(tree, {}, {}, windows);
             m_windows.replace(std::move(windows));
@@ -685,6 +728,16 @@ void I3IpcClient::setBindingMode(const QString &mode)
 
     m_bindingMode = newMode;
     emit bindingModeChanged();
+}
+
+void I3IpcClient::setScratchpadCount(int count)
+{
+    if (m_scratchpadCount == count) {
+        return;
+    }
+
+    m_scratchpadCount = count;
+    emit scratchpadCountChanged();
 }
 
 bool I3IpcClient::supportsSwayInputs() const

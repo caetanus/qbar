@@ -24,6 +24,7 @@ public:
     QString currentKeyboardLayout() const override;
     qint64 focusedContainerId() const override;
     QString bindingMode() const override;
+    int scratchpadCount() const override;
 
 public slots:
     void start() override;
@@ -67,6 +68,7 @@ private:
     void setCurrentKeyboardLayout(const QString &layout);
     void setFocusedContainerId(qint64 containerId);
     void setBindingMode(const QString &mode);
+    void setScratchpadCount(int count);
     bool supportsSwayInputs() const;
     QString socketPath() const;
 
@@ -75,6 +77,7 @@ private:
     QString m_currentKeyboardLayout;
     qint64 m_focusedContainerId = -1;
     QString m_bindingMode = QStringLiteral("default");
+    int m_scratchpadCount = 0;
     QLocalSocket m_commandSocket;
     QLocalSocket m_eventSocket;
     QByteArray m_commandBuffer;

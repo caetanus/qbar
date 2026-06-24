@@ -14,6 +14,7 @@ class WindowManagerBackend : public QObject {
     Q_PROPERTY(QString currentKeyboardLayout READ currentKeyboardLayout NOTIFY currentKeyboardLayoutChanged)
     Q_PROPERTY(qint64 focusedContainerId READ focusedContainerId NOTIFY focusedContainerChanged)
     Q_PROPERTY(QString bindingMode READ bindingMode NOTIFY bindingModeChanged)
+    Q_PROPERTY(int scratchpadCount READ scratchpadCount NOTIFY scratchpadCountChanged)
 
 public:
     explicit WindowManagerBackend(QObject *parent = nullptr);
@@ -29,6 +30,9 @@ public:
     // i3/sway "binding mode" (e.g. "resize"); other backends have no equivalent
     // and stay on the default "default" mode, which the I3Mode applet hides.
     virtual QString bindingMode() const { return QStringLiteral("default"); }
+    // Number of windows stashed in the i3/sway scratchpad; other backends report 0
+    // and the Scratchpad applet hides itself.
+    virtual int scratchpadCount() const { return 0; }
 
 public slots:
     virtual void start() = 0;
@@ -53,6 +57,7 @@ signals:
     void containerFocusEvent(qint64 containerId);
     void workspaceFocusEvent();
     void bindingModeChanged();
+    void scratchpadCountChanged();
 
 protected:
     WindowModel m_windows;

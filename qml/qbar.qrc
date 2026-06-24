@@ -19,6 +19,7 @@
     <file>applets/Network.qml</file>
     <file>applets/NetworkManager.qml</file>
     <file>applets/Temperature.qml</file>
+    <file>applets/Scratchpad.qml</file>
     <file>applets/Sound.qml</file>
     <file>applets/Taskbar.qml</file>
     <file>applets/Title.qml</file>
