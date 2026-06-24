@@ -1,6 +1,7 @@
 #include "barwindow.h"
 
 #include "qml/qbarpopupservice.h"
+#include "qml/dockwindow.h"
 #include "qml/qbaripc.h"
 #include "qml/jsonasync.h"
 #include "qml/jstimers.h"
@@ -881,6 +882,12 @@ void BarWindow::buildLayout()
     });
     connect(m_wm, &WindowManagerBackend::workspaceFocusEvent, m_popupService, &QBarPopupService::closeAll);
 
+    // The macOS-style Dock controller. Cheap to construct and creates no window until
+    // the in-bar "Dock" proxy applet first reports a non-empty slot, so bars without a
+    // Dock pay nothing. Exposed to QML as `dockController`.
+    m_dockWindow = new DockWindow(engine(), theme, m_wm->windowModel(), m_wm, m_cssTheme, this);
+    m_dockWindow->setBarWindow(this);
+
     rootContext()->setContextProperty(QStringLiteral("theme"), theme);
     // Directory of the active config file — relative custom-widget `source` paths
     // (runtime QML loaded by Bar.appletUrl) resolve against it.
@@ -900,6 +907,7 @@ void BarWindow::buildLayout()
     QbarIpc::instance()->registerBar(this); // enables the IPC `set-css` command
     rootContext()->setContextProperty(QStringLiteral("workspaceModel"), m_wm->workspaceModel());
     rootContext()->setContextProperty(QStringLiteral("windowModel"), m_wm->windowModel());
+    rootContext()->setContextProperty(QStringLiteral("dockController"), m_dockWindow);
     rootContext()->setContextProperty(QStringLiteral("taskbarConfig"), m_config.taskbar);
     rootContext()->setContextProperty(QStringLiteral("cpuConfig"), m_config.cpu);
     rootContext()->setContextProperty(QStringLiteral("memoryConfig"), m_config.memory);

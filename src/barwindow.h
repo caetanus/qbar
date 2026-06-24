@@ -19,6 +19,7 @@
 #include <functional>
 
 class QBarPopupService;
+class DockWindow;
 class QNetworkAccessManager;
 class QTimer;
 class QUrl;
@@ -97,6 +98,7 @@ private:
     // `set-css` preview (which overwrites m_config.styleSheet). Tracks config hot-reloads.
     QString m_configuredStyleSheet;
     QBarPopupService *m_popupService = nullptr;
+    DockWindow *m_dockWindow = nullptr;
     QString m_calendarPopupId;
     QString m_evolutionCalendarExecutable;
     WindowManagerBackend *m_wm = nullptr;

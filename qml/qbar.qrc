@@ -27,6 +27,7 @@
     <file>applets/Tray.qml</file>
     <file>applets/Workspaces.qml</file>
     <file>applets/XInput.qml</file>
+    <file>qbar/DockSurface.qml</file>
     <file>qbar/MenuPopup.qml</file>
     <file>qbar/Popup.qml</file>
     <file>qbar/DismissOverlay.qml</file>
