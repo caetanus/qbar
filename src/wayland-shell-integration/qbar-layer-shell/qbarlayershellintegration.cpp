@@ -388,7 +388,11 @@ void QBarLayerShellSurface::applyLayerState()
             zwlr_layer_surface_v1_set_anchor(m_layerSurface, vAnchor | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT);
             zwlr_layer_surface_v1_set_size(
                 m_layerSurface, static_cast<uint32_t>(std::max(1, dockW)), static_cast<uint32_t>(std::max(1, dockH)));
-            zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, 0);
+            // -1 (not 0): ignore other surfaces' exclusive zones so the dock anchors
+            // DIRECTLY to the bar edge and OVERLAPS the bar, instead of being pushed
+            // off the top of the bar's reserved strip. The dock sits exactly where the
+            // proxy applet would inside the bar; the in-bar proxy already holds the slot.
+            zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, -1);
             // (top, right, bottom, left) — left positions the surface at the slot's x;
             // the bar-edge margin keeps it flush with a floating bar.
             zwlr_layer_surface_v1_set_margin(
