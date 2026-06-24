@@ -9,6 +9,10 @@
 #include <QDebug>
 #include <xkbcommon/xkbregistry.h>
 
+#ifdef QBAR_HAVE_X11
+#include "../platform/x11keyboardlayout.h"
+#endif
+
 namespace {
 
 constexpr auto magic = "i3-ipc";
@@ -308,6 +312,17 @@ I3IpcClient::I3IpcClient(QObject *parent)
     connect(&m_commandSocket, SIGNAL(connected()), this, SLOT(requestWorkspaces()));
     connect(&m_commandSocket, SIGNAL(connected()), this, SLOT(flushPendingCommands()));
     connect(&m_eventSocket, SIGNAL(connected()), this, SLOT(subscribeWorkspaceEvents()));
+
+#ifdef QBAR_HAVE_X11
+    // i3 (unlike sway) doesn't report the keyboard layout over IPC, so read it
+    // straight from the X server — otherwise the layout indicator never updates.
+    if (!supportsSwayInputs()) {
+        m_keyboardLayoutMonitor = new X11KeyboardLayout(this);
+        connect(m_keyboardLayoutMonitor, &X11KeyboardLayout::layoutChanged, this,
+                [this]() { setCurrentKeyboardLayout(m_keyboardLayoutMonitor->layout()); });
+        setCurrentKeyboardLayout(m_keyboardLayoutMonitor->layout());
+    }
+#endif
 }
 
 QString I3IpcClient::name() const

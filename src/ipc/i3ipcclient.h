@@ -8,6 +8,10 @@
 #include "../wm/windowmanagerbackend.h"
 #include "../wm/workspacemodel.h"
 
+// X11-only; on i3 it feeds the keyboard layout the IPC can't provide. Pointer stays
+// null on sway / non-X11 builds, so only a forward declaration is needed here.
+class X11KeyboardLayout;
+
 class I3IpcClient final : public WindowManagerBackend {
     Q_OBJECT
 
@@ -77,4 +81,5 @@ private:
     QByteArray m_eventBuffer;
     QStringList m_pendingCommands;
     QTimer m_reconnectTimer;
+    X11KeyboardLayout *m_keyboardLayoutMonitor = nullptr;  // i3/X11 only; null on sway
 };

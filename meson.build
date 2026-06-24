@@ -111,9 +111,13 @@ qtgui_private_include = include_directories(
 
 x11_dep = dependency('xcb', required: get_option('x11'))
 xcb_ewmh_dep = dependency('xcb-ewmh', required: get_option('x11'))
-if x11_dep.found() and xcb_ewmh_dep.found()
-  platform_deps += [x11_dep, xcb_ewmh_dep]
-  platform_sources += files('src/platform/x11barintegration.cpp')
+xcb_xkb_dep = dependency('xcb-xkb', required: get_option('x11'))
+if x11_dep.found() and xcb_ewmh_dep.found() and xcb_xkb_dep.found()
+  platform_deps += [x11_dep, xcb_ewmh_dep, xcb_xkb_dep]
+  platform_sources += files(
+    'src/platform/x11barintegration.cpp',
+    'src/platform/x11keyboardlayout.cpp',
+  )
   platform_includes += qtgui_private_include
   platform_args += ['-DQBAR_HAVE_X11=1']
 endif
@@ -294,6 +298,7 @@ headers = files(
   'src/mpris/mprismodel.h',
   'src/graphics/sparkline.h',
   'src/platform/capslockmonitor.h',
+  'src/platform/x11keyboardlayout.h',
   'src/network/networkmodel.h',
   'src/network/networkprocessmodel.h',
   'src/networkmanager/networkmanagermodel.h',
