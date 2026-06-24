@@ -128,6 +128,7 @@ QBar.CssRect {
         gap: 4
         placement: "below"
         horizontalAlignment: "center"
+        keyboardFocus: true
     }
 
     MouseArea {

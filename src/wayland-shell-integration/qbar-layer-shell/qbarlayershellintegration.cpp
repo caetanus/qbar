@@ -238,6 +238,7 @@ bool QBarLayerShellSurface::eventFilter(QObject *watched, QEvent *event)
     if (event->type() == QEvent::DynamicPropertyChange && m_layerSurface != nullptr) {
         const QByteArray name = static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName();
         if (name == "qbarBarMarginTop" || name == "qbarBarMarginBottom"
+            || name == "qbarOverlayKeyboard"
             || name == "qbarDockX" || name == "qbarDockWidth" || name == "qbarDockHeight"
             || name == "qbarDockInputX" || name == "qbarDockInputY"
             || name == "qbarDockInputWidth" || name == "qbarDockInputHeight") {
