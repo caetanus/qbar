@@ -322,6 +322,21 @@ QVariantMap parseTaskbar(const QJsonObject &root)
     return taskbar;
 }
 
+QVariantMap parseDock(const QJsonObject &root)
+{
+    QVariantMap dock{
+        {QStringLiteral("magnify"), QStringLiteral("fisheye")},
+        {QStringLiteral("indicator"), QStringLiteral("underline")},
+    };
+    if (root.contains(QStringLiteral("dock")) && root.value(QStringLiteral("dock")).isObject()) {
+        const QVariantMap overrides = root.value(QStringLiteral("dock")).toObject().toVariantMap();
+        for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
+            dock.insert(it.key(), it.value());
+        }
+    }
+    return dock;
+}
+
 BarConfig parseBarObject(const QJsonObject &root)
 {
     BarConfig config;
@@ -358,6 +373,7 @@ BarConfig parseBarObject(const QJsonObject &root)
     }
     config.customTools = parseCustomTools(root);
     config.taskbar = parseTaskbar(root);
+    config.dock = parseDock(root);
     // The graph is always rendered; these defaults list only the value part shown
     // beside it, reproducing the historical look.
     config.cpu = parseDisplay(root, QStringLiteral("cpu"), {QStringLiteral("cycle")}, QStringLiteral("cpu"));

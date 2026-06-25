@@ -174,6 +174,22 @@ any `modules-*` region as an alternative to the regular taskbar.
 
 <img src="docs/assets/simple-dock.png" alt="Simple Dock applet in qbar">
 
+Its hover animation and focused-window marker are configurable via a `"dock"` block:
+
+```jsonc
+"dock": {
+  "magnify":   "fisheye",   // "fisheye" | "parabolic" | "scale" | "none"
+  "indicator": "underline"  // "underline" | "dot" | "pill" | "none"
+  // "hoverHeight": 48,      // whole-dock height on hover (px)
+  // "peakHeight":  72       // cursor-focused fisheye peak (px)
+}
+```
+
+`magnify` picks the hover effect — a cosine **fisheye** (default), a sharper
+**parabolic** peak, a uniform whole-dock **scale**, or **none** (static).
+`indicator` picks the focused-window marker — an accent **underline** (default),
+a round **dot**, a translucent **pill** behind the icon, or **none**.
+
 > **Window-manager support.** **sway** (Wayland), **Hyprland** (Wayland), and
 > **i3** (X11) are tested setups — workspaces, popups/tooltips, the
 > keyboard-layout indicator, Caffeine, resize/submap mode, etc. are validated

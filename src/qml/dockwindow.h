@@ -27,6 +27,7 @@ class DockWindow final : public QObject {
 public:
     DockWindow(QQmlEngine *engine,
                QVariantMap theme,
+               QVariantMap dock,
                QObject *windowModel,
                QObject *wm,
                QObject *cssTheme,
@@ -49,6 +50,7 @@ private:
 
     QQmlEngine *m_engine = nullptr;
     QVariantMap m_theme;
+    QVariantMap m_dock;     // dock animation options (magnify/indicator/heights)
     QObject *m_windowModel = nullptr;
     QObject *m_wm = nullptr;
     QObject *m_cssTheme = nullptr;

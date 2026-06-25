@@ -95,6 +95,9 @@
     "memory":  { "format": ["cycle", "graph"], "text": "mem" },
     "network": { "format": ["cycle", "graph"], "text": "net" },
     // "taskbar": { "scope": "all", "middleClickClose": true, "rightClickMenu": true },
+    // "dock": { "magnify": "fisheye", "indicator": "underline" },
+    //   magnify:   "fisheye" | "parabolic" | "scale" | "none"
+    //   indicator: "underline" | "dot" | "pill" | "none"
 
     // ── Custom tools ──────────────────────────────────────────────────────────
     // Two kinds:

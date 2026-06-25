@@ -40,6 +40,10 @@ struct BarConfig {
     // Taskbar applet options: scope ("workspace"|"all"|"monitor"),
     // middleClickClose (bool), rightClickMenu (bool). Defaults set in config.cpp.
     QVariantMap taskbar;
+    // Dock applet options: magnify ("fisheye"|"parabolic"|"scale"|"none") hover
+    // effect, indicator ("underline"|"dot"|"pill"|"none") for the focused window,
+    // and optional hoverHeight/peakHeight overrides (px). Defaults set in config.cpp.
+    QVariantMap dock;
     // CPU/Memory/Network display: { "format": [parts...], "text": "<label>" }.
     // Parts (composable, ordered): "text" (the literal label), "percentage",
     // "clock" (cpu), "absolute" (mem used/total, net rate), "graph", and "cycle"

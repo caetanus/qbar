@@ -885,7 +885,7 @@ void BarWindow::buildLayout()
     // The macOS-style Dock controller. Cheap to construct and creates no window until
     // the in-bar "Dock" proxy applet first reports a non-empty slot, so bars without a
     // Dock pay nothing. Exposed to QML as `dockController`.
-    m_dockWindow = new DockWindow(engine(), theme, m_wm->windowModel(), m_wm, m_cssTheme, this);
+    m_dockWindow = new DockWindow(engine(), theme, m_config.dock, m_wm->windowModel(), m_wm, m_cssTheme, this);
     m_dockWindow->setBarWindow(this);
 
     rootContext()->setContextProperty(QStringLiteral("theme"), theme);

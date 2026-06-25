@@ -19,8 +19,28 @@ Item {
     id: root
 
     readonly property int barHeight: theme.height
-    property real hoverHeight: 48                       // whole-dock baseline height on hover
-    property real peakHeight: Math.round(root.hoverHeight * 1.5)  // cursor-focused icon (fisheye peak)
+
+    // Animation modes (config-selectable via the "dock" config block, forwarded by
+    // DockWindow as the `dockConfig` context property):
+    //   magnify   — hover effect: "fisheye" (cosine peak under the cursor, default),
+    //               "parabolic" (sharper, more pointed peak), "scale" (whole dock grows
+    //               uniformly, no per-icon peak), "none" (no growth, static dock).
+    //   indicator — focused-window marker: "underline" (accent bar, default), "dot"
+    //               (round dots), "pill" (translucent accent tile behind the icon),
+    //               "none".
+    readonly property string magnifyMode: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.magnify)
+        ? dockConfig.magnify : "fisheye"
+    readonly property string indicatorMode: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.indicator)
+        ? dockConfig.indicator : "underline"
+    // Whole dock grows on hover for everything except "none".
+    readonly property bool magnifies: root.magnifyMode !== "none"
+    // Per-icon peak under the cursor (fisheye/parabolic); "scale" grows uniformly.
+    readonly property bool fisheye: root.magnifyMode === "fisheye" || root.magnifyMode === "parabolic"
+
+    property real hoverHeight: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.hoverHeight > 0)
+        ? dockConfig.hoverHeight : 48                    // whole-dock baseline height on hover
+    property real peakHeight: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.peakHeight > 0)
+        ? dockConfig.peakHeight : Math.round(root.hoverHeight * 1.5)  // cursor-focused icon (fisheye peak)
     property real spacing: 6
     property bool hovered: false
     property real cursorX: -1e6                          // cursor X in row coords (<0 → unknown)
@@ -30,20 +50,26 @@ Item {
     property real edgePadding: Math.max(root.peakHeight, root.influence * 0.5)
 
     // Uniform baseline: bar height at rest → hoverHeight on hover, animated.
-    property real baseSize: root.hovered ? Math.max(root.barHeight, root.hoverHeight) : root.barHeight
+    property real baseSize: (root.hovered && root.magnifies) ? Math.max(root.barHeight, root.hoverHeight) : root.barHeight
     Behavior on baseSize { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
 
     // Per-icon fisheye ON TOP of the baseline: the icon at the cursor reaches peakHeight,
     // decaying to baseSize past `influence`. At rest (not hovered) everything is bar height.
     function iconSize(centerX) {
-        if (!root.hovered)
+        if (!root.hovered || !root.magnifies)
             return root.barHeight
+        if (!root.fisheye)                               // "scale": uniform grow, no peak
+            return root.baseSize
         if (root.cursorX < -9.9e5)
             return root.baseSize
         var d = Math.abs(centerX - root.cursorX)
         if (d >= root.influence)
             return root.baseSize
-        var t = 0.5 * (1.0 + Math.cos(Math.PI * d / root.influence))
+        var u = d / root.influence
+        // Parabolic falls off as 1-u² (pointed peak); fisheye uses a raised cosine (softer).
+        var t = root.magnifyMode === "parabolic"
+            ? (1.0 - u * u)
+            : 0.5 * (1.0 + Math.cos(Math.PI * u))
         return root.baseSize + (root.peakHeight - root.baseSize) * t
     }
 
@@ -99,6 +125,22 @@ Item {
                 PauseAnimation { duration: 900 }
             }
 
+            // "pill" indicator: a translucent accent tile behind the focused icon,
+            // sized to the (magnified) icon so it tracks the fisheye. Declared first so
+            // it paints behind the icon.
+            Rectangle {
+                visible: root.indicatorMode === "pill" && cell.focused
+                width: cell.sz + 8
+                height: cell.sz + 8
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: -4
+                radius: Math.round(width * 0.28)
+                color: theme.accent
+                opacity: 0.22
+                transform: Translate { y: cell.bounceY }
+            }
+
             Image {
                 id: icon
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -126,14 +168,19 @@ Item {
                 transform: Translate { y: cell.bounceY }
             }
 
-            // Focused/running indicator: accent underline for the focused window,
-            // a faint dot for the other running windows.
+            // Focused/running indicator below the icon. "underline" widens an accent
+            // bar for the focused window (faint thin bar otherwise); "dot" marks each
+            // running window with a round dot, accent + larger for the focused one.
+            // "pill" (handled above) and "none" leave the bottom marker hidden.
             Rectangle {
+                visible: root.indicatorMode === "underline" || root.indicatorMode === "dot"
+                readonly property bool asDot: root.indicatorMode === "dot"
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
-                width: cell.focused ? Math.round(cell.width * 0.5) : 3
-                height: 3
-                radius: 1.5
+                width: asDot ? (cell.focused ? 7 : 5)
+                             : (cell.focused ? Math.round(cell.width * 0.5) : 3)
+                height: asDot ? width : 3
+                radius: asDot ? width / 2 : 1.5
                 color: cell.focused ? theme.accent : Qt.rgba(1, 1, 1, 0.45)
                 Behavior on width { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
             }

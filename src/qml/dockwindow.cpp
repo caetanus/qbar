@@ -1,5 +1,8 @@
 #include "dockwindow.h"
 
+#include <algorithm>
+#include <cmath>
+
 #include <QGuiApplication>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -29,15 +32,18 @@ bool barIsBottom(QWindow *bar)
 
 // Upward (or downward) overflow room for the magnification/effects, beyond the bar's
 // own height. Kept generous and transparent — the surface only paints its icons.
-int headroomFor(QWindow *bar)
+// `peak` is the configured fisheye peak height (px); the surface must be tall enough
+// to host it without clipping, so a tall override grows the headroom to match.
+int headroomFor(QWindow *bar, int peak)
 {
-    return std::max(72, barHeightOf(bar) * 2);
+    return std::max({72, barHeightOf(bar) * 2, peak + 12});
 }
 
 } // namespace
 
 DockWindow::DockWindow(QQmlEngine *engine,
                        QVariantMap theme,
+                       QVariantMap dock,
                        QObject *windowModel,
                        QObject *wm,
                        QObject *cssTheme,
@@ -45,6 +51,7 @@ DockWindow::DockWindow(QQmlEngine *engine,
     : QObject(parent)
     , m_engine(engine)
     , m_theme(std::move(theme))
+    , m_dock(std::move(dock))
     , m_windowModel(windowModel)
     , m_wm(wm)
     , m_cssTheme(cssTheme)
@@ -113,6 +120,7 @@ void DockWindow::ensureView()
 
     QQmlContext *ctx = view->rootContext();
     ctx->setContextProperty(QStringLiteral("theme"), m_theme);
+    ctx->setContextProperty(QStringLiteral("dockConfig"), m_dock);
     ctx->setContextProperty(QStringLiteral("cssTheme"), m_cssTheme);
     ctx->setContextProperty(QStringLiteral("windowModel"), m_windowModel);
     ctx->setContextProperty(QStringLiteral("wm"), m_wm);
@@ -136,7 +144,14 @@ void DockWindow::applyGeometry()
     }
 
     const int barH = barHeightOf(m_barWindow);
-    const int headroom = headroomFor(m_barWindow);
+    // Match the QML default (round(hoverHeight * 1.5), hoverHeight 48 → 72) so the
+    // surface fits the resting fisheye, but honour a taller configured peak/hover.
+    const int hoverH = m_dock.contains(QStringLiteral("hoverHeight"))
+        ? m_dock.value(QStringLiteral("hoverHeight")).toInt() : 48;
+    const int peakH = m_dock.contains(QStringLiteral("peakHeight"))
+        ? m_dock.value(QStringLiteral("peakHeight")).toInt()
+        : static_cast<int>(std::lround(std::max(hoverH, 48) * 1.5));
+    const int headroom = headroomFor(m_barWindow, peakH);
     const int surfaceH = barH + headroom;
     const bool bottom = barIsBottom(m_barWindow);
     QScreen *screen = m_view->screen();
