@@ -56,17 +56,18 @@ QBar.CssRect {
     function report() {
         if (!dockController)
             return
-        if (root.preferredWidth <= 0 || root.width <= 1) {
+        if (root.preferredWidth <= 0) {
             dockController.hideDock()
             return
         }
         var g = root.mapToGlobal(0, 0)
-        dockController.setSlotGeometry(Math.round(g.x), Math.round(g.y),
-                                       Math.round(root.width), Math.round(root.height))
+        var w = Math.round(root.preferredWidth)
+        var x = Math.round(g.x + root.width / 2 - w / 2)
+        dockController.setSlotGeometry(x, Math.round(g.y),
+                                       w, Math.round(root.height))
     }
 
     onXChanged: Qt.callLater(report)
-    onWidthChanged: Qt.callLater(report)
 
     // The dock window must track the bar moving/resizing (multi-monitor, layout shifts).
     Connections {
