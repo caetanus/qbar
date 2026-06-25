@@ -170,11 +170,11 @@ Built-in modules include: `Workspaces`, `Title`, `CPU`, `Memory`, `Network`, `Ne
 `Disk`, `Temperature`, `Sound`, `Battery`, `Brightness`, `Bluetooth`, `PowerProfiles`,
 `Caffeine`, `XInput`, `Media` (MPRIS), `Clock`, `Tray`, and `CustomTool:<id>`.
 
-> **Window-manager support.** For now **sway** (Wayland) and **i3** (X11) are the
-> exhaustively-tested setups — workspaces, popups/tooltips, the keyboard-layout
-> indicator, Caffeine, etc. are validated on both. The other backends (`hyprland`,
-> `bspwm`, `ewmh`) are implemented but not yet hardened; expect rough edges and
-> please report bugs.
+> **Window-manager support.** **sway** (Wayland), **Hyprland** (Wayland), and
+> **i3** (X11) are tested setups — workspaces, popups/tooltips, the
+> keyboard-layout indicator, Caffeine, resize/submap mode, etc. are validated
+> there. The other backends (`bspwm`, `ewmh`) are implemented but not yet
+> hardened; expect rough edges and please report bugs.
 
 ## Theming
 
