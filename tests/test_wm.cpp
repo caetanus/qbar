@@ -149,6 +149,14 @@ void WindowManagerTests::hyprlandKeyboardLayoutIsNormalized()
     QCOMPARE(HyprlandBackend::parseActiveKeyboardLayout(devices), QStringLiteral("br"));
 }
 
+void WindowManagerTests::hyprlandSubmapIsNormalizedAsBindingMode()
+{
+    QCOMPARE(HyprlandBackend::normalizeSubmapName(QStringLiteral("resize")), QStringLiteral("resize"));
+    QCOMPARE(HyprlandBackend::normalizeSubmapName(QStringLiteral(" resize ")), QStringLiteral("resize"));
+    QCOMPARE(HyprlandBackend::normalizeSubmapName(QString()), QStringLiteral("default"));
+    QCOMPARE(HyprlandBackend::normalizeSubmapName(QStringLiteral("reset")), QStringLiteral("default"));
+}
+
 void WindowManagerTests::bspwmDesktopStateIsParsed()
 {
     const auto parsed = BspwmBackend::parseDesktopState(

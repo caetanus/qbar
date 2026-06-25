@@ -18,6 +18,7 @@ public:
     QString currentWindowTitle() const override;
     QString currentKeyboardLayout() const override;
     qint64 focusedContainerId() const override;
+    QString bindingMode() const override;
 
     static bool isAvailable();
     static QString commandSocketPath();
@@ -27,6 +28,7 @@ public:
                                                             const QByteArray &monitorsJson);
     static QString parseActiveWindowTitle(const QByteArray &activeWindowJson);
     static QString parseActiveKeyboardLayout(const QByteArray &devicesJson);
+    static QString normalizeSubmapName(const QString &submap);
     static QList<WindowModel::Window> parseClients(const QByteArray &clientsJson,
                                                    const QByteArray &monitorsJson,
                                                    qint64 focusedAddress);
@@ -57,10 +59,12 @@ private:
     void setCurrentWindowTitle(const QString &title);
     void setCurrentKeyboardLayout(const QString &layout);
     void setFocusedContainerId(qint64 containerId);
+    void setBindingMode(const QString &mode);
 
     WorkspaceModel m_workspaceModel;
     QString m_currentWindowTitle;
     QString m_currentKeyboardLayout;
+    QString m_bindingMode = QStringLiteral("default");
     qint64 m_focusedContainerId = -1;
     QLocalSocket m_eventSocket;
     QByteArray m_eventBuffer;

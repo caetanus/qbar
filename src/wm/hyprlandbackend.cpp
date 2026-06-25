@@ -87,6 +87,11 @@ qint64 HyprlandBackend::focusedContainerId() const
     return m_focusedContainerId;
 }
 
+QString HyprlandBackend::bindingMode() const
+{
+    return m_bindingMode;
+}
+
 bool HyprlandBackend::isAvailable()
 {
     return QFileInfo::exists(commandSocketPath()) && QFileInfo::exists(eventSocketPath());
@@ -203,6 +208,15 @@ QString HyprlandBackend::parseActiveKeyboardLayout(const QByteArray &devicesJson
     }
 
     return {};
+}
+
+QString HyprlandBackend::normalizeSubmapName(const QString &submap)
+{
+    const QString name = submap.trimmed();
+    if (name.isEmpty() || name == QStringLiteral("reset")) {
+        return QStringLiteral("default");
+    }
+    return name;
 }
 
 void HyprlandBackend::start()
@@ -447,6 +461,11 @@ void HyprlandBackend::handleEventLine(const QByteArray &line)
         const QString text = QString::fromUtf8(payload);
         const int comma = text.indexOf(QLatin1Char(','));
         setCurrentKeyboardLayout(comma >= 0 ? text.mid(comma + 1).left(2).toLower() : text.left(2).toLower());
+        return;
+    }
+
+    if (event == "submap") {
+        setBindingMode(normalizeSubmapName(QString::fromUtf8(payload)));
     }
 }
 
@@ -478,4 +497,15 @@ void HyprlandBackend::setFocusedContainerId(qint64 containerId)
 
     m_focusedContainerId = containerId;
     emit focusedContainerChanged(containerId);
+}
+
+void HyprlandBackend::setBindingMode(const QString &mode)
+{
+    const QString newMode = mode.isEmpty() ? QStringLiteral("default") : mode;
+    if (m_bindingMode == newMode) {
+        return;
+    }
+
+    m_bindingMode = newMode;
+    emit bindingModeChanged();
 }

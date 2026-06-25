@@ -9,8 +9,8 @@ QBar.CssRect {
 
     readonly property var cssStyle: root.style
 
-    // i3/sway "binding mode" (e.g. "resize"). Other WM backends always report
-    // "default", so this applet stays hidden outside of i3/sway binding modes.
+    // i3/sway binding mode or Hyprland submap (e.g. "resize"). Other backends
+    // report "default", so this applet stays hidden outside of modal states.
     readonly property string modeName: i3Ipc && i3Ipc.bindingMode ? i3Ipc.bindingMode : "default"
     readonly property bool active: modeName !== "default" && modeName !== ""
 

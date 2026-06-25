@@ -27,8 +27,8 @@ public:
     virtual QString currentWindowTitle() const = 0;
     virtual QString currentKeyboardLayout() const = 0;
     virtual qint64 focusedContainerId() const = 0;
-    // i3/sway "binding mode" (e.g. "resize"); other backends have no equivalent
-    // and stay on the default "default" mode, which the I3Mode applet hides.
+    // i3/sway binding mode or Hyprland submap (e.g. "resize"). Backends with no
+    // equivalent stay on "default", which the I3Mode applet hides.
     virtual QString bindingMode() const { return QStringLiteral("default"); }
     // Number of windows stashed in the i3/sway scratchpad; other backends report 0
     // and the Scratchpad applet hides itself.

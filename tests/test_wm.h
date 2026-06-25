@@ -12,6 +12,7 @@ private slots:
     void hyprlandWorkspaceJsonIsParsed();
     void hyprlandActiveWindowTitleIsParsed();
     void hyprlandKeyboardLayoutIsNormalized();
+    void hyprlandSubmapIsNormalizedAsBindingMode();
     void bspwmDesktopStateIsParsed();
     void bspwmFocusedNodeTitleIsParsed();
     void factoryCreatesNullBackend();
