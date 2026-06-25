@@ -140,14 +140,18 @@ Item {
         }
     }
 
-    // Hover band: drives the grow + fisheye and routes clicks. Anchored to the bar edge,
-    // tall enough to cover the magnified peak so the cursor stays "in" while magnifying.
+    // Hover band: drives the grow + fisheye and routes clicks. Anchored to the bar edge.
+    // At REST it hugs the resting dock (bar height, icon width) so the empty space ABOVE
+    // and beside the dock doesn't trigger the fisheye. Once hovered it expands to cover the
+    // magnified peak (and the edge padding) so the cursor stays "in" while icons grow upward.
     MouseArea {
         id: hover
         anchors.bottom: parent.bottom
-        width: Math.max(row.width + 2 * root.edgePadding, root.barHeight, root.slotWidth + 2 * root.edgePadding)
+        width: root.hovered
+            ? Math.max(row.width + 2 * root.edgePadding, root.barHeight, root.slotWidth + 2 * root.edgePadding)
+            : Math.max(row.width, root.barHeight, root.slotWidth)
         x: Math.round(root.slotCenterX - width / 2)
-        height: root.peakHeight + 6
+        height: root.hovered ? root.peakHeight + 6 : root.barHeight
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton
