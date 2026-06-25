@@ -2,6 +2,7 @@
 
 #include "src/wm/bspwmbackend.h"
 #include "src/wm/hyprlandbackend.h"
+#include "src/ipc/i3ipcclient.h"
 #include "src/wm/nullbackend.h"
 #include "src/wm/windowmodel.h"
 #include "src/wm/workspacemodel.h"
@@ -90,6 +91,14 @@ void WindowManagerTests::windowModelMutatesIncrementally()
     QCOMPARE(model.rowCount(), 2);
     QCOMPARE(model.data(model.index(0, 0), WindowModel::IdRole).toLongLong(), 3);
     QCOMPARE(model.data(model.index(0, 0), WindowModel::FocusedRole).toBool(), true);
+}
+
+void WindowManagerTests::i3WindowTitleEventsOnlyUpdateFocusedContainer()
+{
+    QCOMPARE(I3IpcClient::windowEventUpdatesFocusedTitle(QStringLiteral("focus"), 10, 20), true);
+    QCOMPARE(I3IpcClient::windowEventUpdatesFocusedTitle(QStringLiteral("title"), 10, 10), true);
+    QCOMPARE(I3IpcClient::windowEventUpdatesFocusedTitle(QStringLiteral("title"), 20, 10), false);
+    QCOMPARE(I3IpcClient::windowEventUpdatesFocusedTitle(QStringLiteral("title"), -1, 10), false);
 }
 
 void WindowManagerTests::i3WorkspaceJsonIsParsed()

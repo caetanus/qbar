@@ -37,6 +37,10 @@ public slots:
     void cycleKeyboardLayout() override;
     void requestTreeSnapshot() override;
 
+    static bool windowEventUpdatesFocusedTitle(const QString &change,
+                                               qint64 eventContainerId,
+                                               qint64 focusedContainerId);
+
 signals:
     void qbarNodeFound(qint64 nodeId);
 

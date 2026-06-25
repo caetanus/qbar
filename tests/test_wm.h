@@ -8,6 +8,7 @@ class WindowManagerTests final : public QObject {
 private slots:
     void workspaceModelUpdatesRoles();
     void windowModelMutatesIncrementally();
+    void i3WindowTitleEventsOnlyUpdateFocusedContainer();
     void i3WorkspaceJsonIsParsed();
     void hyprlandWorkspaceJsonIsParsed();
     void hyprlandActiveWindowTitleIsParsed();

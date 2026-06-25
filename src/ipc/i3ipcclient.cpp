@@ -393,6 +393,14 @@ qint64 I3IpcClient::focusedContainerId() const
     return m_focusedContainerId;
 }
 
+bool I3IpcClient::windowEventUpdatesFocusedTitle(const QString &change,
+                                                 qint64 eventContainerId,
+                                                 qint64 focusedContainerId)
+{
+    return change == QStringLiteral("focus")
+        || (eventContainerId >= 0 && eventContainerId == focusedContainerId);
+}
+
 QString I3IpcClient::bindingMode() const
 {
     return m_bindingMode;
@@ -623,8 +631,8 @@ void I3IpcClient::handleMessage(quint32 type, const QByteArray &payload, bool ev
             setBindingMode(change);
         } else if (type == windowEvent) {
             const auto container = event.value(QStringLiteral("container")).toObject();
+            const qint64 id = containerId(container);
             if (change == QStringLiteral("focus")) {
-                const qint64 id = containerId(container);
                 if (id >= 0) {
                     emit containerFocusEvent(id);
                     setFocusedContainerId(id);
@@ -632,7 +640,8 @@ void I3IpcClient::handleMessage(quint32 type, const QByteArray &payload, bool ev
             }
 
             const QString title = nodeTitle(container);
-            if (!title.isEmpty()) {
+            if (!title.isEmpty()
+                && windowEventUpdatesFocusedTitle(change, id, m_focusedContainerId)) {
                 setCurrentWindowTitle(title);
             }
             // Any window event (new/close/move/title/focus/urgent) can change the
