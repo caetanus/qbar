@@ -236,6 +236,7 @@ sources = files(
   'src/caffeine/caffeinemodel.cpp',
   'src/customtool/customtoolmodel.cpp',
   'src/ipc/i3ipcclient.cpp',
+  'src/platform/keyboardlayoutcode.cpp',
   'src/platform/platformbarintegration.cpp',
   'src/css/csstheme.cpp',
   'src/css/valueparser.cpp',
@@ -464,6 +465,7 @@ wm_test_exe = executable(
     'src/wm/ewmhbackend.cpp',
     'src/wm/wmbackendfactory.cpp',
     'src/ipc/i3ipcclient.cpp',
+    'src/platform/keyboardlayoutcode.cpp',
   ),
   wm_test_moc,
   qt6.preprocess(moc_headers: files(

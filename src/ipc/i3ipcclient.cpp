@@ -7,7 +7,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QDebug>
-#include <xkbcommon/xkbregistry.h>
+#include "../platform/keyboardlayoutcode.h"
 
 #ifdef QBAR_HAVE_X11
 #include "../platform/x11keyboardlayout.h"
@@ -248,61 +248,6 @@ int scratchpadWindowCount(const QJsonObject &node)
     return total;
 }
 
-QString normalizedLayoutCode(const QString &layout)
-{
-    QString value = layout.trimmed().toLower();
-    if (value.isEmpty()) {
-        return {};
-    }
-
-    if (value == QStringLiteral("br") || value.contains(QStringLiteral("brazil"))) {
-        return QStringLiteral("br");
-    }
-    if (value == QStringLiteral("us") || value.contains(QStringLiteral("united states")) || value.contains(QStringLiteral("(us)"))) {
-        return QStringLiteral("us");
-    }
-    if (value == QStringLiteral("pt") || value.contains(QStringLiteral("portuguese"))) {
-        return QStringLiteral("br");
-    }
-    if (value == QStringLiteral("en") || value.contains(QStringLiteral("english"))) {
-        return QStringLiteral("us");
-    }
-
-    const int parenStart = value.indexOf(QLatin1Char('('));
-    const int parenEnd = value.indexOf(QLatin1Char(')'), parenStart + 1);
-    if (parenStart >= 0 && parenEnd > parenStart + 1) {
-        value = value.mid(parenStart + 1, parenEnd - parenStart - 1).trimmed();
-    }
-
-    return value.left(2);
-}
-
-QString registryLayoutCode(const QString &layoutDescription)
-{
-    rxkb_context *context = rxkb_context_new(RXKB_CONTEXT_LOAD_EXOTIC_RULES);
-    if (context == nullptr) {
-        return {};
-    }
-
-    rxkb_context_parse_default_ruleset(context);
-    QString code;
-    for (rxkb_layout *layout = rxkb_layout_first(context); layout != nullptr; layout = rxkb_layout_next(layout)) {
-        const char *description = rxkb_layout_get_description(layout);
-        if (description == nullptr || layoutDescription != QString::fromUtf8(description)) {
-            continue;
-        }
-
-        const char *name = rxkb_layout_get_name(layout);
-        if (name != nullptr) {
-            code = QString::fromUtf8(name);
-        }
-        break;
-    }
-
-    rxkb_context_unref(context);
-    return code;
-}
-
 QString activeKeyboardLayout(const QJsonArray &inputs)
 {
     for (const auto &value : inputs) {
@@ -314,25 +259,15 @@ QString activeKeyboardLayout(const QJsonArray &inputs)
         const int activeIndex = input.value(QStringLiteral("xkb_active_layout_index")).toInt(-1);
         const QJsonArray layoutNames = input.value(QStringLiteral("xkb_layout_names")).toArray();
         if (activeIndex >= 0 && activeIndex < layoutNames.size()) {
-            const QString layoutName = layoutNames.at(activeIndex).toString();
-            const QString layoutCode = registryLayoutCode(layoutName);
-            if (!layoutCode.isEmpty()) {
-                return layoutCode;
-            }
-            const QString normalizedCode = normalizedLayoutCode(layoutName);
-            if (!normalizedCode.isEmpty()) {
-                return normalizedCode;
+            const QString code = qbar::keyboardLayoutCode(layoutNames.at(activeIndex).toString());
+            if (!code.isEmpty()) {
+                return code;
             }
         }
 
-        const QString activeName = input.value(QStringLiteral("xkb_active_layout_name")).toString();
-        const QString registryCode = registryLayoutCode(activeName);
-        if (!registryCode.isEmpty()) {
-            return registryCode;
-        }
-        const QString layout = normalizedLayoutCode(activeName);
-        if (!layout.isEmpty()) {
-            return layout;
+        const QString code = qbar::keyboardLayoutCode(input.value(QStringLiteral("xkb_active_layout_name")).toString());
+        if (!code.isEmpty()) {
+            return code;
         }
     }
 

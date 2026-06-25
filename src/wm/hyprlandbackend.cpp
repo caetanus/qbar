@@ -1,5 +1,7 @@
 #include "hyprlandbackend.h"
 
+#include "../platform/keyboardlayoutcode.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
@@ -195,15 +197,10 @@ QString HyprlandBackend::parseActiveKeyboardLayout(const QByteArray &devicesJson
         const QString layout = firstNonEmpty({
             keyboard.value(QStringLiteral("active_keymap")).toString(),
             keyboard.value(QStringLiteral("layout")).toString(),
-        }).toLower();
-        if (layout.contains(QStringLiteral("br")) || layout.contains(QStringLiteral("brazil"))) {
-            return QStringLiteral("br");
-        }
-        if (layout.contains(QStringLiteral("us")) || layout.contains(QStringLiteral("english"))) {
-            return QStringLiteral("us");
-        }
-        if (!layout.isEmpty()) {
-            return layout.left(2);
+        });
+        const QString code = qbar::keyboardLayoutCode(layout);
+        if (!code.isEmpty()) {
+            return code;
         }
     }
 
@@ -460,7 +457,7 @@ void HyprlandBackend::handleEventLine(const QByteArray &line)
     if (event == "activelayout") {
         const QString text = QString::fromUtf8(payload);
         const int comma = text.indexOf(QLatin1Char(','));
-        setCurrentKeyboardLayout(comma >= 0 ? text.mid(comma + 1).left(2).toLower() : text.left(2).toLower());
+        setCurrentKeyboardLayout(qbar::keyboardLayoutCode(comma >= 0 ? text.mid(comma + 1) : text));
         return;
     }
 
