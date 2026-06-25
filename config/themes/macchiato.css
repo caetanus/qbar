@@ -34,6 +34,10 @@
 @define-color pink      #f5bde6;
 @define-color flamingo  #f0c6c6;
 @define-color rosewater #f4dbd6;
+@define-color blue-fill rgba(138, 173, 244, 0.22);
+@define-color mauve-fill rgba(198, 160, 246, 0.22);
+@define-color sky-fill rgba(145, 215, 227, 0.22);
+@define-color yellow-fill rgba(238, 212, 159, 0.24);
 
 window#waybar    { background-color: rgba(0, 0, 0, 0.3);     }
 

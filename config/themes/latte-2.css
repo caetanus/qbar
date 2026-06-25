@@ -1,16 +1,8 @@
-/* Catppuccin Latte 2 — same palette as catppuccin-latte, but the bar's CENTER is
-   transparent so the macOS-style Dock (its own window) floats over a see-through gap.
-   The left/right module groups keep the Latte fill as rounded pills; the whole-bar
-   background is turned off so nothing paints behind the centre.
-   Adapted from the Catppuccin Waybar theme (https://github.com/catppuccin/waybar, MIT). */
+/* Catppuccin Latte 2 — Catppuccin Latte with a transparent centre lane for Dock. */
 
-/* Whole-bar background OFF — the regions below paint their own, leaving the centre clear. */
-window#waybar  { background-color: transparent; }
+window#waybar  { background-color: transparent; border-radius: 8px; border-left: 80px; border-right: 80px; padding: 0 6px; }
 
-/* Left/right groups: the Latte fill, as rounded pills. */
-#left, #right  { background-color: rgba(239, 241, 245, 0.85); border-radius: 8px; padding: 0 8px; }
-
-/* The centre — where the Dock lives — stays transparent. */
+#left, #right  { background-color: rgba(239, 241, 245, 0.85); border-radius: 8px; }
 #center        { background-color: transparent; }
 #dock          { background-color: transparent; }
 
@@ -23,6 +15,7 @@ window#waybar  { background-color: transparent; }
 #memory        { color: #8839ef; background-color: transparent; }
 #nm-applet       { color: #209fb5; background-color: transparent; }
 #network-io    { color: #04a5e5; background-color: transparent; }
+#network-io.graph { background-color: rgba(76, 79, 105, 0.06); width: 22px; }
 #network-io.download { color: #df8e1d; fill: rgba(223, 142, 29, 0.22); }
 #network-io.upload { color: #fe640b; fill: rgba(254, 100, 11, 0.26); }
 #network-io.arrowDown { color: #df8e1d; }
@@ -46,3 +39,16 @@ window#waybar  { background-color: transparent; }
 #workspaces button.focused  { color: #4c4f69; background-color: rgba(76, 79, 105, 0.12); }
 #workspaces button.visible  { color: #5c5f77; background-color: rgba(92, 95, 119, 0.06); }
 #workspaces button.urgent   { color: #eff1f5; background-color: #d20f39; }
+
+#overlay { background-color: rgba(76, 79, 105, 0.16); }
+#popup {
+    color: #4c4f69;
+    background-color: rgba(239, 241, 245, 0.98);
+    border-color: rgba(188, 192, 204, 0.85);
+    border-width: 1px;
+    border-radius: 8px;
+    box-shadow: 0px 14px 30px rgba(76, 79, 105, 0.22);
+    text-shadow: none;
+    opacity: 0.98;
+}
+#cpu-popup { color: #4c4f69; text-shadow: none; }

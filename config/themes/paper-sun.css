@@ -61,6 +61,7 @@ window#waybar {
 #memory.swap { color: #ffb16b; }
 #nm-applet { color: @paper; background-color: transparent; }
 #network-io { color: @paper; background-color: transparent; }
+#network-io.graph { background-color: rgba(255, 255, 255, 0.16); width: 34px; }
 #network-io.download { color: #91e6d6; fill: rgba(145, 230, 214, 0.24); }
 #network-io.upload { color: #ffd37a; fill: rgba(255, 211, 122, 0.24); }
 #network-io.arrowDown { color: #91e6d6; }

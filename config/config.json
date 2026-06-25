@@ -35,8 +35,8 @@
     // bundled themes were copied to ./themes/ on first run — swap the name and save.
     // Try: nord, catppuccin-mocha, tokyo-night, gruvbox-dark, dracula, rose-pine,
     //      everforest-dark, solarized-dark, paper-sun, bliss-xp, vinyl-dusk … (see ./themes/)
+    "baseStyleSheet": "style.css",
     "styleSheet": "themes/nord.css",
-    // "baseStyleSheet": "themes/base.css",  // optional layer the theme cascades over
 
     // Fallback colours (used by applets the CSS theme doesn't fully style, and as
     // the basis for auto-contrast). The styleSheet above normally overrides the look.

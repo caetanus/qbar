@@ -1,0 +1,138 @@
+/*
+ * qbar base style.
+ *
+ * First-run configs load this as baseStyleSheet, then layer a theme from
+ * ./themes/ on top. Palette-only themes, like macchiato.css, override the
+ * @define-color values below while keeping these structural module rules.
+ */
+
+@define-color base      #2e3440;
+@define-color mantle    #242933;
+@define-color crust     #1f242d;
+@define-color surface0  #3b4252;
+@define-color surface1  #434c5e;
+@define-color surface2  #4c566a;
+@define-color text      #eceff4;
+@define-color subtext0  #d8dee9;
+@define-color subtext1  #e5e9f0;
+@define-color overlay0  #6e738d;
+@define-color blue      #81a1c1;
+@define-color lavender  #8fbcbb;
+@define-color sapphire  #88c0d0;
+@define-color sky       #8fbcbb;
+@define-color teal      #8fbcbb;
+@define-color green     #a3be8c;
+@define-color yellow    #ebcb8b;
+@define-color peach     #d08770;
+@define-color red       #bf616a;
+@define-color mauve     #b48ead;
+@define-color pink      #b48ead;
+@define-color blue-fill rgba(129, 161, 193, 0.22);
+@define-color mauve-fill rgba(180, 142, 173, 0.22);
+@define-color sky-fill rgba(143, 188, 187, 0.22);
+@define-color yellow-fill rgba(235, 203, 139, 0.24);
+
+* {
+    border: none;
+    border-radius: 0;
+}
+
+window#waybar {
+    background-color: rgba(46, 52, 64, 0.90);
+    border-radius: 8px;
+    color: @text;
+}
+
+#clock,
+#battery,
+#cpu,
+#memory,
+#network-io,
+#nm-applet,
+#pulseaudio,
+#backlight,
+#temperature,
+#keyboard,
+#disk,
+#bluetooth,
+#power-profiles-daemon,
+#tray,
+#custom-dollar,
+#custom-btc {
+    color: @text;
+    background-color: @base;
+}
+
+#clock { color: @text; }
+#battery, #battery.charging, #battery.full { color: @green; }
+#battery.critical { color: @crust; background-color: @red; }
+
+#cpu { color: @blue; }
+#cpu.graph {
+    background-color: @base;
+    color: @blue;
+    fill: @blue-fill;
+    width: 22px;
+}
+
+#memory { color: @mauve; }
+#memory.graph {
+    background-color: @base;
+    color: @mauve;
+    fill: @mauve-fill;
+    width: 22px;
+}
+#memory.swap { color: @yellow; }
+
+#network-io { color: @sky; }
+#network-io.graph {
+    background-color: @base;
+    width: 22px;
+}
+#network-io.download { color: @sky; fill: @sky-fill; }
+#network-io.upload { color: @yellow; fill: @yellow-fill; }
+#network-io.arrowDown { color: @sky; }
+#network-io.arrowUp { color: @yellow; }
+
+#nm-applet { color: @sapphire; }
+#pulseaudio { color: @teal; }
+#pulseaudio.muted { color: @surface2; }
+#backlight { color: @yellow; }
+#temperature { color: @peach; }
+#keyboard { color: @mauve; }
+#disk { color: @yellow; }
+#bluetooth { color: @blue; }
+#power-profiles-daemon { color: @green; }
+#title { color: @subtext0; background-color: transparent; }
+#caffeine { color: @surface2; background-color: transparent; }
+#caffeine.active { color: @yellow; background-color: rgba(235, 203, 139, 0.18); }
+#custom-dollar { color: @green; }
+#custom-btc { color: @peach; }
+
+#workspaces button {
+    color: @surface2;
+    background-color: @crust;
+}
+#workspaces button.focused {
+    color: @text;
+    background-color: @surface0;
+}
+#workspaces button.visible {
+    color: @subtext0;
+    background-color: @base;
+}
+#workspaces button.urgent {
+    color: @crust;
+    background-color: @red;
+}
+
+#popup {
+    color: @text;
+    background-color: @base;
+    border-color: @surface1;
+    border-width: 1px;
+    border-radius: 8px;
+    box-shadow: 0px 14px 30px rgba(0, 0, 0, 0.28);
+}
+
+#overlay { background-color: rgba(0, 0, 0, 0.22); }

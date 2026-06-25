@@ -51,6 +51,7 @@ window#waybar { background-color: rgba(21, 19, 26, 0.86); border-radius: 8px; bo
 #memory.swap { color: @peach; }
 #nm-applet { color: @aqua; background-color: rgba(121, 224, 212, 0.10); }
 #network-io { color: @aqua; background-color: transparent; }
+#network-io.graph { background-color: rgba(12, 15, 27, 0.72); width: 34px; }
 #network-io.download { color: @aqua; fill: rgba(121, 224, 212, 0.22); }
 #network-io.upload { color: @lavender; fill: rgba(189, 162, 255, 0.24); }
 #network-io.arrowDown { color: @aqua; }

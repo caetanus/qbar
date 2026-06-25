@@ -47,6 +47,7 @@ window#waybar { background-color: rgba(17, 24, 32, 0.86); border-radius: 8px;  m
 #memory.swap { color: @amber; }
 #nm-applet { color: @frost; background-color: rgba(185, 230, 255, 0.09); }
 #network-io { color: @frost; background-color: transparent; }
+#network-io.graph { background-color: rgba(8, 15, 23, 0.72); width: 32px; }
 #network-io.download { color: @frost; fill: rgba(185, 230, 255, 0.20); }
 #network-io.upload { color: @amber; fill: rgba(240, 198, 116, 0.22); }
 #network-io.arrowDown { color: @frost; }

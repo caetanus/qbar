@@ -13,6 +13,7 @@ window#waybar    { background-color: rgba(36, 39, 58, 0.85); border-radius: 8px;
 #memory        { color: #c6a0f6; background-color: #24273a; }
 #nm-applet       { color: #7dc4e4; background-color: #24273a; }
 #network-io    { color: #91d7e3; background-color: #24273a; }
+#network-io.graph { background-color: #24273a; width: 22px; }
 #pulseaudio    { color: #8bd5ca; background-color: #24273a; }
 #pulseaudio.muted  { color: #5b6078; background-color: #24273a; }
 #backlight     { color: #eed49f; background-color: #24273a; }

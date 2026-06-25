@@ -2,6 +2,7 @@
   <qresource prefix="/defaults">
     <file alias="config.json">../config/config.json</file>
     <file alias="config.schema.json">../config.schema.json</file>
+    <file alias="style.css">../config/style.css</file>
     <file alias="themes/aqua-glass.css">../config/themes/aqua-glass.css</file>
     <file alias="themes/bliss-xp.css">../config/themes/bliss-xp.css</file>
     <file alias="themes/catppuccin-frappe.css">../config/themes/catppuccin-frappe.css</file>

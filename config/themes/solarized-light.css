@@ -11,6 +11,7 @@ window#waybar    { background-color: rgba(253, 246, 227, 0.85); border-radius: 8
 #memory        { color: #6c71c4; background-color: transparent; }
 #nm-applet       { color: #2aa198; background-color: transparent; }
 #network-io    { color: #2aa198; background-color: transparent; }
+#network-io.graph { background-color: rgba(101, 123, 131, 0.06); width: 22px; }
 #network-io.download { color: #b58900; fill: rgba(181, 137, 0, 0.22); }
 #network-io.upload { color: #cb4b16; fill: rgba(203, 75, 22, 0.26); }
 #network-io.arrowDown { color: #b58900; }
