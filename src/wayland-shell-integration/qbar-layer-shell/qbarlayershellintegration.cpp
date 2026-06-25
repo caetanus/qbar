@@ -347,25 +347,50 @@ void QBarLayerShellSurface::applyLayerState()
         const bool bottom = positionProp.isValid()
             ? positionProp.toString() == QLatin1String("bottom")
             : isBottom();
+
+        const QScreen *outScreen = overlayWin->screen() != nullptr ? overlayWin->screen()
+                                                                   : QGuiApplication::primaryScreen();
+        const int outputHeight = outScreen != nullptr ? outScreen->geometry().height() : 0;
         const int barInset = exclusive ? barHeight : 0;
-        const int topMargin = bottom ? 0 : barInset;
-        const int bottomMargin = bottom ? barInset : 0;
-        zwlr_layer_surface_v1_set_anchor(
-            m_layerSurface,
-            ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP
-                | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
-                | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
-                | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
-        zwlr_layer_surface_v1_set_size(m_layerSurface, 0, 0);
+
+        if (barInset > 0 && outputHeight > barInset) {
+            // Cover the whole output EXCEPT the bar's strip. Anchoring to all four
+            // edges and insetting with a margin works on sway but NOT on Hyprland,
+            // which ignores both the margin and a 0 exclusive zone on a top+bottom-
+            // anchored surface and lets the backdrop overlap the bar. So drop the bar's
+            // edge, anchor the three others, and size the surface explicitly to the
+            // remaining height — unambiguous on every compositor. (Width stays anchored
+            // to both sides; only the bar-facing vertical edge is freed.)
+            const uint32_t vAnchor = bottom ? ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP
+                                            : ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;
+            zwlr_layer_surface_v1_set_anchor(
+                m_layerSurface,
+                vAnchor | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+            zwlr_layer_surface_v1_set_size(m_layerSurface, 0, static_cast<uint32_t>(outputHeight - barInset));
+        } else {
+            // Non-exclusive bar (or unknown output size): cover the whole output.
+            zwlr_layer_surface_v1_set_anchor(
+                m_layerSurface,
+                ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
+                    | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+            zwlr_layer_surface_v1_set_size(m_layerSurface, 0, 0);
+        }
         zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, -1);
-        zwlr_layer_surface_v1_set_margin(m_layerSurface, topMargin, 0, bottomMargin, 0);
-        // Grab the keyboard (for Escape-to-close) only when the user opted in via
-        // BarConfig::popupKeyboardFocus; otherwise stay focusless.
+        zwlr_layer_surface_v1_set_margin(m_layerSurface, 0, 0, 0, 0);
+        // Take the keyboard (for Escape-to-close / typing in popups) only when the user
+        // opted in via BarConfig::popupKeyboardFocus; otherwise stay focusless.
+        //
+        // Use ON_DEMAND, not EXCLUSIVE. EXCLUSIVE is a MODAL keyboard grab: while the
+        // overlay holds it, Hyprland refuses to move focus, so clicking the bar (or a
+        // popup provider) does nothing until the grab is released by clicking elsewhere
+        // — the bar appears frozen. ON_DEMAND still lets the popup hold the keyboard,
+        // but a click on the bar transfers focus normally and the bar stays responsive
+        // (this is how sway already behaved with EXCLUSIVE).
         const bool grabKeyboard = window()->window()->property("qbarOverlayKeyboard").toBool();
         zwlr_layer_surface_v1_set_keyboard_interactivity(
             m_layerSurface,
             grabKeyboard
-                ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
+                ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND
                 : ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
         return;
     }
@@ -772,17 +797,33 @@ xdg_positioner *QBarXdgPopupSurface::createPositioner()
         // Tooltips/menus anchor at a point and grow away from the bar's edge: a
         // top bar grows down, a bottom bar grows up — so a tooltip is never left
         // below the cursor at the screen's bottom edge.
+        //
+        // m_geometry is the intended on-screen rect, so relativePosition is its
+        // TOP-left (relative to the parent surface). With an UPWARD gravity (bottom
+        // bar) the anchor point becomes the popup's BOTTOM edge, so anchoring at the
+        // rect's top would land the popup a full popup-height too high (away from the
+        // bar). Anchor at the rect's bottom (top + height) in that case; a top bar
+        // grows down from the top, so its anchor stays at the top.
         const bool bottom = popupBarIsBottom();
-        xdg_positioner_set_anchor_rect(positioner, relativePosition.x(), relativePosition.y(), 1, 1);
+        const int anchorY = bottom ? relativePosition.y() + std::max(size.height(), 1)
+                                   : relativePosition.y();
+        xdg_positioner_set_anchor_rect(positioner, relativePosition.x(), anchorY, 1, 1);
         xdg_positioner_set_anchor(positioner, bottom ? XDG_POSITIONER_ANCHOR_BOTTOM_LEFT : XDG_POSITIONER_ANCHOR_TOP_LEFT);
         xdg_positioner_set_gravity(positioner, bottom ? XDG_POSITIONER_GRAVITY_TOP_RIGHT : XDG_POSITIONER_GRAVITY_BOTTOM_RIGHT);
     }
-    xdg_positioner_set_constraint_adjustment(
-        positioner,
-        XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_X
-            | XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_Y
-            | XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_X
-            | XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_Y);
+    // Point-anchored tooltips/menus are already positioned (and screen-clamped by
+    // QBarPopupService) where we want them, with their edge sitting exactly on the
+    // screen boundary. FLIP would treat that boundary-touch as a violation and mirror
+    // the popup a FULL width/height to the other side of the anchor — a big jump.
+    // Allow only SLIDE (a minimal nudge to fit). The applet-anchored path (hasAnchor)
+    // genuinely wants to flip to the other side of its anchor rect, so keep FLIP there.
+    uint32_t constraint = XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_X
+        | XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_SLIDE_Y;
+    if (hasAnchor) {
+        constraint |= XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_X
+            | XDG_POSITIONER_CONSTRAINT_ADJUSTMENT_FLIP_Y;
+    }
+    xdg_positioner_set_constraint_adjustment(positioner, constraint);
 
     if (xdg_wm_base_get_version(m_integration->xdgWmBase()) >= XDG_POSITIONER_SET_REACTIVE_SINCE_VERSION) {
         xdg_positioner_set_reactive(positioner);
