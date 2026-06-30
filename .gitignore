@@ -24,3 +24,4 @@ ui_*.h
 # local tooling / scratch (not for publication)
 .claude/
 readme_ai.md
+nvim.log
