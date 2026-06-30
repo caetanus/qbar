@@ -56,9 +56,15 @@ sha256sums=('SKIP')
 
 pkgver() {
   cd "$srcdir/$_pkgname"
-  # Tagged: 1.2.3.r45.gabcdef — untagged: 0.1.0.r<commits>.g<hash>
-  git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' \
-    || printf '0.1.0.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+  # Tagged: 1.2.3.r45.gabcdef — untagged: 0.1.0.r<commits>.g<hash>.
+  # NB: `git describe | sed` would mask `git describe`'s failure behind sed's exit
+  # status (the pipeline succeeds with EMPTY output → an empty pkgver → makepkg
+  # aborts). With no tags yet, test describe first and fall back explicitly.
+  if git describe --long --tags >/dev/null 2>&1; then
+    git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+  else
+    printf '0.1.0.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+  fi
 }
 
 build() {
