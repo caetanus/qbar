@@ -14,7 +14,7 @@ ModelCapsules::ModelCapsules(QObject *parent)
 {
 }
 
-QObject *ModelCapsules::acquire(const QString &key)
+QObject *ModelCapsules::acquire(const QString &key, QWindow *window)
 {
     QObject *model = nullptr;
     if (key == QLatin1String("cpu")) {
@@ -35,6 +35,15 @@ QObject *ModelCapsules::acquire(const QString &key)
         model = m_calendar.get();
     } else if (key == QLatin1String("battery")) {
         model = m_battery.get();
+    } else if (key == QLatin1String("tray")) {
+        model = m_tray.get();
+    } else if (key == QLatin1String("sound")) {
+        model = m_sound.get();
+    } else if (key == QLatin1String("caffeine")) {
+        if (m_caffeineWindow == nullptr) {
+            m_caffeineWindow = window;
+        }
+        model = m_caffeine.get();
     } else if (key == QLatin1String("disk")) {
         model = m_disk.get();
     } else if (key == QLatin1String("bluetooth")) {

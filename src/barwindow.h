@@ -1,13 +1,8 @@
 #pragma once
 
 #include "config.h"
-// Only the eager backends are referenced by member type here; the lazy ones live behind
-// ModelCapsules (src/qml/modelcapsules.cpp) and aren't needed in this header.
-#include "caffeine/caffeinemodel.h"
-#include "sound/audiobackend.h"
 #include "platform/capslockmonitor.h"
 #include "css/csstheme.h"
-#include "tray/statusnotifiermodel.h"
 #include "wm/windowmanagerbackend.h"
 
 #include <QByteArray>
@@ -102,10 +97,6 @@ private:
     QString m_calendarPopupId;
     QString m_evolutionCalendarExecutable;
     WindowManagerBackend *m_wm = nullptr;
-    // Eager backends with direct C++ consumers; the rest are created lazily by ModelCapsules.
-    StatusNotifierModel *m_trayModel = nullptr;
-    CaffeineModel *m_caffeineModel = nullptr;
-    AudioBackend *m_soundModel = nullptr;
     CapsLockMonitor *m_capsLockMonitor = nullptr;
     CssTheme *m_cssTheme = nullptr;
     QNetworkAccessManager *m_cssNam = nullptr; // lazily created for set-css over http(s)

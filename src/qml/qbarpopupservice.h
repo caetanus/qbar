@@ -27,7 +27,6 @@ public:
                               QVariantMap theme,
                               QObject *workspaceModel,
                               QObject *ipcClient,
-                              QObject *trayModel,
                               QObject *cssTheme = nullptr,
                               QObject *parent = nullptr);
     ~QBarPopupService() override;
@@ -101,6 +100,7 @@ private:
     void forceCloseTooltip(const QString &id);
     void ensureDismissOverlay();
     void destroyDismissOverlay();
+    void trimQmlCacheWhenIdle();
     void refreshBarGeometry();
     QUrl popupShellSource() const;
     QQuickView *createPopupView(const QUrl &source,
@@ -115,7 +115,6 @@ private:
     QVariantMap m_theme;
     QObject *m_workspaceModel = nullptr;
     QObject *m_ipcClient = nullptr;
-    QObject *m_trayModel = nullptr;
     QObject *m_cssTheme = nullptr;
     // Popups are QML items drawn inside the single backdrop overlay window
     // (m_dismissOverlay). Tooltips remain ordinary standalone windows.

@@ -33,7 +33,6 @@ QBarPopupService::QBarPopupService(QQmlEngine *engine,
                                    QVariantMap theme,
                                    QObject *workspaceModel,
                                    QObject *ipcClient,
-                                   QObject *trayModel,
                                    QObject *cssTheme,
                                    QObject *parent)
     : QObject(parent)
@@ -41,7 +40,6 @@ QBarPopupService::QBarPopupService(QQmlEngine *engine,
     , m_theme(std::move(theme))
     , m_workspaceModel(workspaceModel)
     , m_ipcClient(ipcClient)
-    , m_trayModel(trayModel)
     , m_cssTheme(cssTheme)
 {
     // Dismissal is owned by the overlay's backdrop (DismissOverlay → closeAll)
@@ -690,13 +688,30 @@ void QBarPopupService::ensureDismissOverlay()
 void QBarPopupService::destroyDismissOverlay()
 {
     if (m_dismissOverlay == nullptr) {
+        trimQmlCacheWhenIdle();
         return;
     }
 
     auto *view = m_dismissOverlay.data();
     m_dismissOverlay = nullptr;
+    view->releaseResources();
     view->close();
     view->deleteLater();
+    trimQmlCacheWhenIdle();
+}
+
+void QBarPopupService::trimQmlCacheWhenIdle()
+{
+    if (m_engine == nullptr || !m_popups.isEmpty() || m_openMenu != nullptr) {
+        return;
+    }
+
+    QTimer::singleShot(0, this, [this]() {
+        if (m_engine != nullptr && m_popups.isEmpty() && m_openMenu == nullptr) {
+            m_engine->collectGarbage();
+            m_engine->clearComponentCache();
+        }
+    });
 }
 
 QWidget *QBarPopupService::popupParent() const
@@ -734,9 +749,6 @@ void QBarPopupService::applyPopupContext(QQmlContext *context)
     }
     if (m_ipcClient != nullptr) {
         context->setContextProperty(QStringLiteral("i3Ipc"), m_ipcClient);
-    }
-    if (m_trayModel != nullptr) {
-        context->setContextProperty(QStringLiteral("trayModel"), m_trayModel);
     }
     if (m_cssTheme != nullptr) {
         context->setContextProperty(QStringLiteral("cssTheme"), m_cssTheme);

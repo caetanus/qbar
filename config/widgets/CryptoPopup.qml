@@ -6,7 +6,7 @@ import "qrc:/qbar" as QBar
 import "qrc:/qbar/Fetch.js" as Fetch
 import "qrc:/qbar/Json.js" as QJson
 
-// Candlestick / line popup for the BTC widget — EXTERNAL (loaded from disk by Bitcoin.qml).
+// Candlestick / line popup for the Crypto widget — EXTERNAL (loaded from disk by Crypto.qml).
 // The popup shell draws the themed #popup chrome; this is the content. Fetches Binance
 // klines and draws candles or a line, with a price scale (Y) + time ticks (X), optional
 // Bollinger Bands, volume and RSI panes, and an interval selector. `price`/`changePct`
@@ -31,9 +31,20 @@ Item {
     }
 
     // From the widget's payload.
+    property var ticks: [
+        { "label": "BTC", "symbol": "BTCUSDT", "base": "BTC", "quote": "USDT", "icon": "₿", "color": "#f7931a" },
+        { "label": "ETH", "symbol": "ETHUSDT", "base": "ETH", "quote": "USDT", "icon": "Ξ", "color": "#627eea" },
+        { "label": "XMR", "symbol": "XMRUSDT", "base": "XMR", "quote": "USDT", "icon": "ɱ", "color": "#ff6600" }
+    ]
+    property int activeIndex: 0
     property real price: 0
     property real changePct: 0
     readonly property bool up: changePct >= 0
+    readonly property var activeTick: normalizedTick(activeIndex)
+    readonly property string activeLabel: activeTick.label
+    readonly property string activeSymbol: activeTick.symbol
+    readonly property string activeBase: activeTick.base
+    readonly property string activeQuote: activeTick.quote
     // The window hosting this content (the popup overlay, or the detached toplevel). Window.window
     // must attach to an Item, so resolve it here on root rather than inside the Binding below.
     readonly property var hostWindow: Window.window
@@ -107,6 +118,42 @@ Item {
             if (root.periods[i].label === label)
                 return true
         return false
+    }
+
+    function normalizedTick(index) {
+        var list = root.ticks && root.ticks.length ? root.ticks : []
+        var raw = list.length > 0 ? list[Math.max(0, Math.min(index, list.length - 1))] : ({})
+        var label = String(raw.label || raw.base || raw.symbol || "ETH").toUpperCase()
+        var symbol = String(raw.symbol || (label + "USDT")).toUpperCase()
+        var quote = String(raw.quote || "USDT").toUpperCase()
+        var base = String(raw.base || label).toUpperCase()
+        return {
+            label: label,
+            symbol: symbol,
+            base: base,
+            quote: quote,
+            icon: String(raw.icon || label.charAt(0)),
+            color: String(raw.color || "#f7931a")
+        }
+    }
+
+    function selectTick(index) {
+        var count = root.ticks && root.ticks.length ? root.ticks.length : 1
+        root.persistDrawings(root.period, root.drawings)
+        liveReconnect.stop()
+        liveSocket.active = false
+        root.activeIndex = ((index % count) + count) % count
+        root.price = 0
+        root.changePct = 0
+        root.pricePanPixels = 0
+        root.manualPriceRange = false
+        root.allCandles = []
+        root.candles = []
+        root.closes = []
+        root.historyCandles = []
+        root.historyCloses = []
+        root.loadDrawings()
+        root.scheduleReload()
     }
 
     function periodConfig() {
@@ -216,7 +263,7 @@ Item {
         // last `barCount`: indicators remain defined across the whole visible range.
         var cfg = root.periodConfig()
         var want = Math.min(1000, Math.max(120, root.barCount + root.warmup))
-        Fetch.fetch("https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval="
+        Fetch.fetch("https://api.binance.com/api/v3/klines?symbol=" + encodeURIComponent(root.activeSymbol) + "&interval="
                 + cfg.api + "&limit=" + want)
             .then(function (r) {
                 if (!r.ok)
@@ -246,7 +293,7 @@ Item {
             .catch(function (e) {
                 root.loading = false
                 root.failed = true
-                console.warn("btc popup: klines fetch failed:", e)
+                console.warn("crypto popup: klines fetch failed for", root.activeSymbol, e)
                 chart.requestPaint()
             })
     }
@@ -353,7 +400,7 @@ Item {
         var cfg = root.periodConfig()
         var oldest = root.allCandles[0].t
         var want = Math.min(1000, Math.max(300, root.barCount * 2))
-        Fetch.fetch("https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval="
+        Fetch.fetch("https://api.binance.com/api/v3/klines?symbol=" + encodeURIComponent(root.activeSymbol) + "&interval="
                 + cfg.api + "&endTime=" + (oldest - 1) + "&limit=" + want)
             .then(function (r) {
                 if (!r.ok)
@@ -394,7 +441,7 @@ Item {
             })
             .catch(function (e) {
                 root.backfilling = false
-                console.warn("btc backfill failed:", e)
+                console.warn("crypto backfill failed for", root.activeSymbol, e)
             })
     }
 
@@ -685,14 +732,14 @@ Item {
     }
 
     function drawingsStorageKey(periodName) {
-        return "bitcoin.drawings." + periodName
+        return "crypto.drawings." + root.activeSymbol + "." + periodName
     }
 
     function persistDrawings(periodName, value) {
         var key = root.drawingsStorageKey(periodName)
         QJson.stringify(value)
             .then(function (encoded) { LocalStorage.setItem(key, encoded) })
-            .catch(function (error) { console.warn("btc drawings stringify failed:", error) })
+            .catch(function (error) { console.warn("crypto drawings stringify failed:", error) })
     }
 
     function loadDrawings() {
@@ -962,7 +1009,7 @@ Item {
     // The socket lives only as long as this popup — closing it destroys the object → disconnect.
     WebSocket {
         id: liveSocket
-        url: "wss://stream.binance.com:9443/ws/btcusdt@kline_" + root.periodConfig().api
+        url: "wss://stream.binance.com:9443/ws/" + root.activeSymbol.toLowerCase() + "@kline_" + root.periodConfig().api
         active: false // connectLiveStream() turns it on once the first batch has loaded
         onTextMessageReceived: function (message) {
             try {
@@ -979,7 +1026,7 @@ Item {
                 if (!isNaN(last) && last > 0)
                     root.price = last // keep the header price live too
             } catch (e) {
-                console.warn("btc ws parse failed:", e)
+                console.warn("crypto ws parse failed:", e)
             }
         }
         // Reconnect ladder: 5 → 10 → 15s, then 30s forever. Keep trying until the
@@ -995,7 +1042,7 @@ Item {
             } else if (liveSocket.status === WebSocket.Error
                        || liveSocket.status === WebSocket.Closed) {
                 if (liveSocket.status === WebSocket.Error)
-                    console.warn("btc ws error:", liveSocket.errorString)
+                    console.warn("crypto ws error:", liveSocket.errorString)
                 if (root.visible && !liveReconnect.running) {
                     liveReconnect.interval =
                         liveSocket.backoff[Math.min(liveSocket.retry, liveSocket.backoff.length - 1)]
@@ -1023,9 +1070,9 @@ Item {
         property: "title"
         when: (typeof detachedWindow !== "undefined") && detachedWindow && root.hostWindow !== null
         value: root.price > 0
-            ? ("₿ BTC/USDT  $" + root.price.toFixed(2) + "  "
+            ? (root.activeTick.icon + " " + root.activeBase + "/" + root.activeQuote + "  $" + root.price.toFixed(2) + "  "
                + (root.up ? "▲ " : "▼ ") + root.changePct.toFixed(2) + "%")
-            : "QBar Bitcoin Applet — BTC/USDT"
+            : "QBar Crypto Applet — " + root.activeBase + "/" + root.activeQuote
     }
     Connections {
         target: LocalStorage
@@ -1048,14 +1095,14 @@ Item {
                     root.restoringDrawings = false
                 })
                 .catch(function (error) {
-                    console.warn("btc drawings parse failed:", error)
+                    console.warn("crypto drawings parse failed:", error)
                 })
         }
     }
 
     // Remember the user's chart options across opens and qbar restarts (QSettings-backed).
     Settings {
-        category: "bitcoinPopup"
+        category: "cryptoPopup"
         property alias period: root.period
         property alias chartType: root.chartType
         property alias showBollinger: root.showBollinger
@@ -1139,12 +1186,19 @@ Item {
             anchors.top: parent.top
             spacing: 10
             Text {
+                id: pairLabel
                 anchors.verticalCenter: parent.verticalCenter
-                text: "₿  BTC/USDT"
+                text: root.activeTick.icon + "  " + root.activeBase + "/" + root.activeQuote
                 color: root.fg
                 font.family: theme.fontFamily
                 font.pointSize: theme.fontSize + 1
                 font.bold: true
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.selectTick(root.activeIndex + 1)
+                }
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
@@ -1160,6 +1214,15 @@ Item {
                 color: root.up ? root.upColor : root.downColor
                 font.family: theme.fontFamily
                 font.pointSize: theme.fontSize
+            }
+            Repeater {
+                model: root.ticks ? root.ticks.length : 0
+                delegate: Chip {
+                    anchors.verticalCenter: parent.verticalCenter
+                    label: root.normalizedTick(index).label
+                    active: index === root.activeIndex
+                    onClicked: root.selectTick(index)
+                }
             }
         }
 

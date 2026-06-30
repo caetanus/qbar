@@ -68,6 +68,7 @@ void UpowerModel::connectToService()
         return;
     }
     m_present = true;
+    ++m_generation;
     m_service = QString::fromLatin1(kService);
 
     QDBusConnection::systemBus().connect(m_service, QString::fromLatin1(kRootPath),
@@ -83,7 +84,24 @@ void UpowerModel::connectToService()
 
 void UpowerModel::disconnectFromService()
 {
+    if (!m_service.isEmpty()) {
+        auto bus = QDBusConnection::systemBus();
+        bus.disconnect(m_service, QString::fromLatin1(kRootPath),
+                       QString::fromLatin1(kManagerInterface),
+                       QStringLiteral("DeviceAdded"), this,
+                       SLOT(handleDeviceListChanged()));
+        bus.disconnect(m_service, QString::fromLatin1(kRootPath),
+                       QString::fromLatin1(kManagerInterface),
+                       QStringLiteral("DeviceRemoved"), this,
+                       SLOT(handleDeviceListChanged()));
+        for (const QString &path : std::as_const(m_watchedPaths)) {
+            bus.disconnect(m_service, path, QString::fromLatin1(kPropsInterface),
+                           QStringLiteral("PropertiesChanged"), this,
+                           SLOT(handleDevicePropertiesChanged(QString, QVariantMap, QStringList)));
+        }
+    }
     m_present = false;
+    ++m_generation;
     m_service.clear();
     m_deviceData.clear();
     m_watchedPaths.clear();
@@ -113,9 +131,13 @@ void UpowerModel::refresh()
     auto call = QDBusMessage::createMethodCall(m_service, QString::fromLatin1(kRootPath),
                                                QString::fromLatin1(kManagerInterface),
                                                QStringLiteral("EnumerateDevices"));
+    const int generation = m_generation;
     auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(call), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, generation](QDBusPendingCallWatcher *w) {
         w->deleteLater();
+        if (generation != m_generation || m_service.isEmpty()) {
+            return;
+        }
         const QDBusPendingReply<QList<QDBusObjectPath>> reply = *w;
         if (reply.isError()) {
             return;
@@ -142,8 +164,11 @@ void UpowerModel::refresh()
             getAll << QString::fromLatin1(kDeviceInterface);
             auto *dw = new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(getAll), this);
             connect(dw, &QDBusPendingCallWatcher::finished, this,
-                    [this, path](QDBusPendingCallWatcher *dwInner) {
+                    [this, path, generation](QDBusPendingCallWatcher *dwInner) {
                         dwInner->deleteLater();
+                        if (generation != m_generation || m_service.isEmpty()) {
+                            return;
+                        }
                         const QDBusPendingReply<QVariantMap> propsReply = *dwInner;
                         if (propsReply.isError()) {
                             return;

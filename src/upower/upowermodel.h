@@ -53,4 +53,5 @@ private:
     QSet<QString> m_watchedPaths;  // device paths we've subscribed to PropertiesChanged
     QDBusServiceWatcher *m_watcher = nullptr;
     QTimer m_refreshTimer;
+    int m_generation = 0;
 };

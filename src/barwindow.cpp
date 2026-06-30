@@ -11,7 +11,6 @@
 #include "qml/modelcapsules.h"
 #include "json/jsonc.h"
 #include "caffeine/caffeinemodel.h"
-#include "sound/audiobackendfactory.h"
 #include "platform/capslockmonitor.h"
 #include "css/csstheme.h"
 #include "dbus/dbusservice.h"
@@ -286,12 +285,6 @@ BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
 {
     configureWindow();
     m_wm = createWindowManagerBackend(m_config.windowManagerBackend, this);
-    // Eager backends — these have direct C++ consumers (tray → popup service; sound/caffeine
-    // → wiring), so they stay owned by the bar. Everything else is created lazily on first
-    // use via ModelCapsules (see the context-property block below).
-    m_trayModel = new StatusNotifierModel(this);
-    m_caffeineModel = new CaffeineModel(this, this);
-    m_soundModel = createAudioBackend(this);
     m_capsLockMonitor = new CapsLockMonitor(this);
     m_cssTheme = new CssTheme(this);
     // Recompute the bar's CSS edge gap on every theme (re)load. CssTheme's own file watcher
@@ -327,7 +320,6 @@ BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
     buildLayout();
     positionAtTop();
     m_wm->start();
-    m_trayModel->start();
 }
 
 bool BarWindow::calendarAppAvailable() const
@@ -830,7 +822,7 @@ void BarWindow::exposeModels()
     const auto expose = [this, &usedApplets](const char *applet, const char *ctx, const char *key) {
         if (usedApplets.contains(QLatin1String(applet))) {
             rootContext()->setContextProperty(QLatin1String(ctx),
-                                               ModelCapsules::instance()->acquire(QLatin1String(key)));
+                                               ModelCapsules::instance()->acquire(QLatin1String(key), this));
         }
     };
     expose("CPU", "cpuModel", "cpu");
@@ -842,6 +834,9 @@ void BarWindow::exposeModels()
     expose("Brightness", "brightnessModel", "brightness");
     expose("Media", "mprisModel", "mpris");
     expose("Battery", "batteryModel", "battery");
+    expose("Tray", "trayModel", "tray");
+    expose("Sound", "soundModel", "sound");
+    expose("Caffeine", "caffeineModel", "caffeine");
     expose("Disk", "diskModel", "disk");
     expose("Bluetooth", "bluetoothModel", "bluetooth");
     expose("PowerProfiles", "powerProfilesModel", "powerProfiles");
@@ -872,7 +867,7 @@ void BarWindow::buildLayout()
     // external commands (the QML side has no process API). Async + self-cleaning like Http.
     JsProcess::install(engine());
 
-    m_popupService = new QBarPopupService(engine(), theme, m_wm->workspaceModel(), m_wm, m_trayModel, m_cssTheme, this);
+    m_popupService = new QBarPopupService(engine(), theme, m_wm->workspaceModel(), m_wm, m_cssTheme, this);
     m_popupService->setOverlayKeyboardFocus(m_config.popupKeyboardFocus);
     m_popupService->setBarWindow(this);
     connect(m_popupService, &QBarPopupService::popupClosed, this, [this](const QString &id) {
@@ -914,12 +909,9 @@ void BarWindow::buildLayout()
     rootContext()->setContextProperty(QStringLiteral("networkConfig"), m_config.network);
     exposeModels(); // lazy capsule backends, gated by which applets this bar's config uses
 
-    rootContext()->setContextProperty(QStringLiteral("caffeineModel"), m_caffeineModel);
-    rootContext()->setContextProperty(QStringLiteral("soundModel"), m_soundModel);
     rootContext()->setContextProperty(QStringLiteral("capsLock"), m_capsLockMonitor);
     rootContext()->setContextProperty(QStringLiteral("wm"), m_wm);
     rootContext()->setContextProperty(QStringLiteral("i3Ipc"), m_wm);
-    rootContext()->setContextProperty(QStringLiteral("trayModel"), m_trayModel);
     rootContext()->setContextProperty(QStringLiteral("cssTheme"), m_cssTheme);
     rootContext()->setContextProperty(QStringLiteral("dbus"), new DBusService(engine(), this));
     rootContext()->setContextProperty(QStringLiteral("customTools"), m_config.customTools);
@@ -1148,7 +1140,9 @@ void BarWindow::cycleKeyboardLayout()
 
 void BarWindow::toggleCaffeine()
 {
-    if (m_caffeineModel != nullptr) {
-        m_caffeineModel->toggle();
+    auto *model = qobject_cast<CaffeineModel *>(
+        ModelCapsules::instance()->acquire(QStringLiteral("caffeine"), this));
+    if (model != nullptr) {
+        model->toggle();
     }
 }

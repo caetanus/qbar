@@ -7,6 +7,7 @@
 #include "../brightness/brightnessmodel.h"
 #include "../calendar/calendarmodel.h"
 #include "../capsule.h"
+#include "../caffeine/caffeinemodel.h"
 #include "../cpu/cpumodel.h"
 #include "../disk/diskmodel.h"
 #include "../mpris/mprismodel.h"
@@ -15,9 +16,14 @@
 #include "../networkmanager/networkmanagermodel.h"
 #include "../powerprofiles/powerprofilesmodel.h"
 #include "../privacy/privacymodel.h"
+#include "../sound/audiobackend.h"
+#include "../sound/audiobackendfactory.h"
 #include "../temperature/temperaturemodel.h"
+#include "../tray/statusnotifiermodel.h"
 #include "../upower/upowermodel.h"
 #include "../user/usermodel.h"
+
+class QWindow;
 
 // Lazy "capsule" registry for the builtin applet backends (CPU, network, bluetooth, …).
 //
@@ -41,9 +47,9 @@ public:
 
     // Return the model for `key`, constructing it on first request via its Capsule. Unknown
     // key → nullptr (logged). Keys: cpu, temperature, network, networkProcess, networkManager,
-    // brightness, mpris, calendar, battery, disk, bluetooth, powerProfiles, upower, user,
-    // privacy.
-    QObject *acquire(const QString &key);
+    // brightness, mpris, calendar, battery, tray, sound, caffeine, disk, bluetooth,
+    // powerProfiles, upower, user, privacy.
+    QObject *acquire(const QString &key, QWindow *window = nullptr);
 
 private:
     explicit ModelCapsules(QObject *parent = nullptr);
@@ -57,10 +63,18 @@ private:
     Capsule<MprisModel> m_mpris{"MprisModel", [this] { return new MprisModel(this); }};
     Capsule<CalendarModel> m_calendar{"CalendarModel", [this] { return new CalendarModel(this); }};
     Capsule<BatteryModel> m_battery{"BatteryModel", [this] { return new BatteryModel(this); }};
+    Capsule<StatusNotifierModel> m_tray{"StatusNotifierModel", [this] {
+        auto *model = new StatusNotifierModel(this);
+        model->start();
+        return model;
+    }};
+    Capsule<AudioBackend> m_sound{"AudioBackend", [this] { return createAudioBackend(this); }};
+    Capsule<CaffeineModel> m_caffeine{"CaffeineModel", [this] { return new CaffeineModel(m_caffeineWindow, this); }};
     Capsule<DiskModel> m_disk{"DiskModel", [this] { return new DiskModel(this); }};
     Capsule<BluetoothModel> m_bluetooth{"BluetoothModel", [this] { return new BluetoothModel(this); }};
     Capsule<PowerProfilesModel> m_powerProfiles{"PowerProfilesModel", [this] { return new PowerProfilesModel(this); }};
     Capsule<UpowerModel> m_upower{"UpowerModel", [this] { return new UpowerModel(this); }};
     Capsule<UserModel> m_user{"UserModel", [this] { return new UserModel(this); }};
     Capsule<PrivacyModel> m_privacy{"PrivacyModel", [this] { return new PrivacyModel(this); }};
+    QWindow *m_caffeineWindow = nullptr;
 };

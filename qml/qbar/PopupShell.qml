@@ -100,7 +100,7 @@ Item {
                     return
                 }
                 for (var key in popupData) {
-                    if (Object.prototype.hasOwnProperty.call(popupData, key)) {
+                    if (Object.prototype.hasOwnProperty.call(popupData, key) && key in item) {
                         item[key] = popupData[key]
                     }
                 }
