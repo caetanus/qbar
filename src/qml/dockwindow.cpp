@@ -8,6 +8,7 @@
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickView>
+#include <QRegion>
 #include <QScreen>
 #include <QWindow>
 
@@ -168,6 +169,17 @@ void DockWindow::applyGeometry()
         root->setProperty("slotWidth", m_slot.width());
     }
 
+    // The interactive band hugs the slot at the bar edge (bottom of the surface): a
+    // strip wide enough for the icons + the fisheye edge padding, and tall enough for
+    // the hover-grow. The transparent headroom above it must NOT catch the mouse, or
+    // hovering over empty space triggers the dock. Wayland enforces this via the
+    // layer-shell input region; X11 via the window's input mask (QWindow::setMask).
+    const int edgePadding = std::max(barH * 2, headroom);
+    const int inputW = std::max(1, std::min(dockW, m_slot.width() + (2 * edgePadding)));
+    const int inputH = std::min(surfaceH, std::max(barH, static_cast<int>(std::round(barH * 2.8))));
+    const int inputX = static_cast<int>(std::round(slotCenterX - inputW / 2.0));
+    const int inputY = surfaceH - inputH;
+
     if (onX11()) {
         // The dock behaves like an in-bar applet: the surface covers the bar's slot
         // (so base icons sit IN the bar, vertically centred like any applet) and
@@ -178,6 +190,9 @@ void DockWindow::applyGeometry()
         if (m_view->geometry() != geometry) {
             m_view->setGeometry(geometry);
         }
+        // Restrict mouse input to the band; the empty headroom passes clicks/hover
+        // through to the windows beneath (matches the Wayland input region).
+        m_view->setMask(QRegion(inputX, inputY, inputW, inputH));
         return;
     }
 
@@ -193,11 +208,6 @@ void DockWindow::applyGeometry()
     if (m_view->property("qbarDockHeight").toInt() != surfaceH) {
         m_view->setProperty("qbarDockHeight", surfaceH);
     }
-    const int edgePadding = std::max(barH * 2, headroom);
-    const int inputW = std::max(1, std::min(dockW, m_slot.width() + (2 * edgePadding)));
-    const int inputH = std::min(surfaceH, std::max(barH, static_cast<int>(std::round(barH * 2.8))));
-    const int inputX = static_cast<int>(std::round(slotCenterX - inputW / 2.0));
-    const int inputY = surfaceH - inputH;
     if (m_view->property("qbarDockInputX").toInt() != inputX) {
         m_view->setProperty("qbarDockInputX", inputX);
     }
