@@ -13,9 +13,12 @@
 #include <QEvent>
 #include <QFrame>
 #include <QGuiApplication>
+#include <QHash>
 #include <QIcon>
 #include <QKeyEvent>
 #include <QProcess>
+#include <QScreen>
+#include <QSet>
 #include <QQuickWindow>
 #include <QSettings>
 #include <QStandardPaths>
@@ -268,6 +271,69 @@ void configureCoreDumps()
 #endif
 }
 
+// Owns the live set of BarWindows and keeps it in sync with the connected monitors.
+// Each logical bar config is replicated onto every monitor it targets (see
+// barConfigTargetsScreen); as monitors are plugged or unplugged, bars are created
+// and torn down to match. Bars are keyed by "<configIndex>@<screenName>", so a
+// config keeps its array index — the per-bar live config reload relies on it.
+class BarManager final : public QObject {
+public:
+    explicit BarManager(QList<BarConfig> configs, QObject *parent = nullptr)
+        : QObject(parent)
+        , m_configs(std::move(configs))
+    {
+        connect(qApp, &QGuiApplication::screenAdded, this, [this](QScreen *) { reconcile(); });
+        connect(qApp, &QGuiApplication::screenRemoved, this, [this](QScreen *) { reconcile(); });
+        reconcile();
+    }
+
+private:
+    void reconcile()
+    {
+        const auto screens = QGuiApplication::screens();
+        QSet<QString> liveScreens;
+        for (QScreen *screen : screens) {
+            liveScreens.insert(screen->name());
+            for (int i = 0; i < m_configs.size(); ++i) {
+                if (!barConfigTargetsScreen(m_configs.at(i), screen->name())) {
+                    continue;
+                }
+                const QString key = barKey(i, screen->name());
+                if (m_bars.contains(key)) {
+                    continue;
+                }
+                auto *bar = new BarWindow(m_configs.at(i));
+                bar->setScreen(screen);
+                bar->show();
+                m_bars.insert(key, bar);
+            }
+        }
+
+        // Tear down bars whose target monitor was unplugged.
+        for (auto it = m_bars.begin(); it != m_bars.end();) {
+            if (liveScreens.contains(screenNameOfKey(it.key()))) {
+                ++it;
+            } else {
+                it.value()->deleteLater();
+                it = m_bars.erase(it);
+            }
+        }
+    }
+
+    static QString barKey(int index, const QString &screenName)
+    {
+        return QString::number(index) + QLatin1Char('@') + screenName;
+    }
+
+    static QString screenNameOfKey(const QString &key)
+    {
+        return key.mid(key.indexOf(QLatin1Char('@')) + 1);
+    }
+
+    QList<BarConfig> m_configs;
+    QHash<QString, BarWindow *> m_bars;
+};
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -350,26 +416,13 @@ int main(int argc, char *argv[])
         return app.exec();
     }
 
-    // One BarWindow per config entry (a single object → one bar; an array →
-    // several, e.g. multi-monitor or top+bottom). Each targets its `output`
-    // screen when set; the layer-shell integration reads the bar's geometry from
-    // per-window properties (see BarWindow), so bars can differ.
-    const QList<BarConfig> configs = loadConfigs();
-    QList<BarWindow *> bars;
-    for (const BarConfig &config : configs) {
-        auto *bar = new BarWindow(config);
-        if (!config.output.isEmpty()) {
-            const auto screens = QGuiApplication::screens();
-            for (QScreen *screen : screens) {
-                if (screen->name() == config.output) {
-                    bar->setScreen(screen);
-                    break;
-                }
-            }
-        }
-        bar->show();
-        bars.append(bar);
-    }
+    // Each config entry (a single object → one bar; an array → several, e.g.
+    // top+bottom) is a logical bar. The BarManager replicates each onto every
+    // monitor its `output` targets (absent = all), and adds/removes bars as
+    // monitors are hotplugged. The layer-shell integration reads each bar's
+    // geometry from per-window properties (see BarWindow), so bars can differ.
+    auto *barManager = new BarManager(loadConfigs(), &app);
+    Q_UNUSED(barManager);
 
     // JSON IPC over a QLocalSocket (open/toggle popups, e.g. from keyboard shortcuts).
     QbarIpc::instance()->start();

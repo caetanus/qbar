@@ -325,12 +325,54 @@ void HyprlandBackend::connectEventSocket()
     }
 }
 
+qint64 HyprlandBackend::parseWindowAddress(const QString &address)
+{
+    bool ok = false;
+    const qint64 id = address.startsWith(QStringLiteral("0x"))
+        ? address.mid(2).toLongLong(&ok, 16)
+        : address.toLongLong(&ok, 16);
+    return ok ? id : 0;
+}
+
 void HyprlandBackend::refreshWorkspaces()
 {
     const QByteArray workspaces = request(QByteArrayLiteral("j/workspaces"));
     const QByteArray activeWorkspace = request(QByteArrayLiteral("j/activeworkspace"));
     const QByteArray monitors = request(QByteArrayLiteral("j/monitors"));
-    m_workspaceModel.replace(parseWorkspaces(workspaces, activeWorkspace, monitors));
+    QList<WorkspaceModel::Workspace> result = parseWorkspaces(workspaces, activeWorkspace, monitors);
+    applyUrgentWindows(result);
+    m_workspaceModel.replace(result);
+}
+
+void HyprlandBackend::applyUrgentWindows(QList<WorkspaceModel::Workspace> &workspaces)
+{
+    // Hyprland never reports urgency in j/workspaces; it only emits an `urgent`
+    // event carrying a window address. We track those addresses and resolve each
+    // to its workspace via j/clients so the matching tile lights up.
+    if (m_urgentWindows.isEmpty()) {
+        return;
+    }
+
+    const QJsonDocument clientsDoc = QJsonDocument::fromJson(request(QByteArrayLiteral("j/clients")));
+    QSet<QString> urgentWorkspaces;
+    QSet<qint64> stillPresent;
+    for (const auto &value : clientsDoc.array()) {
+        const QJsonObject client = value.toObject();
+        const qint64 id = parseWindowAddress(client.value(QStringLiteral("address")).toString());
+        if (id != 0 && m_urgentWindows.contains(id)) {
+            stillPresent.insert(id);
+            urgentWorkspaces.insert(client.value(QStringLiteral("workspace")).toObject()
+                                        .value(QStringLiteral("name")).toString());
+        }
+    }
+    // Drop addresses for windows that have since closed.
+    m_urgentWindows = stillPresent;
+
+    for (WorkspaceModel::Workspace &workspace : workspaces) {
+        if (urgentWorkspaces.contains(workspace.name)) {
+            workspace.urgent = true;
+        }
+    }
 }
 
 void HyprlandBackend::refreshActiveWindow()
@@ -366,12 +408,8 @@ QList<WindowModel::Window> HyprlandBackend::parseClients(const QByteArray &clien
         if (!client.value(QStringLiteral("mapped")).toBool(true)) {
             continue;
         }
-        const QString address = client.value(QStringLiteral("address")).toString();
-        bool ok = false;
-        const qint64 id = address.startsWith(QStringLiteral("0x"))
-            ? address.mid(2).toLongLong(&ok, 16)
-            : address.toLongLong(&ok, 16);
-        if (!ok || id == 0) {
+        const qint64 id = parseWindowAddress(client.value(QStringLiteral("address")).toString());
+        if (id == 0) {
             continue;
         }
 
@@ -436,12 +474,26 @@ void HyprlandBackend::handleEventLine(const QByteArray &line)
         return;
     }
 
+    if (event == "urgent") {
+        bool ok = false;
+        const qint64 id = payload.toLongLong(&ok, 16);
+        if (ok && !m_urgentWindows.contains(id)) {
+            m_urgentWindows.insert(id);
+            refreshWorkspaces();
+        }
+        return;
+    }
+
     if (event == "activewindowv2") {
         bool ok = false;
         const qint64 id = payload.toLongLong(&ok, 16);
         if (ok) {
             emit containerFocusEvent(id);
             setFocusedContainerId(id);
+            // Focusing a window clears its urgency hint.
+            if (m_urgentWindows.remove(id)) {
+                refreshWorkspaces();
+            }
         }
         refreshActiveWindow();
         refreshWindows();

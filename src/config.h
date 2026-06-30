@@ -54,7 +54,9 @@ struct BarConfig {
     QVariantMap network;
     QString styleSheet;
     QString baseStyleSheet;  // always loaded first; styleSheet cascades on top
-    QString output;          // target monitor name (waybar: "output")
+    // Target monitors (waybar "output"): empty = every connected monitor (and any
+    // hotplugged later). Entries are screen names; a "!name" entry excludes that one.
+    QStringList outputs;
     int marginTop    = -1;   // -1 = inherit from margin
     int marginBottom = -1;
     int marginLeft   = -1;
@@ -79,7 +81,7 @@ struct BarConfig {
         QStringLiteral("Sound"),
         QStringLiteral("Battery"),
         QStringLiteral("CustomTool:custom/dollar"),
-        QStringLiteral("CustomTool:custom/btc"),
+        QStringLiteral("CustomTool:custom/crypto"),
         QStringLiteral("Clock"),
         QStringLiteral("Tray"),
     };
@@ -101,7 +103,7 @@ struct BarConfig {
         QStringLiteral("Sound"),
         QStringLiteral("Battery"),
         QStringLiteral("CustomTool:custom/dollar"),
-        QStringLiteral("CustomTool:custom/btc"),
+        QStringLiteral("CustomTool:custom/crypto"),
         QStringLiteral("Clock"),
         QStringLiteral("Tray"),
     };
@@ -109,6 +111,10 @@ struct BarConfig {
 
 BarConfig loadConfig();
 QList<BarConfig> loadConfigs();
+// True if a bar with this config should be shown on the monitor named screenName,
+// applying waybar "output" semantics (empty = all; positive list = allowlist;
+// "!name" = exclude). See BarConfig::outputs.
+bool barConfigTargetsScreen(const BarConfig &config, const QString &screenName);
 // Parse a single bar object (one entry of the config array, or the whole object) into a
 // BarConfig — reused by the live config reload to pick up module/group/style changes.
 BarConfig parseBarObject(const QJsonObject &root);

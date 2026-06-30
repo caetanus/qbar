@@ -5,6 +5,7 @@
 
 #include <QByteArray>
 #include <QLocalSocket>
+#include <QSet>
 #include <QTimer>
 
 class HyprlandBackend final : public WindowManagerBackend {
@@ -32,6 +33,7 @@ public:
     static QList<WindowModel::Window> parseClients(const QByteArray &clientsJson,
                                                    const QByteArray &monitorsJson,
                                                    qint64 focusedAddress);
+    static qint64 parseWindowAddress(const QString &address);
 
 public slots:
     void start() override;
@@ -52,6 +54,7 @@ private:
     QByteArray request(const QByteArray &command);
     void connectEventSocket();
     void refreshWorkspaces();
+    void applyUrgentWindows(QList<WorkspaceModel::Workspace> &workspaces);
     void refreshActiveWindow();
     void refreshWindows();
     void refreshKeyboardLayout();
@@ -66,6 +69,7 @@ private:
     QString m_currentKeyboardLayout;
     QString m_bindingMode = QStringLiteral("default");
     qint64 m_focusedContainerId = -1;
+    QSet<qint64> m_urgentWindows;
     QLocalSocket m_eventSocket;
     QByteArray m_eventBuffer;
     QTimer m_reconnectTimer;

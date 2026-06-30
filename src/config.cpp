@@ -8,9 +8,11 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QScreen>
 #include <QStandardPaths>
 
 namespace {
@@ -99,6 +101,60 @@ void ensureConfigSchema(const QString &configFilePath)
 // First-run scaffold: with no config yet, spit the whole starter kit (documented config.json,
 // schema, all themes, example widgets) into the config dir, so the user isn't staring at an
 // empty directory. Only ever runs on a fresh dir (guarded on the config file's absence).
+// On first run, bake the monitors connected right now into the freshly-copied
+// config.json so the user sees their actual outputs (and how per-monitor config
+// works) instead of a generic template. The bundled config carries no "output"
+// key, so listing every detected monitor keeps the default "show everywhere"
+// behaviour while making the wiring explicit and editable. The config is a
+// heavily-commented JSONC document, so we splice text rather than reserialising.
+void injectDetectedOutputs(const QString &configFilePath)
+{
+    if (QGuiApplication::instance() == nullptr) {
+        return; // no GUI context (e.g. tests); leave the template untouched
+    }
+    QStringList names;
+    const auto screens = QGuiApplication::screens();
+    for (const QScreen *screen : screens) {
+        if (!screen->name().isEmpty()) {
+            names.append(screen->name());
+        }
+    }
+    if (names.isEmpty()) {
+        return;
+    }
+
+    QFile file(configFilePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    QString text = QString::fromUtf8(file.readAll());
+    file.close();
+
+    const qsizetype brace = text.indexOf(QLatin1Char('{'));
+    if (brace < 0 || text.contains(QStringLiteral("\"output\""))) {
+        return; // not an object, or already specifies outputs
+    }
+
+    QStringList quoted;
+    quoted.reserve(names.size());
+    for (const QString &name : std::as_const(names)) {
+        quoted.append(QStringLiteral("\"%1\"").arg(name));
+    }
+    const QString block = QStringLiteral(
+        "\n  // Monitors detected on first run. Empty/omitted = show on every monitor"
+        "\n  // (and any hotplugged later); prefix a name with \"!\" to exclude it. To give"
+        "\n  // each monitor its own layout, make this file a JSON array of bar objects,"
+        "\n  // each with its own \"output\"."
+        "\n  \"output\": [%1],")
+        .arg(quoted.join(QStringLiteral(", ")));
+    text.insert(brace + 1, block);
+
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        file.write(text.toUtf8());
+        file.close();
+    }
+}
+
 void scaffoldConfigDir(const QString &configFilePath)
 {
     if (QFileInfo::exists(configFilePath)) {
@@ -111,6 +167,7 @@ void scaffoldConfigDir(const QString &configFilePath)
         const QString src = it.next();
         copyResourceIfMissing(src, QDir(dir).filePath(src.mid(prefix.size())));
     }
+    injectDetectedOutputs(configFilePath);
 }
 
 // Flatten the top-level config into a list of bar objects, expanding "include" string entries
@@ -217,10 +274,10 @@ QVariantMap parseInlineGroupBody(const QJsonValue &body)
 void readModuleList(const QJsonObject &root, const QString &key, QStringList *target, QVariantMap *groups)
 {
     const auto arr = root.value(key).toArray();
+    target->clear();
     if (arr.isEmpty()) {
         return;
     }
-    target->clear();
     for (const auto &value : arr) {
         if (value.isString()) {
             target->append(value.toString());
@@ -253,13 +310,36 @@ QVariantMap defaultCustomTools()
     dollar.insert(QStringLiteral("tooltip"), false);
     tools.insert(QStringLiteral("custom/dollar"), dollar);
 
+    QVariantList cryptoTicks;
     QVariantMap btc;
-    btc.insert(QStringLiteral("exec"), QStringLiteral("python -u ") + waybarScripts + QStringLiteral("btc.py --waybar"));
-    btc.insert(QStringLiteral("interval"), 10);
-    btc.insert(QStringLiteral("return-type"), QStringLiteral("json"));
-    btc.insert(QStringLiteral("show-empty"), false);
-    btc.insert(QStringLiteral("tooltip"), false);
-    tools.insert(QStringLiteral("custom/btc"), btc);
+    btc.insert(QStringLiteral("label"), QStringLiteral("BTC"));
+    btc.insert(QStringLiteral("symbol"), QStringLiteral("BTCUSDT"));
+    btc.insert(QStringLiteral("base"), QStringLiteral("BTC"));
+    btc.insert(QStringLiteral("quote"), QStringLiteral("USDT"));
+    btc.insert(QStringLiteral("icon"), QStringLiteral("₿"));
+    btc.insert(QStringLiteral("color"), QStringLiteral("#f7931a"));
+    cryptoTicks.append(btc);
+    QVariantMap eth;
+    eth.insert(QStringLiteral("label"), QStringLiteral("ETH"));
+    eth.insert(QStringLiteral("symbol"), QStringLiteral("ETHUSDT"));
+    eth.insert(QStringLiteral("base"), QStringLiteral("ETH"));
+    eth.insert(QStringLiteral("quote"), QStringLiteral("USDT"));
+    eth.insert(QStringLiteral("icon"), QStringLiteral("Ξ"));
+    eth.insert(QStringLiteral("color"), QStringLiteral("#627eea"));
+    cryptoTicks.append(eth);
+    QVariantMap xmr;
+    xmr.insert(QStringLiteral("label"), QStringLiteral("XMR"));
+    xmr.insert(QStringLiteral("symbol"), QStringLiteral("XMRUSDT"));
+    xmr.insert(QStringLiteral("base"), QStringLiteral("XMR"));
+    xmr.insert(QStringLiteral("quote"), QStringLiteral("USDT"));
+    xmr.insert(QStringLiteral("icon"), QStringLiteral("ɱ"));
+    xmr.insert(QStringLiteral("color"), QStringLiteral("#ff6600"));
+    cryptoTicks.append(xmr);
+
+    QVariantMap crypto;
+    crypto.insert(QStringLiteral("source"), QStringLiteral("widgets/Crypto.qml"));
+    crypto.insert(QStringLiteral("ticks"), cryptoTicks);
+    tools.insert(QStringLiteral("custom/crypto"), crypto);
 
     return tools;
 }
@@ -359,6 +439,24 @@ BarConfig parseBarObject(const QJsonObject &root)
     config.fontSize = root.value(QStringLiteral("fontSize")).toInt(config.fontSize);
     config.styleSheet = root.value(QStringLiteral("styleSheet")).toString(config.styleSheet);
     config.baseStyleSheet = root.value(QStringLiteral("baseStyleSheet")).toString(config.baseStyleSheet);
+    // "output": a single monitor name, or an array of names (entries may be "!name"
+    // to exclude). Absent/empty means every monitor.
+    config.outputs.clear();
+    const QJsonValue outputValue = root.value(QStringLiteral("output"));
+    if (outputValue.isString()) {
+        const QString name = outputValue.toString().trimmed();
+        if (!name.isEmpty()) {
+            config.outputs.append(name);
+        }
+    } else if (outputValue.isArray()) {
+        const QJsonArray entries = outputValue.toArray();
+        for (const auto &entry : entries) {
+            const QString name = entry.toString().trimmed();
+            if (!name.isEmpty()) {
+                config.outputs.append(name);
+            }
+        }
+    }
     config.trayItemPadding = root.value(QStringLiteral("trayItemPadding")).toInt(config.trayItemPadding);
     config.background = readColor(root, QStringLiteral("background"), config.background);
     config.foreground = readColor(root, QStringLiteral("foreground"), config.foreground);
@@ -467,6 +565,26 @@ BarConfig loadConfig()
 {
     const QList<BarConfig> configs = loadConfigs();
     return configs.isEmpty() ? BarConfig{} : configs.first();
+}
+
+bool barConfigTargetsScreen(const BarConfig &config, const QString &screenName)
+{
+    bool hasAllowList = false;
+    bool allowed = false;
+    for (const QString &spec : config.outputs) {
+        if (spec.startsWith(QLatin1Char('!'))) {
+            if (QStringView(spec).mid(1) == screenName) {
+                return false; // explicit exclusion wins
+            }
+            continue;
+        }
+        hasAllowList = true;
+        if (spec == screenName) {
+            allowed = true;
+        }
+    }
+    // No positive entries → every monitor (minus exclusions handled above).
+    return hasAllowList ? allowed : true;
 }
 
 QString barPositionName(BarPosition position)
