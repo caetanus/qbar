@@ -194,15 +194,16 @@ QBarLayerShellSurface::QBarLayerShellSurface(QBarLayerShellIntegration *integrat
             output = screen->output();
         }
     }
-    // The dock floats on the OVERLAY layer so its magnified icons draw above the bar
-    // (and everything else); the bar and popup backdrop stay on TOP.
-    const bool isDock = window != nullptr && window->window() != nullptr
-        && window->window()->property("qbarDock").toBool();
+    // Everything (bar, dock, popup backdrop) lives on the TOP layer, NOT OVERLAY:
+    // OVERLAY draws above fullscreen surfaces, so a dock on it would cover e.g. a
+    // fullscreen image viewer. The dock's layer surface is created lazily, after its
+    // bar's, so within TOP it stacks above the bar — its magnified icons still draw
+    // over the bar, while a fullscreen window now correctly covers the dock.
     m_layerSurface = zwlr_layer_shell_v1_get_layer_surface(
         integration->layerShell(),
         wlSurface(),
         output,
-        isDock ? ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY : ZWLR_LAYER_SHELL_V1_LAYER_TOP,
+        ZWLR_LAYER_SHELL_V1_LAYER_TOP,
         "qbar");
     zwlr_layer_surface_v1_add_listener(m_layerSurface, &layerSurfaceListener, this);
     applyLayerState();
