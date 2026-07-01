@@ -34,6 +34,12 @@ Item {
     // Both opaque — the fade is done via Canvas globalAlpha.
     readonly property color keypressColor: root.styleColor(root.ringStyle, "keypress-color", Qt.lighter(root.idleColor, 1.6))
     readonly property color keypressClearColor: root.styleColor(root.ringStyle, "keypress-clear-color", root.busyColor)
+    readonly property color keypressEmptyColor: root.styleColor(root.ringStyle, "keypress-empty-color", "#8890a0")
+
+    // Transient "empty" notice: shown briefly when Backspace clears the buffer (or is
+    // pressed on an already-empty buffer), like i3lock's cleared-ring state.
+    property bool emptyActive: false
+    function flashEmpty() { emptyActive = true; emptyTimer.restart() }
 
     // Solid backdrop (theme #lockscreen background-color, else near-black like i3lock).
     QBar.CssFill {
@@ -222,6 +228,8 @@ Item {
             text: {
                 if (root.hasError)
                     return lockController.error
+                if (root.emptyActive)
+                    return "empty"
                 var parts = []
                 if (lockController.fingerprintActive) parts.push("Touch the fingerprint reader")
                 if (lockController.faceActive) parts.push("Look at the camera")
@@ -254,15 +262,35 @@ Item {
         opacity: 0
         focus: true
         echoMode: TextInput.Password
-        property int prevLength: 0
-        onTextChanged: {
-            // Pulse the ring on any edit (type or delete).
+        // Drive the arc on the KEY EVENT, not onTextChanged: Backspace on an already-empty
+        // buffer doesn't change the text (so onTextChanged never fires) — but i3lock still
+        // flashes it. Keys.onPressed sees every physical key.
+        Keys.onPressed: function (event) {
+            switch (event.key) {
+            // Standalone modifiers aren't "input" — ignore them.
+            case Qt.Key_Shift: case Qt.Key_Control: case Qt.Key_Alt: case Qt.Key_AltGr:
+            case Qt.Key_Meta: case Qt.Key_Super_L: case Qt.Key_Super_R:
+            case Qt.Key_CapsLock: case Qt.Key_NumLock:
+                return
+            case Qt.Key_Escape:
+                lockController.cancel()
+                event.accepted = true
+                return
+            }
+
+            var isDelete = event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete
+            // At key-press time the edit hasn't happened yet: ≤1 char left + delete → empty.
+            var goesEmpty = isDelete && passwordInput.text.length <= 1
+
             ring.scale = 1.09
             pulseReset.restart()
-            // Light a random arc segment: bright for a typed char, dimmer for a delete.
-            var deleted = text.length < prevLength
-            prevLength = text.length
-            arcCanvas.addSegment(deleted ? root.keypressClearColor : root.keypressColor)
+            if (goesEmpty) {
+                arcCanvas.addSegment(root.keypressEmptyColor)
+                root.flashEmpty()
+            } else {
+                arcCanvas.addSegment(isDelete ? root.keypressClearColor : root.keypressColor)
+            }
+            // Not accepted: let the TextInput edit the buffer / fire onAccepted on Return.
         }
         onAccepted: {
             var password = text
@@ -275,6 +303,12 @@ Item {
         id: pulseReset
         interval: 90
         onTriggered: ring.scale = 1.0
+    }
+
+    Timer {
+        id: emptyTimer
+        interval: 700
+        onTriggered: root.emptyActive = false
     }
 
     // Shake on a new error.
@@ -295,13 +329,6 @@ Item {
         NumberAnimation { target: ring; property: "shake"; to: 14; duration: 90 }
         NumberAnimation { target: ring; property: "shake"; to: -8; duration: 70 }
         NumberAnimation { target: ring; property: "shake"; to: 0; duration: 60 }
-    }
-
-    Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_Escape) {
-            lockController.cancel()
-            event.accepted = true
-        }
     }
 
     Component.onCompleted: passwordInput.forceActiveFocus()
