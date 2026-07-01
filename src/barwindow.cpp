@@ -745,6 +745,15 @@ void BarWindow::reloadConfigFromDisk()
         rootContext()->setContextProperty(QStringLiteral("customTools"), m_config.customTools);
     }
 
+    // Dock options (magnify/indicator/coverflow/heights): forward to the live dock so a
+    // config edit re-styles it without a restart.
+    if (fresh.dock != m_config.dock) {
+        m_config.dock = fresh.dock;
+        if (m_dockWindow != nullptr) {
+            m_dockWindow->setDockConfig(m_config.dock);
+        }
+    }
+
     // Module/group changes: update the applet lists the Bar.qml Repeaters bind to (and expose
     // any newly-configured applet's backend), so adding/removing an applet takes effect live.
     if (fresh.appletsLeft != m_config.appletsLeft || fresh.appletsCenter != m_config.appletsCenter

@@ -88,6 +88,20 @@ void DockWindow::hideDock()
     }
 }
 
+void DockWindow::setDockConfig(const QVariantMap &dock)
+{
+    if (dock == m_dock) {
+        return;
+    }
+    m_dock = dock;
+    if (m_view != nullptr) {
+        // Re-publish the config so DockSurface's bindings (magnify/indicator/…) re-evaluate,
+        // then re-apply geometry in case the hover/peak heights changed.
+        m_view->rootContext()->setContextProperty(QStringLiteral("dockConfig"), m_dock);
+        applyGeometry();
+    }
+}
+
 void DockWindow::ensureView()
 {
     if (m_view != nullptr || m_engine == nullptr) {
