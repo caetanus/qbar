@@ -100,7 +100,7 @@
     //   magnify:   "fisheye" | "parabolic" | "scale" | "coverflow" | "none"
     //   indicator: "underline" | "dot" | "pill" | "none"
     //   coverflowAngle: max tilt in degrees for "coverflow" (default 58)
-    //   coverflowDepth: perspective depth px for "coverflow"; smaller = stronger 3D (default 650)
+    //   coverflowDepth: perspective distance as a multiple of icon width; smaller = stronger 3D (default 1.5)
 
     // ── Custom tools ──────────────────────────────────────────────────────────
     // Two kinds:

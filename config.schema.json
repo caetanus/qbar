@@ -67,7 +67,7 @@
         "hoverHeight": { "type": "integer", "description": "Whole-dock baseline height on hover, px (default 48)." },
         "peakHeight": { "type": "integer", "description": "Cursor-focused fisheye peak height, px (default round(hoverHeight * 1.5))." },
         "coverflowAngle": { "type": "number", "description": "Max tilt in degrees for the coverflow magnify mode (default 58)." },
-        "coverflowDepth": { "type": "number", "description": "Perspective depth in px for coverflow; smaller = stronger 3D (default 650)." }
+        "coverflowDepth": { "type": "number", "description": "Coverflow perspective distance as a multiple of icon width; smaller = stronger 3D (default 1.5)." }
       }
     },
     "cpu": { "$ref": "#/$defs/display" },

@@ -43,12 +43,14 @@ Item {
                                     || root.magnifyMode === "coverflow"
     readonly property bool coverflow: root.magnifyMode === "coverflow"
     // Cover Flow tuning: neighbours rotate up to ±maxAngle around the vertical axis, with a
-    // perspective divide at `depth` px so the far edge genuinely recedes (real 3D, not affine).
-    // Both are config-tunable via dockConfig.coverflowAngle / dockConfig.coverflowDepth.
+    // perspective divide so the near edge grows and the far edge recedes (a real 3D turn, not
+    // just a horizontal width squash). `coverflowDepth` is the perspective distance as a MULTIPLE
+    // of the icon width — relative so the 3D look is consistent at any icon size; smaller =
+    // stronger 3D (default 1.5). Both are config-tunable via dockConfig.coverflowAngle/Depth.
     readonly property real coverflowMaxAngle: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowAngle > 0)
         ? dockConfig.coverflowAngle : 58
     readonly property real coverflowDepth: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowDepth > 0)
-        ? dockConfig.coverflowDepth : 650
+        ? dockConfig.coverflowDepth : 1.5
 
     property real hoverHeight: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.hoverHeight > 0)
         ? dockConfig.hoverHeight : 48                    // whole-dock baseline height on hover
@@ -99,7 +101,7 @@ Item {
         var cx = w / 2, cy = h / 2, c = Math.cos(a), s = Math.sin(a)
         var t1 = Qt.matrix4x4(1,0,0,-cx, 0,1,0,-cy, 0,0,1,0, 0,0,0,1)
         var r  = Qt.matrix4x4(c,0,s,0, 0,1,0,0, -s,0,c,0, 0,0,0,1)
-        var p  = Qt.matrix4x4(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,-1 / root.coverflowDepth,1)
+        var p  = Qt.matrix4x4(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,-1 / (w * root.coverflowDepth),1)
         var t2 = Qt.matrix4x4(1,0,0,cx, 0,1,0,cy, 0,0,1,0, 0,0,0,1)
         return t2.times(p).times(r).times(t1)
     }
