@@ -31,7 +31,8 @@ Item {
     //               (round dots), "pill" (translucent accent tile behind the icon),
     //               "none".
     //   coverflowAngle — Cover Flow max tilt in degrees (default 58).
-    //   coverflowDepth — Cover Flow perspective depth in px; smaller = stronger 3D (default 650).
+    //   coverflowDepth — Cover Flow perspective distance; smaller = stronger 3D (default 1.2).
+    //   coverflowRest  — resting card fraction of the shader item (headroom for the turn; default 0.66).
     readonly property string magnifyMode: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.magnify)
         ? dockConfig.magnify : "fisheye"
     readonly property string indicatorMode: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.indicator)
@@ -42,19 +43,19 @@ Item {
     readonly property bool fisheye: root.magnifyMode === "fisheye" || root.magnifyMode === "parabolic"
                                     || root.magnifyMode === "coverflow"
     readonly property bool coverflow: root.magnifyMode === "coverflow"
-    // Cover Flow tuning: neighbours rotate up to ±maxAngle around the vertical axis, with a
-    // perspective divide so the near edge grows and the far edge recedes (a real 3D turn, not
-    // just a horizontal width squash). `coverflowDepth` is the perspective distance as a MULTIPLE
-    // of the icon width — relative so the 3D look is consistent at any icon size; smaller =
-    // stronger 3D (default 1.5). Both are config-tunable via dockConfig.coverflowAngle/Depth.
+    // Cover Flow is drawn by a baked perspective shader (coverflow.frag.qsb, needs qsb at
+    // build). If it wasn't bundled, fall back to the flat fisheye grow instead of a broken card.
+    readonly property bool coverflowReady: root.coverflow
+        && (typeof coverflowShaderAvailable !== "undefined" ? coverflowShaderAvailable : false)
+    // Cover Flow tuning (shader uniforms): `coverflowAngle` max tilt in degrees; `coverflowDepth`
+    // perspective distance (smaller → stronger 3D); `coverflowRest` resting card fraction of the
+    // shader item, leaving headroom for the near vertical edge to grow taller (the 3D-turn cue).
     readonly property real coverflowMaxAngle: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowAngle > 0)
         ? dockConfig.coverflowAngle : 58
-    // Card thickness (px) for coverflow: each icon is an opaque tile extruded into a solid
-    // slab, so a turned card shows its standing side edge instead of collapsing to 0 width.
-    readonly property real coverflowThickness: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowThickness > 0)
-        ? Math.max(5, dockConfig.coverflowThickness) : 8
     readonly property real coverflowDepth: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowDepth > 0)
-        ? dockConfig.coverflowDepth : 1.5
+        ? dockConfig.coverflowDepth : 1.2
+    readonly property real coverflowRest: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowRest > 0)
+        ? dockConfig.coverflowRest : 0.66
 
     property real hoverHeight: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.hoverHeight > 0)
         ? dockConfig.hoverHeight : 48                    // whole-dock baseline height on hover
@@ -92,38 +93,6 @@ Item {
         // Cover Flow leans on 3D depth, so its grow is gentler than the plain fisheye peak.
         var peak = root.coverflow ? (root.baseSize + (root.peakHeight - root.baseSize) * 0.5) : root.peakHeight
         return root.baseSize + (peak - root.baseSize) * t
-    }
-
-    // Cover Flow transform for a cell: rotate `angleDeg` around the vertical (Y) axis about
-    // the cell's horizontal centre, with a perspective divide so the receding edge shrinks.
-    // Composed as translate-to-centre · perspective · rotateY · translate-back. angle 0 →
-    // identity, so attaching this unconditionally is a no-op for the other magnify modes.
-    function coverflowMatrix(angleDeg, w, h) {
-        if (!angleDeg)
-            return Qt.matrix4x4(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1)
-        var a = angleDeg * Math.PI / 180
-        var cx = w / 2, cy = h / 2, c = Math.cos(a), s = Math.sin(a)
-        var t1 = Qt.matrix4x4(1,0,0,-cx, 0,1,0,-cy, 0,0,1,0, 0,0,0,1)
-        var r  = Qt.matrix4x4(c,0,s,0, 0,1,0,0, -s,0,c,0, 0,0,0,1)
-        var p  = Qt.matrix4x4(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,-1 / (w * root.coverflowDepth),1)
-        var t2 = Qt.matrix4x4(1,0,0,cx, 0,1,0,cy, 0,0,1,0, 0,0,0,1)
-        return t2.times(p).times(r).times(t1)
-    }
-
-    // The card is a solid slab of thickness `t`: its FRONT face (tile + icon) sits at z=+t/2,
-    // and one vertical SIDE face (the visible edge) bridges z=+t/2 → -t/2 on the near side, so
-    // a turned card shows real thickness instead of a zero-width plane. Both share world().
-    function coverflowFront(angleDeg, w, h, t) {
-        return coverflowMatrix(angleDeg, w, h).times(Qt.matrix4x4(1,0,0,0, 0,1,0,0, 0,0,1,t/2, 0,0,0,1))
-    }
-    function coverflowSide(angleDeg, w, h, t) {
-        var world = coverflowMatrix(angleDeg, w, h)
-        var pushZ = Qt.matrix4x4(1,0,0,0, 0,1,0,0, 0,0,1,t/2, 0,0,0,1)
-        var ry90  = Qt.matrix4x4(0,0,1,0, 0,1,0,0, -1,0,0,0, 0,0,0,1)   // rotate the strip into the x-z plane
-        if (angleDeg >= 0)
-            return world.times(pushZ).times(ry90)                        // near edge is the left one
-        var pushX = Qt.matrix4x4(1,0,0,w, 0,1,0,0, 0,0,1,0, 0,0,0,1)     // …the right one when turned the other way
-        return world.times(pushX).times(pushZ).times(ry90)
     }
 
     ListView {
@@ -166,14 +135,11 @@ Item {
             readonly property real sz: root.iconSize(centerX)
             opacity: cell.focused || cell.urgent ? 1.0 : 0.72
 
-            // Cover Flow: rotate this card around the vertical axis by its signed distance
-            // from the cursor (flat at the cursor, ±maxAngle past `influence`). 0 for every
-            // other magnify mode (and at rest), so the Matrix4x4 below is then identity.
-            // NOT readonly: a Behavior can't animate a read-only property (it's a load-time
-            // error that breaks the whole delegate). The binding still drives the target;
-            // the Behavior eases each change.
-            property real coverflowAngle: (root.coverflow && root.hovered && root.cursorX > -9.9e5)
-                ? root.coverflowMaxAngle * Math.max(-1, Math.min(1, (cell.centerX - root.cursorX) / root.influence))
+            // Cover Flow turn angle (RADIANS, for the shader): signed distance from the cursor,
+            // flat at the cursor, ±maxAngle past `influence`. 0 when not turning. NOT readonly —
+            // a Behavior can't animate a read-only property (load-time error that breaks the cell).
+            property real coverflowAngle: (root.coverflowReady && root.hovered && root.cursorX > -9.9e5)
+                ? (root.coverflowMaxAngle * Math.PI / 180) * Math.max(-1, Math.min(1, (cell.centerX - root.cursorX) / root.influence))
                 : 0
             Behavior on coverflowAngle { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
@@ -205,23 +171,10 @@ Item {
                 transform: Translate { y: cell.bounceY }
             }
 
-            // Cover Flow draws each icon as a solid slab: a darker SIDE face (the thickness)
-            // plus a FRONT face — an opaque tile with the icon on it, pushed forward by t/2.
-            // For every other magnify mode the front matrix is identity and the tile/side are
-            // hidden (width/opacity 0), so the icon renders exactly as a plain bottom image.
-            Rectangle {
-                id: sideFace
-                width: root.coverflow ? root.coverflowThickness : 0
-                height: face.height
-                x: face.x
-                y: face.y
-                antialiasing: true
-                color: "#161922"
-                transform: [
-                    Matrix4x4 { matrix: root.coverflowSide(cell.coverflowAngle, face.width, face.height, root.coverflowThickness) },
-                    Translate { y: cell.bounceY }
-                ]
-            }
+            // The icon "face": for Cover Flow it's an opaque rounded tile with the icon (the
+            // card the shader turns); otherwise just the icon, bottom-anchored, drawn directly.
+            // When coverflow is active, the ShaderEffectSource below textures this face and
+            // hides it in-scene (hideSource), and the ShaderEffect draws it turned in 3D.
             Item {
                 id: face
                 width: cell.sz
@@ -230,24 +183,19 @@ Item {
                 y: cell.height - face.height
                 Behavior on width  { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
                 Behavior on height { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
-                transform: [
-                    Matrix4x4 { matrix: root.coverflow
-                        ? root.coverflowFront(cell.coverflowAngle, face.width, face.height, root.coverflowThickness)
-                        : root.coverflowMatrix(cell.coverflowAngle, cell.width, cell.height) },
-                    Translate { y: cell.bounceY }
-                ]
+                transform: Translate { y: cell.bounceY }
 
                 Rectangle {   // opaque card tile — coverflow only
                     anchors.fill: parent
-                    radius: Math.round(width * 0.18)
+                    radius: Math.round(width * 0.2)
                     color: "#262b38"
                     antialiasing: true
-                    opacity: root.coverflow ? 1 : 0
+                    opacity: root.coverflowReady ? 1 : 0
                 }
                 Image {
                     id: icon
                     anchors.fill: parent
-                    anchors.margins: root.coverflow ? Math.round(face.width * 0.12) : 0
+                    anchors.margins: root.coverflowReady ? Math.round(face.width * 0.14) : 0
                     sourceSize.width: Math.ceil(root.peakHeight)
                     sourceSize.height: Math.ceil(root.peakHeight)
                     fillMode: Image.PreserveAspectFit
@@ -261,6 +209,30 @@ Item {
                     color: theme.foreground
                     font.family: theme.fontFamily
                     font.pointSize: Math.max(8, Math.round(cell.sz * 0.4))
+                }
+            }
+
+            // Cover Flow: turn the tile via the perspective shader. The shader item is larger
+            // than the tile by 1/rest so the near vertical edge has headroom to grow taller,
+            // and is centred on the tile so the tile (drawn at `rest`) sits at the bar edge.
+            Loader {
+                active: root.coverflowReady
+                readonly property real cfSize: Math.round(cell.sz / root.coverflowRest)
+                width: cfSize
+                height: cfSize
+                x: Math.round((cell.width - cfSize) / 2)
+                y: Math.round(cell.height - (cfSize + cell.sz) / 2)
+                sourceComponent: ShaderEffect {
+                    property variant source: ShaderEffectSource {
+                        sourceItem: face
+                        hideSource: true
+                        live: true
+                    }
+                    property real angle: cell.coverflowAngle
+                    property real depth: root.coverflowDepth
+                    property real rest: root.coverflowRest
+                    fragmentShader: "qrc:/qbar/shaders/coverflow.frag.qsb"
+                    transform: Translate { y: cell.bounceY }
                 }
             }
 

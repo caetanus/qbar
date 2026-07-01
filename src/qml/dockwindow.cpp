@@ -139,6 +139,15 @@ void DockWindow::ensureView()
     ctx->setContextProperty(QStringLiteral("cssTheme"), m_cssTheme);
     ctx->setContextProperty(QStringLiteral("windowModel"), m_windowModel);
     ctx->setContextProperty(QStringLiteral("wm"), m_wm);
+    // Whether the baked Cover Flow shader was bundled (qsb available at build time); the
+    // dock falls back to a flat magnify for "coverflow" when it isn't.
+    ctx->setContextProperty(QStringLiteral("coverflowShaderAvailable"),
+#ifdef QBAR_HAVE_COVERFLOW_SHADER
+                            true
+#else
+                            false
+#endif
+    );
 
     QScreen *screen = m_barWindow != nullptr ? m_barWindow->screen() : nullptr;
     if (screen == nullptr) {

@@ -1,5 +1,6 @@
 <RCC>
   <qresource prefix="/">
     <file alias="qbar/shaders/PopupEmboss.frag.qsb">@POPUP_EMBOSS_QSB@</file>
+    <file alias="qbar/shaders/coverflow.frag.qsb">@COVERFLOW_QSB@</file>
   </qresource>
 </RCC>

@@ -100,8 +100,8 @@
     //   magnify:   "fisheye" | "parabolic" | "scale" | "coverflow" | "none"
     //   indicator: "underline" | "dot" | "pill" | "none"
     //   coverflowAngle: max tilt in degrees for "coverflow" (default 58)
-    //   coverflowDepth: perspective distance as a multiple of icon width; smaller = stronger 3D (default 1.5)
-    //   coverflowThickness: card slab thickness in px for "coverflow" (min 5, default 8)
+    //   coverflowDepth: perspective distance for "coverflow" (shader); smaller = stronger 3D (default 1.2)
+    //   coverflowRest:  resting card fraction of its cell — headroom for the 3D turn (default 0.66)
 
     // ── Custom tools ──────────────────────────────────────────────────────────
     // Two kinds:

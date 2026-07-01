@@ -76,8 +76,17 @@ if popup_emboss_shader_enabled
     build_by_default: true,
   )
   popup_emboss_shader_qsb_path = join_paths(meson.project_build_root(), 'PopupEmboss.frag.qsb')
+  # Dock Cover Flow perspective shader — baked the same way, bundled in the same qrc.
+  coverflow_shader_qsb = custom_target(
+    'coverflow-frag-qsb',
+    input: files('qml/shaders/coverflow.frag'),
+    output: 'coverflow.frag.qsb',
+    command: [qsb_program, '--qt6', '-o', '@OUTPUT@', '@INPUT@'],
+    build_by_default: true,
+  )
   popup_emboss_shader_conf = configuration_data()
   popup_emboss_shader_conf.set('POPUP_EMBOSS_QSB', popup_emboss_shader_qsb_path)
+  popup_emboss_shader_conf.set('COVERFLOW_QSB', join_paths(meson.project_build_root(), 'coverflow.frag.qsb'))
   popup_emboss_shader_qrc = configure_file(
     input: 'qml/qbar-shaders.qrc.in',
     output: 'qbar-shaders.qrc',
@@ -103,8 +112,8 @@ if get_option('qml_debug')
 endif
 
 if popup_emboss_shader_enabled
-  platform_args += ['-DQBAR_HAVE_POPUP_EMBOSS_SHADER=1']
-  platform_generated += [popup_emboss_shader_qsb]
+  platform_args += ['-DQBAR_HAVE_POPUP_EMBOSS_SHADER=1', '-DQBAR_HAVE_COVERFLOW_SHADER=1']
+  platform_generated += [popup_emboss_shader_qsb, coverflow_shader_qsb]
 endif
 
 qtgui_version = dependency('Qt6Gui').version()
