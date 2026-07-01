@@ -30,6 +30,8 @@ Item {
     //   indicator — focused-window marker: "underline" (accent bar, default), "dot"
     //               (round dots), "pill" (translucent accent tile behind the icon),
     //               "none".
+    //   coverflowAngle — Cover Flow max tilt in degrees (default 58).
+    //   coverflowDepth — Cover Flow perspective depth in px; smaller = stronger 3D (default 650).
     readonly property string magnifyMode: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.magnify)
         ? dockConfig.magnify : "fisheye"
     readonly property string indicatorMode: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.indicator)
@@ -42,8 +44,11 @@ Item {
     readonly property bool coverflow: root.magnifyMode === "coverflow"
     // Cover Flow tuning: neighbours rotate up to ±maxAngle around the vertical axis, with a
     // perspective divide at `depth` px so the far edge genuinely recedes (real 3D, not affine).
-    property real coverflowMaxAngle: 58
-    property real coverflowDepth: 650
+    // Both are config-tunable via dockConfig.coverflowAngle / dockConfig.coverflowDepth.
+    readonly property real coverflowMaxAngle: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowAngle > 0)
+        ? dockConfig.coverflowAngle : 58
+    readonly property real coverflowDepth: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowDepth > 0)
+        ? dockConfig.coverflowDepth : 650
 
     property real hoverHeight: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.hoverHeight > 0)
         ? dockConfig.hoverHeight : 48                    // whole-dock baseline height on hover

@@ -99,6 +99,8 @@
     // "dock": { "magnify": "fisheye", "indicator": "underline" },
     //   magnify:   "fisheye" | "parabolic" | "scale" | "coverflow" | "none"
     //   indicator: "underline" | "dot" | "pill" | "none"
+    //   coverflowAngle: max tilt in degrees for "coverflow" (default 58)
+    //   coverflowDepth: perspective depth px for "coverflow"; smaller = stronger 3D (default 650)
 
     // ── Custom tools ──────────────────────────────────────────────────────────
     // Two kinds:

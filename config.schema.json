@@ -65,7 +65,9 @@
         "magnify": { "type": "string", "enum": ["fisheye", "parabolic", "scale", "coverflow", "none"], "description": "Hover effect: cosine fisheye (default), sharper parabolic peak, uniform whole-dock scale, macOS coverflow (3D vertical-axis rotation), or no growth." },
         "indicator": { "type": "string", "enum": ["underline", "dot", "pill", "none"], "description": "Focused-window marker: accent underline (default), round dot, translucent tile behind the icon, or none." },
         "hoverHeight": { "type": "integer", "description": "Whole-dock baseline height on hover, px (default 48)." },
-        "peakHeight": { "type": "integer", "description": "Cursor-focused fisheye peak height, px (default round(hoverHeight * 1.5))." }
+        "peakHeight": { "type": "integer", "description": "Cursor-focused fisheye peak height, px (default round(hoverHeight * 1.5))." },
+        "coverflowAngle": { "type": "number", "description": "Max tilt in degrees for the coverflow magnify mode (default 58)." },
+        "coverflowDepth": { "type": "number", "description": "Perspective depth in px for coverflow; smaller = stronger 3D (default 650)." }
       }
     },
     "cpu": { "$ref": "#/$defs/display" },
