@@ -140,11 +140,7 @@ QBar.CssRect {
             anchors.verticalCenter: parent.verticalCenter
             text: root.tick.icon
             color: root.tick.color
-            // Crypto icons are Unicode symbols (₿ Ξ ɱ …). The configured bar font often
-            // carries ₿ but not the rarer Greek/IPA letters, so a single font.family
-            // renders BTC and tofus the rest. List broad-coverage fallbacks: Qt fills
-            // any glyph the primary family is missing from the next family that has it.
-            font.families: [theme.fontFamily, "Noto Sans", "DejaVu Sans"]
+            font.family: theme.fontFamily
             font.pointSize: theme.fontSize
             font.bold: true
         }
