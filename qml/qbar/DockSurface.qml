@@ -49,6 +49,31 @@ Item {
     property real slotWidth: 0                           // visual width reserved by Dock.qml
     property real edgePadding: Math.max(root.peakHeight, root.influence * 0.5)
 
+    // Hover tooltip: the window title floating ABOVE the icon under the cursor. It tracks
+    // the icon's CURRENT height (tooltipSize), so it stays just above the icon no matter how
+    // much the fisheye has grown it.
+    property string tooltipText: ""
+    property real tooltipCenterX: 0
+    property real tooltipSize: root.barHeight
+
+    // Find the icon under `rowX` (row-content coords) and publish its title/centre/size.
+    function updateTooltip(rowX) {
+        if (!row.contentItem) { root.tooltipText = ""; return }
+        var kids = row.contentItem.children
+        for (var i = 0; i < kids.length; i++) {
+            var c = kids[i]
+            if (c.windowId === undefined)
+                continue
+            if (rowX >= c.x && rowX < c.x + c.width) {
+                root.tooltipText = (c.title && c.title.length > 0) ? c.title : (c.appId || "")
+                root.tooltipCenterX = row.contentItem.mapToItem(root, c.x + c.width / 2, 0).x
+                root.tooltipSize = c.sz
+                return
+            }
+        }
+        root.tooltipText = ""
+    }
+
     // Uniform baseline: bar height at rest → hoverHeight on hover, animated.
     property real baseSize: (root.hovered && root.magnifies) ? Math.max(root.barHeight, root.hoverHeight) : root.barHeight
     Behavior on baseSize { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
@@ -202,9 +227,16 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton
-        onContainsMouseChanged: root.hovered = containsMouse
-        onPositionChanged: function (m) { root.cursorX = hover.mapToItem(row.contentItem, m.x, m.y).x }
-        onExited: root.cursorX = -1e6
+        onContainsMouseChanged: {
+            root.hovered = containsMouse
+            if (!containsMouse)
+                root.tooltipText = ""
+        }
+        onPositionChanged: function (m) {
+            root.cursorX = hover.mapToItem(row.contentItem, m.x, m.y).x
+            root.updateTooltip(root.cursorX)
+        }
+        onExited: { root.cursorX = -1e6; root.tooltipText = "" }
         onClicked: function (m) {
             if (!wm)
                 return
@@ -218,6 +250,38 @@ Item {
                     return
                 }
             }
+        }
+    }
+
+    // Tooltip: the hovered window's title, centred over the icon and sitting just ABOVE its
+    // top edge. `root.height` is the bar edge (bottom); the icon rises `tooltipSize` above it,
+    // so subtracting that keeps the label above the icon at any magnification.
+    Rectangle {
+        id: tooltip
+        z: 100
+        visible: root.hovered && root.tooltipText.length > 0
+        radius: 6
+        color: Qt.rgba(0, 0, 0, 0.85)
+        border.color: Qt.rgba(1, 1, 1, 0.14)
+        border.width: 1
+        width: Math.min(root.width - 8, tipText.implicitWidth + 18)
+        height: tipText.implicitHeight + 9
+        x: Math.round(Math.max(4, Math.min(root.width - width - 4, root.tooltipCenterX - width / 2)))
+        y: Math.round(root.height - root.tooltipSize - height - 10)
+        opacity: visible ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: 90 } }
+        Behavior on x { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
+        Behavior on y { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
+
+        Text {
+            id: tipText
+            anchors.centerIn: parent
+            width: Math.min(implicitWidth, root.width - 26)
+            text: root.tooltipText
+            color: "#ffffff"
+            elide: Text.ElideRight
+            font.family: theme.fontFamily
+            font.pointSize: (theme.fontSize && theme.fontSize > 0) ? theme.fontSize : 10
         }
     }
 }

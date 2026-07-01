@@ -166,7 +166,9 @@ void DockWindow::applyGeometry()
     const int peakH = m_dock.contains(QStringLiteral("peakHeight"))
         ? m_dock.value(QStringLiteral("peakHeight")).toInt()
         : static_cast<int>(std::lround(std::max(hoverH, 48) * 1.5));
-    const int headroom = headroomFor(m_barWindow, peakH);
+    // Extra room above the peak so the hover tooltip (a label floating above the icon,
+    // Docky-style) isn't clipped by the surface/window edge.
+    const int headroom = headroomFor(m_barWindow, peakH) + 44;
     const int surfaceH = barH + headroom;
     const bool bottom = barIsBottom(m_barWindow);
     QScreen *screen = m_view->screen();
