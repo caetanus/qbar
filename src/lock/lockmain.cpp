@@ -53,6 +53,29 @@ std::unique_ptr<LockBackend> createBackend(const QString &name)
 
 int main(int argc, char *argv[])
 {
+    // The Wayland lock backend drives ext-session-lock-v1 through the qbar-session-lock
+    // shell-integration plugin, which Qt must select BEFORE the platform plugin loads —
+    // i.e. before QGuiApplication. Resolve the backend from argv/env here (mirroring the
+    // QCommandLineParser default below) and point Qt at the plugin on Wayland.
+    {
+        QString requestedBackend = QStringLiteral("auto");
+        for (int i = 1; i < argc; ++i) {
+            const QString arg = QString::fromLocal8Bit(argv[i]);
+            if (arg == QStringLiteral("--backend") && i + 1 < argc) {
+                requestedBackend = QString::fromLocal8Bit(argv[i + 1]);
+                break;
+            }
+            if (arg.startsWith(QStringLiteral("--backend="))) {
+                requestedBackend = arg.mid(QStringLiteral("--backend=").size());
+                break;
+            }
+        }
+        if (detectBackendName(requestedBackend) == QStringLiteral("wayland")
+            && qEnvironmentVariableIsEmpty("QT_WAYLAND_SHELL_INTEGRATION")) {
+            qputenv("QT_WAYLAND_SHELL_INTEGRATION", "qbar-session-lock");
+        }
+    }
+
     QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("qbar-lock"));
     QCoreApplication::setOrganizationName(QStringLiteral("qbar"));

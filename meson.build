@@ -132,6 +132,11 @@ wayland_dep = dependency('wayland-client', required: get_option('wayland'))
 wlroots_dep = dependency('wlroots-0.19', required: get_option('wayland'))
 wayland_scanner = find_program('wayland-scanner', required: get_option('wayland'))
 wayland_protocols_dep = dependency('wayland-protocols', required: get_option('wayland'))
+# Set once the Wayland shell plugins (layer-shell + session-lock) are built; the
+# qbar-lock target keys its Wayland lock backend off this.
+have_wayland_shell = false
+session_lock_header = []
+session_lock_code = []
 if wayland_dep.found() and wlroots_dep.found() and wayland_scanner.found() and wayland_protocols_dep.found()
   # Ask wayland-protocols where it installed its XML, rather than assuming /usr/share.
   wl_protocols_dir = wayland_protocols_dep.get_variable(pkgconfig: 'pkgdatadir')
@@ -172,6 +177,20 @@ if wayland_dep.found() and wlroots_dep.found() and wayland_scanner.found() and w
     'idle-inhibit-client-code',
     input: idle_inhibit_protocol,
     output: 'idle-inhibit-unstable-v1-protocol.c',
+    command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
+  )
+
+  session_lock_protocol = files(wl_protocols_dir / 'staging/ext-session-lock/ext-session-lock-v1.xml')
+  session_lock_header = custom_target(
+    'ext-session-lock-client-header',
+    input: session_lock_protocol,
+    output: 'ext-session-lock-v1-client-protocol.h',
+    command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
+  )
+  session_lock_code = custom_target(
+    'ext-session-lock-client-code',
+    input: session_lock_protocol,
+    output: 'ext-session-lock-v1-protocol.c',
     command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
   )
 
@@ -225,6 +244,34 @@ if wayland_dep.found() and wlroots_dep.found() and wayland_scanner.found() and w
     command: ['sh', '-c', 'mkdir -p wayland-shell-integration && cp "$1" wayland-shell-integration/libqbar-layer-shell.so.tmp && mv -f wayland-shell-integration/libqbar-layer-shell.so.tmp wayland-shell-integration/libqbar-layer-shell.so && touch "$2"', 'sh', '@INPUT@', '@OUTPUT@'],
     build_by_default: true,
   )
+
+  # Session-lock shell integration plugin (qbar-lock, Wayland ext-session-lock-v1).
+  session_lock_plugin_headers = files('src/wayland-shell-integration/qbar-session-lock/qbarsessionlockintegration.h')
+  session_lock_plugin_sources = files('src/wayland-shell-integration/qbar-session-lock/qbarsessionlockintegration.cpp')
+  session_lock_plugin_moc = qt6.preprocess(moc_headers: session_lock_plugin_headers)
+  session_lock_plugin = shared_module(
+    'qbar-session-lock',
+    session_lock_plugin_sources,
+    session_lock_plugin_moc,
+    session_lock_header,
+    session_lock_code,
+    cpp_args: ['-fPIC'],
+    include_directories: platform_includes + [qtwayland_private_include],
+    dependencies: qt_deps + [dependency('Qt6WaylandClient'), wayland_dep],
+    install: true,
+    install_dir: get_option('libdir') / 'qt6/plugins/wayland-shell-integration',
+    name_prefix: 'lib',
+  )
+  custom_target(
+    'qbar-session-lock-plugin-copy',
+    input: session_lock_plugin,
+    output: 'qbar-session-lock-plugin-copy.stamp',
+    # Atomic replace (see the layer-shell copy above for why cp-in-place corrupts a live mmap).
+    command: ['sh', '-c', 'mkdir -p wayland-shell-integration && cp "$1" wayland-shell-integration/libqbar-session-lock.so.tmp && mv -f wayland-shell-integration/libqbar-session-lock.so.tmp wayland-shell-integration/libqbar-session-lock.so && touch "$2"', 'sh', '@INPUT@', '@OUTPUT@'],
+    build_by_default: true,
+  )
+
+  have_wayland_shell = true
 endif
 
 sources = files(
@@ -395,6 +442,15 @@ if lockscreen_dep.found()
     lockscreen_deps += [x11_dep]
   endif
 
+  # The Wayland lock backend drives ext-session-lock-v1 via the qbar-session-lock plugin;
+  # it needs the generated protocol (for unlock_and_destroy + the availability probe).
+  lockscreen_generated = []
+  if have_wayland_shell
+    lockscreen_args += ['-DQBAR_LOCK_HAVE_WAYLAND=1']
+    lockscreen_deps += [wayland_dep]
+    lockscreen_generated += [session_lock_header, session_lock_code]
+  endif
+
   lockscreen_headers = files(
     'src/lock/lockbackend.h',
     'src/lock/lockcontroller.h',
@@ -420,8 +476,9 @@ if lockscreen_dep.found()
       'src/css/valueparser.cpp',
     ),
     lockscreen_qt_sources,
+    lockscreen_generated,
     cpp_args: lockscreen_args,
-    include_directories: include_directories('src'),
+    include_directories: [include_directories('src'), qtgui_private_include],
     dependencies: lockscreen_deps,
     install: true,
   )
