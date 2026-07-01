@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import "qrc:/qbar" as QBar
 
 Item {
@@ -9,6 +10,11 @@ Item {
     readonly property var inputStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("password-input") : ({})
     readonly property var labelStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("lock-label") : ({})
     readonly property var errorStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("lock-error") : ({})
+
+    readonly property string displayName: (typeof userModel !== "undefined" && userModel && userModel.realName.length)
+        ? userModel.realName : lockController.user
+    readonly property string avatarSource: (typeof userModel !== "undefined" && userModel && userModel.iconPath)
+        ? userModel.iconPath : ""
 
     function color(style, name, fallback) {
         return style && style[name] ? cssTheme.parseColor(style[name]) : fallback
@@ -29,7 +35,7 @@ Item {
     Item {
         id: panel
         width: Math.min(420, root.width - 48)
-        height: 248
+        height: col.implicitHeight + 56
         anchors.centerIn: parent
 
         QBar.CssFill {
@@ -42,9 +48,56 @@ Item {
         }
 
         Column {
-            anchors.fill: parent
-            anchors.margins: 28
+            id: col
+            width: parent.width - 56
+            anchors.top: parent.top
+            anchors.topMargin: 28
+            anchors.horizontalCenter: parent.horizontalCenter
             spacing: 12
+
+            // Avatar (AccountsService / ~/.face), circular. Falls back to a monogram disc.
+            Item {
+                width: 72
+                height: 72
+                anchors.horizontalCenter: parent.horizontalCenter
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: width / 2
+                    color: "#232a3d"
+                    border.color: "#3d4861"
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.displayName.length ? root.displayName[0].toUpperCase() : "?"
+                        color: "#cfd8ec"
+                        font.pixelSize: 28
+                    }
+                }
+                Image {
+                    id: avatarImg
+                    anchors.fill: parent
+                    source: root.avatarSource
+                    fillMode: Image.PreserveAspectCrop
+                    sourceSize.width: 144
+                    sourceSize.height: 144
+                    visible: false
+                }
+                MultiEffect {
+                    anchors.fill: parent
+                    source: avatarImg
+                    maskEnabled: true
+                    maskSource: avatarMask
+                    opacity: avatarImg.status === Image.Ready ? 1 : 0
+                }
+                Item {
+                    id: avatarMask
+                    anchors.fill: parent
+                    layer.enabled: true
+                    visible: false
+                    Rectangle { anchors.fill: parent; radius: width / 2; color: "black" }
+                }
+            }
 
             Text {
                 width: parent.width
@@ -62,7 +115,7 @@ Item {
                 font.family: root.labelStyle["font-family"] || "Inter"
                 font.pixelSize: 15
                 horizontalAlignment: Text.AlignHCenter
-                text: lockController.user
+                text: root.displayName
                 elide: Text.ElideRight
             }
 
@@ -120,6 +173,23 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 text: lockController.error.length > 0 ? lockController.error : lockController.message
                 elide: Text.ElideRight
+            }
+
+            // Caps / Num Lock — Caps ON is a loud red warning (mistyped-password guard).
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 18
+                Text {
+                    text: keyLocks.active ? "CAPS LOCK ON" : "Caps Lock"
+                    color: keyLocks.active ? "#f7768e" : "#5b6272"
+                    font.bold: keyLocks.active
+                    font.pixelSize: 12
+                }
+                Text {
+                    text: keyLocks.numLockActive ? "Num Lock On" : "Num Lock Off"
+                    color: keyLocks.numLockActive ? "#9ece6a" : "#5b6272"
+                    font.pixelSize: 12
+                }
             }
         }
     }

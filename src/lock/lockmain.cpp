@@ -3,6 +3,8 @@
 #include "waylandlockbackend.h"
 #include "x11lockbackend.h"
 #include "css/csstheme.h"
+#include "platform/capslockmonitor.h"
+#include "user/usermodel.h"
 
 #include <QCommandLineParser>
 #include <QCursor>
@@ -136,6 +138,11 @@ int main(int argc, char *argv[])
     CssTheme cssTheme;
     cssTheme.load(parser.value(themeOption));
 
+    // Current user's avatar + real name (AccountsService via D-Bus, async) and the
+    // Caps/Num Lock LED state — both shown on every lock face.
+    UserModel userModel;
+    CapsLockMonitor keyLocks;
+
     LockController controller(&authenticator, backend.get(), demoMode, parser.value(passwordPamServiceOption));
     controller.setFingerprintEnabled(!parser.isSet(noFingerprintOption));
 
@@ -173,6 +180,8 @@ int main(int argc, char *argv[])
         view->setCursor(Qt::ArrowCursor);
         view->rootContext()->setContextProperty(QStringLiteral("lockController"), &controller);
         view->rootContext()->setContextProperty(QStringLiteral("cssTheme"), &cssTheme);
+        view->rootContext()->setContextProperty(QStringLiteral("userModel"), &userModel);
+        view->rootContext()->setContextProperty(QStringLiteral("keyLocks"), &keyLocks);
         view->setSource(lockSource);
         view->setGeometry(screen->geometry());
         view->showFullScreen();

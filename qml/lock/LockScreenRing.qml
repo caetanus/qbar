@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import "qrc:/qbar" as QBar
 
 // i3lock-style lock face: a solid-colour screen with a single central unlock ring.
@@ -10,6 +11,11 @@ Item {
 
     readonly property var screenStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("lockscreen") : ({})
     readonly property var ringStyle: cssTheme && cssTheme.loaded ? cssTheme.resolve("lock-ring") : ({})
+
+    readonly property string displayName: (typeof userModel !== "undefined" && userModel && userModel.realName.length)
+        ? userModel.realName : lockController.user
+    readonly property string avatarSource: (typeof userModel !== "undefined" && userModel && userModel.iconPath)
+        ? userModel.iconPath : ""
 
     function styleColor(style, name, fallback) {
         return style && style[name] ? cssTheme.parseColor(style[name]) : fallback
@@ -76,26 +82,97 @@ Item {
             }
         }
 
-        // A soft inner fill hint that echoes the state colour.
-        Rectangle {
+        // Avatar inside the ring; falls back to a state-tinted disc + monogram.
+        Item {
             anchors.centerIn: parent
-            width: parent.width - 26
+            width: parent.width - 30
             height: width
-            radius: width / 2
-            color: ringCircle.border.color
-            opacity: 0.10
+
+            Rectangle {
+                anchors.fill: parent
+                radius: width / 2
+                color: ringCircle.border.color
+                opacity: 0.12
+                Text {
+                    anchors.centerIn: parent
+                    text: root.displayName.length ? root.displayName[0].toUpperCase() : "?"
+                    color: root.styleColor(root.ringStyle, "text-color", "#c8d0e0")
+                    font.pixelSize: 34
+                    opacity: avatarImg.status === Image.Ready ? 0 : 0.9
+                }
+            }
+            Image {
+                id: avatarImg
+                anchors.fill: parent
+                source: root.avatarSource
+                fillMode: Image.PreserveAspectCrop
+                sourceSize.width: 220
+                sourceSize.height: 220
+                visible: false
+            }
+            MultiEffect {
+                anchors.fill: parent
+                source: avatarImg
+                maskEnabled: true
+                maskSource: avatarMask
+                opacity: avatarImg.status === Image.Ready ? 1 : 0
+            }
+            Item {
+                id: avatarMask
+                anchors.fill: parent
+                layer.enabled: true
+                visible: false
+                Rectangle { anchors.fill: parent; radius: width / 2; color: "black" }
+            }
         }
     }
 
-    // Prompt / error line under the ring (small, unobtrusive).
-    Text {
+    // Name, live prompt/hint and Caps/Num Lock, stacked under the ring.
+    Column {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: ring.bottom
-        anchors.topMargin: 26
-        color: root.hasError ? root.errorColor : root.styleColor(root.ringStyle, "text-color", "#c8d0e0")
-        opacity: 0.85
-        font.pixelSize: 13
-        text: root.hasError ? lockController.error : lockController.message
+        anchors.topMargin: 22
+        spacing: 8
+
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            color: root.styleColor(root.ringStyle, "text-color", "#c8d0e0")
+            opacity: 0.9
+            font.pixelSize: 15
+            text: root.displayName
+        }
+
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            horizontalAlignment: Text.AlignHCenter
+            color: root.hasError ? root.errorColor : root.styleColor(root.ringStyle, "text-color", "#c8d0e0")
+            opacity: 0.8
+            font.pixelSize: 13
+            text: {
+                if (root.hasError)
+                    return lockController.error
+                var parts = []
+                if (lockController.fingerprintActive) parts.push("Touch the fingerprint reader")
+                if (lockController.faceActive) parts.push("Look at the camera")
+                return parts.length ? parts.join("   ·   ") : lockController.message
+            }
+        }
+
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 18
+            Text {
+                text: keyLocks.active ? "CAPS LOCK ON" : "Caps Lock"
+                color: keyLocks.active ? "#f7768e" : "#5b6272"
+                font.bold: keyLocks.active
+                font.pixelSize: 12
+            }
+            Text {
+                text: keyLocks.numLockActive ? "Num Lock On" : "Num Lock Off"
+                color: keyLocks.numLockActive ? "#9ece6a" : "#5b6272"
+                font.pixelSize: 12
+            }
+        }
     }
 
     // Invisible keystroke sink — no password box is drawn, matching i3lock.

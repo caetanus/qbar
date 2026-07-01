@@ -459,6 +459,8 @@ if lockscreen_dep.found()
     'src/lock/fprintauthenticator.h',
     'src/lock/waylandlockbackend.h',
     'src/lock/x11lockbackend.h',
+    'src/user/usermodel.h',
+    'src/platform/capslockmonitor.h',
     'src/css/csstheme.h',
   )
   lockscreen_qt_sources = qt6.preprocess(
@@ -475,6 +477,8 @@ if lockscreen_dep.found()
       'src/lock/fprintauthenticator.cpp',
       'src/lock/waylandlockbackend.cpp',
       'src/lock/x11lockbackend.cpp',
+      'src/user/usermodel.cpp',
+      'src/platform/capslockmonitor.cpp',
       'src/css/csstheme.cpp',
       'src/css/valueparser.cpp',
     ),
