@@ -166,7 +166,12 @@ void DockWindow::applyGeometry()
     const int peakH = m_dock.contains(QStringLiteral("peakHeight"))
         ? m_dock.value(QStringLiteral("peakHeight")).toInt()
         : static_cast<int>(std::lround(std::max(hoverH, 48) * 1.5));
-    const int headroom = headroomFor(m_barWindow, peakH);
+    int headroom = headroomFor(m_barWindow, peakH);
+    // Cover Flow tilts each card in perspective, so its near vertical edge grows TALLER than the
+    // flat peak — without extra headroom the surface (and thus the window) clips the turned cards.
+    if (m_dock.value(QStringLiteral("magnify")).toString() == QStringLiteral("coverflow")) {
+        headroom += static_cast<int>(std::lround(peakH * 0.6));
+    }
     const int surfaceH = barH + headroom;
     const bool bottom = barIsBottom(m_barWindow);
     QScreen *screen = m_view->screen();

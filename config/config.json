@@ -101,6 +101,7 @@
     //   indicator: "underline" | "dot" | "pill" | "none"
     //   coverflowAngle: max tilt in degrees for "coverflow" (default 58)
     //   coverflowDepth: perspective distance as a multiple of icon width; smaller = stronger 3D (default 1.5)
+    //   coverflowThickness: card slab thickness in px for "coverflow" (min 5, default 8)
 
     // ── Custom tools ──────────────────────────────────────────────────────────
     // Two kinds:

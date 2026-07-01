@@ -49,6 +49,10 @@ Item {
     // stronger 3D (default 1.5). Both are config-tunable via dockConfig.coverflowAngle/Depth.
     readonly property real coverflowMaxAngle: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowAngle > 0)
         ? dockConfig.coverflowAngle : 58
+    // Card thickness (px) for coverflow: each icon is an opaque tile extruded into a solid
+    // slab, so a turned card shows its standing side edge instead of collapsing to 0 width.
+    readonly property real coverflowThickness: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowThickness > 0)
+        ? Math.max(5, dockConfig.coverflowThickness) : 8
     readonly property real coverflowDepth: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowDepth > 0)
         ? dockConfig.coverflowDepth : 1.5
 
@@ -106,6 +110,22 @@ Item {
         return t2.times(p).times(r).times(t1)
     }
 
+    // The card is a solid slab of thickness `t`: its FRONT face (tile + icon) sits at z=+t/2,
+    // and one vertical SIDE face (the visible edge) bridges z=+t/2 → -t/2 on the near side, so
+    // a turned card shows real thickness instead of a zero-width plane. Both share world().
+    function coverflowFront(angleDeg, w, h, t) {
+        return coverflowMatrix(angleDeg, w, h).times(Qt.matrix4x4(1,0,0,0, 0,1,0,0, 0,0,1,t/2, 0,0,0,1))
+    }
+    function coverflowSide(angleDeg, w, h, t) {
+        var world = coverflowMatrix(angleDeg, w, h)
+        var pushZ = Qt.matrix4x4(1,0,0,0, 0,1,0,0, 0,0,1,t/2, 0,0,0,1)
+        var ry90  = Qt.matrix4x4(0,0,1,0, 0,1,0,0, -1,0,0,0, 0,0,0,1)   // rotate the strip into the x-z plane
+        if (angleDeg >= 0)
+            return world.times(pushZ).times(ry90)                        // near edge is the left one
+        var pushX = Qt.matrix4x4(1,0,0,w, 0,1,0,0, 0,0,1,0, 0,0,0,1)     // …the right one when turned the other way
+        return world.times(pushX).times(pushZ).times(ry90)
+    }
+
     ListView {
         id: row
         anchors.bottom: parent.bottom               // the bar edge
@@ -156,7 +176,6 @@ Item {
                 ? root.coverflowMaxAngle * Math.max(-1, Math.min(1, (cell.centerX - root.cursorX) / root.influence))
                 : 0
             Behavior on coverflowAngle { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-            transform: Matrix4x4 { matrix: root.coverflowMatrix(cell.coverflowAngle, cell.width, cell.height) }
 
             // Urgent windows bounce for attention (macOS dock idiom): the icon hops
             // up out of the bar and settles, repeating while the window stays urgent.
@@ -186,31 +205,63 @@ Item {
                 transform: Translate { y: cell.bounceY }
             }
 
-            Image {
-                id: icon
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
+            // Cover Flow draws each icon as a solid slab: a darker SIDE face (the thickness)
+            // plus a FRONT face — an opaque tile with the icon on it, pushed forward by t/2.
+            // For every other magnify mode the front matrix is identity and the tile/side are
+            // hidden (width/opacity 0), so the icon renders exactly as a plain bottom image.
+            Rectangle {
+                id: sideFace
+                width: root.coverflow ? root.coverflowThickness : 0
+                height: face.height
+                x: face.x
+                y: face.y
+                antialiasing: true
+                color: "#161922"
+                transform: [
+                    Matrix4x4 { matrix: root.coverflowSide(cell.coverflowAngle, face.width, face.height, root.coverflowThickness) },
+                    Translate { y: cell.bounceY }
+                ]
+            }
+            Item {
+                id: face
                 width: cell.sz
                 height: cell.sz
-                sourceSize.width: Math.ceil(root.peakHeight)
-                sourceSize.height: Math.ceil(root.peakHeight)
-                fillMode: Image.PreserveAspectFit
-                source: cell.appId.length > 0 ? "image://themeicon/" + cell.appId : ""
-                visible: status === Image.Ready
-                transform: Translate { y: cell.bounceY }
+                x: Math.round((cell.width - face.width) / 2)
+                y: cell.height - face.height
                 Behavior on width  { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
                 Behavior on height { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
-            }
+                transform: [
+                    Matrix4x4 { matrix: root.coverflow
+                        ? root.coverflowFront(cell.coverflowAngle, face.width, face.height, root.coverflowThickness)
+                        : root.coverflowMatrix(cell.coverflowAngle, cell.width, cell.height) },
+                    Translate { y: cell.bounceY }
+                ]
 
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                visible: !icon.visible
-                text: cell.appId.length > 0 ? cell.appId.charAt(0).toUpperCase() : "?"
-                color: theme.foreground
-                font.family: theme.fontFamily
-                font.pointSize: Math.max(8, Math.round(cell.sz * 0.4))
-                transform: Translate { y: cell.bounceY }
+                Rectangle {   // opaque card tile — coverflow only
+                    anchors.fill: parent
+                    radius: Math.round(width * 0.18)
+                    color: "#262b38"
+                    antialiasing: true
+                    opacity: root.coverflow ? 1 : 0
+                }
+                Image {
+                    id: icon
+                    anchors.fill: parent
+                    anchors.margins: root.coverflow ? Math.round(face.width * 0.12) : 0
+                    sourceSize.width: Math.ceil(root.peakHeight)
+                    sourceSize.height: Math.ceil(root.peakHeight)
+                    fillMode: Image.PreserveAspectFit
+                    source: cell.appId.length > 0 ? "image://themeicon/" + cell.appId : ""
+                    visible: status === Image.Ready
+                }
+                Text {
+                    anchors.centerIn: parent
+                    visible: !icon.visible
+                    text: cell.appId.length > 0 ? cell.appId.charAt(0).toUpperCase() : "?"
+                    color: theme.foreground
+                    font.family: theme.fontFamily
+                    font.pointSize: Math.max(8, Math.round(cell.sz * 0.4))
+                }
             }
 
             // Focused/running indicator below the icon. "underline" widens an accent
