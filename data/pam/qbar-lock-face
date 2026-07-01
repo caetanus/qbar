@@ -1,0 +1,14 @@
+#%PAM-1.0
+
+# Example face-unlock (Howdy) stack for qbar-lock. Enable it by passing
+#   qbar-lock --face-pam-service qbar-lock-face
+# qbar-lock drives this as a separate, re-arming PAM conversation in parallel with
+# the password and fingerprint (fprintd D-Bus) methods; the first to succeed unlocks.
+#
+# Howdy is OPTIONAL. Install it (e.g. the `howdy` AUR package) and enroll a face
+# (`sudo howdy add`) first, then uncomment the line below. Left commented, this
+# service simply never authenticates (face unlock stays off).
+#
+# auth sufficient pam_howdy.so
+auth include login
+account include login

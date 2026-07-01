@@ -67,6 +67,9 @@ Item {
                     color: "#232a3d"
                     border.color: "#3d4861"
                     border.width: 1
+                    // Hide the whole fallback disc (and its border) once the avatar image
+                    // loads, so nothing bleeds around the masked photo.
+                    opacity: avatarImg.status === Image.Ready ? 0 : 1
                     Text {
                         anchors.centerIn: parent
                         text: root.displayName.length ? root.displayName[0].toUpperCase() : "?"
@@ -165,10 +168,15 @@ Item {
                 }
             }
 
+            // Real auth errors are red; method hints (fingerprint/face) reuse this line
+            // but must NOT look like errors — show them in the normal label colour.
             Text {
                 width: parent.width
                 height: 20
-                color: root.color(root.errorStyle, "color", "#ff8585")
+                color: lockController.error.length > 0
+                    ? root.color(root.errorStyle, "color", "#ff8585")
+                    : root.color(root.labelStyle, "color", "#f4f7ff")
+                opacity: lockController.error.length > 0 ? 1.0 : 0.72
                 font.pixelSize: 13
                 horizontalAlignment: Text.AlignHCenter
                 text: lockController.error.length > 0 ? lockController.error : lockController.message

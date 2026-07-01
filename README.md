@@ -259,6 +259,39 @@ bindsym $mod+t exec qbar-ipc toggle clock
 
 Popups are registered by name; any applet's popup can be exposed by giving its `QBar.Popup` a `name`.
 
+## Lock screen
+
+`qbar-lock` is an optional QML/PAM lock screen (built when `pam` is present). It picks its
+backend automatically: **Wayland** via `ext-session-lock-v1` (a real, secure session lock on
+sway/Hyprland/wlroots) or **X11** via a keyboard+pointer grab. On X11 also set
+`QT_QPA_PLATFORM=xcb` (the `--backend` flag only selects the lock backend, not the Qt platform).
+
+Two faces, chosen with `--lock-style`:
+
+```bash
+qbar-lock                                   # panel (default): avatar, clock, name, password box
+qbar-lock --lock-style ring --theme \
+    /usr/share/qbar/themes/i3lock.css       # i3lock-style: solid screen + a single unlock ring
+```
+
+**Parallel unlock** — password, fingerprint and face run at once; the first to succeed wins:
+
+- **Password** (always on) — the `qbar-lock` PAM service (`pam_unix`).
+- **Fingerprint** (auto-detected) — driven over **fprintd's D-Bus API** (not `pam_fprintd`), so it
+  runs concurrently and cancels cleanly. Disable with `--no-fingerprint`.
+- **Face** (opt-in) — `--face-pam-service qbar-lock-face`, a separate PAM stack using
+  [Howdy](https://github.com/boltgolt/howdy)'s `pam_howdy` (see the example
+  `/etc/pam.d/qbar-lock-face`; commented out until you install and enroll Howdy).
+
+The user's **avatar and real name** come from AccountsService (`org.freedesktop.Accounts`, with
+`~/.face` / GECOS fallbacks), and both faces show clear **Caps Lock** (loud red warning) and
+**Num Lock** indicators.
+
+```bash
+bindsym $mod+Escape exec env QT_QPA_PLATFORM=xcb qbar-lock --lock-style ring    # X11
+bindsym $mod+Escape exec qbar-lock --lock-style ring                           # Wayland
+```
+
 ## Documentation
 
 Full reference docs (Sphinx) live in [`docs/`](docs/) — configuration, CSS theming, and the

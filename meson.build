@@ -496,6 +496,7 @@ if lockscreen_dep.found()
   )
   install_data(
     'data/pam/qbar-lock',
+    'data/pam/qbar-lock-face',
     install_dir: get_option('sysconfdir') / 'pam.d',
   )
   install_data(
