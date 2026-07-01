@@ -147,7 +147,10 @@ Item {
             // Cover Flow: rotate this card around the vertical axis by its signed distance
             // from the cursor (flat at the cursor, ±maxAngle past `influence`). 0 for every
             // other magnify mode (and at rest), so the Matrix4x4 below is then identity.
-            readonly property real coverflowAngle: (root.coverflow && root.hovered && root.cursorX > -9.9e5)
+            // NOT readonly: a Behavior can't animate a read-only property (it's a load-time
+            // error that breaks the whole delegate). The binding still drives the target;
+            // the Behavior eases each change.
+            property real coverflowAngle: (root.coverflow && root.hovered && root.cursorX > -9.9e5)
                 ? root.coverflowMaxAngle * Math.max(-1, Math.min(1, (cell.centerX - root.cursorX) / root.influence))
                 : 0
             Behavior on coverflowAngle { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
