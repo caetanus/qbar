@@ -1,6 +1,7 @@
 <RCC>
   <qresource prefix="/">
     <file>lock/LockScreen.qml</file>
+    <file>lock/LockScreenRing.qml</file>
     <file>qbar/CssFill.qml</file>
     <file>qbar/CssRect.qml</file>
     <file>qbar/CssDropShadow.qml</file>

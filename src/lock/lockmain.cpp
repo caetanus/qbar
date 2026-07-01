@@ -102,12 +102,19 @@ int main(int argc, char *argv[])
                                    QStringLiteral("CSS theme path."),
                                    QStringLiteral("path"),
                                    defaultThemePath());
+    // NB: not "--style" — QGuiApplication reserves -style/--style for the widget style
+    // and strips it from argv before QCommandLineParser sees it.
+    QCommandLineOption styleOption(QStringLiteral("lock-style"),
+                                   QStringLiteral("Lock face: panel (default) or ring (i3lock-style)."),
+                                   QStringLiteral("style"),
+                                   QStringLiteral("panel"));
     parser.addOption(demoOption);
     parser.addOption(authOnStartOption);
     parser.addOption(backendOption);
     parser.addOption(pamServiceOption);
     parser.addOption(passwordPamServiceOption);
     parser.addOption(themeOption);
+    parser.addOption(styleOption);
     parser.process(app);
 
     const bool demoMode = parser.isSet(demoOption);
@@ -122,6 +129,11 @@ int main(int argc, char *argv[])
     cssTheme.load(parser.value(themeOption));
 
     LockController controller(&authenticator, backend.get(), demoMode, parser.value(passwordPamServiceOption));
+
+    // Lock face: the classic panel, or an i3lock-style single ring.
+    const QUrl lockSource = parser.value(styleOption) == QStringLiteral("ring")
+        ? QUrl(QStringLiteral("qrc:/lock/LockScreenRing.qml"))
+        : QUrl(QStringLiteral("qrc:/lock/LockScreen.qml"));
 
     // The lock surface needs an alpha channel so translucent theme layers
     // (e.g. #lockscreen { overlay-color: rgba(...) } or a partly-transparent
@@ -142,7 +154,7 @@ int main(int argc, char *argv[])
         view->setCursor(Qt::ArrowCursor);
         view->rootContext()->setContextProperty(QStringLiteral("lockController"), &controller);
         view->rootContext()->setContextProperty(QStringLiteral("cssTheme"), &cssTheme);
-        view->setSource(QUrl(QStringLiteral("qrc:/lock/LockScreen.qml")));
+        view->setSource(lockSource);
         view->setGeometry(screen->geometry());
         view->showFullScreen();
         view->raise();

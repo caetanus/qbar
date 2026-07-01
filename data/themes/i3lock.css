@@ -1,0 +1,38 @@
+/*
+ * i3lock-style lock theme for qbar-lock. Pair with `--lock-style ring` for the classic
+ * solid-colour screen with a single central unlock ring. The ring colours below map to
+ * the ring's states (idle / verifying / failed / success).
+ */
+
+#lockscreen {
+    background-color: #15161e;
+}
+
+#lock-ring {
+    color: #7aa2f7;          /* idle ring */
+    busy-color: #e0af68;     /* authenticating (spinner) */
+    error-color: #f7768e;    /* failed attempt */
+    success-color: #9ece6a;  /* authenticated */
+    text-color: #a9b1c6;     /* prompt / error line */
+}
+
+/* The panel face reads these too, so the same theme also works with the default face. */
+#auth-panel {
+    background-color: #1a1b26;
+    border-color: #2a2e42;
+    border-width: 1;
+}
+
+#password-input {
+    background-color: #16161e;
+    border-color: #414868;
+    color: #c0caf5;
+}
+
+#lock-label {
+    color: #c0caf5;
+}
+
+#lock-error {
+    color: #f7768e;
+}
