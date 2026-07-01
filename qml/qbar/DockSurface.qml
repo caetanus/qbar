@@ -24,38 +24,18 @@ Item {
     // DockWindow as the `dockConfig` context property):
     //   magnify   — hover effect: "fisheye" (cosine peak under the cursor, default),
     //               "parabolic" (sharper, more pointed peak), "scale" (whole dock grows
-    //               uniformly, no per-icon peak), "coverflow" (macOS Cover Flow: the icon
-    //               under the cursor faces front, neighbours rotate around the vertical
-    //               axis into 3D perspective depth, over a gentle grow), "none".
+    //               uniformly, no per-icon peak), "none" (no growth, static dock).
     //   indicator — focused-window marker: "underline" (accent bar, default), "dot"
     //               (round dots), "pill" (translucent accent tile behind the icon),
     //               "none".
-    //   coverflowAngle — Cover Flow max tilt in degrees (default 58).
-    //   coverflowDepth — Cover Flow perspective distance; smaller = stronger 3D (default 1.2).
-    //   coverflowRest  — resting card fraction of the shader item (headroom for the turn; default 0.66).
     readonly property string magnifyMode: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.magnify)
         ? dockConfig.magnify : "fisheye"
     readonly property string indicatorMode: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.indicator)
         ? dockConfig.indicator : "underline"
     // Whole dock grows on hover for everything except "none".
     readonly property bool magnifies: root.magnifyMode !== "none"
-    // Per-icon peak under the cursor (fisheye/parabolic/coverflow); "scale" grows uniformly.
+    // Per-icon peak under the cursor (fisheye/parabolic); "scale" grows uniformly.
     readonly property bool fisheye: root.magnifyMode === "fisheye" || root.magnifyMode === "parabolic"
-                                    || root.magnifyMode === "coverflow"
-    readonly property bool coverflow: root.magnifyMode === "coverflow"
-    // Cover Flow is drawn by a baked perspective shader (coverflow.frag.qsb, needs qsb at
-    // build). If it wasn't bundled, fall back to the flat fisheye grow instead of a broken card.
-    readonly property bool coverflowReady: root.coverflow
-        && (typeof coverflowShaderAvailable !== "undefined" ? coverflowShaderAvailable : false)
-    // Cover Flow tuning (shader uniforms): `coverflowAngle` max tilt in degrees; `coverflowDepth`
-    // perspective distance (smaller → stronger 3D); `coverflowRest` resting card fraction of the
-    // shader item, leaving headroom for the near vertical edge to grow taller (the 3D-turn cue).
-    readonly property real coverflowMaxAngle: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowAngle > 0)
-        ? dockConfig.coverflowAngle : 58
-    readonly property real coverflowDepth: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowDepth > 0)
-        ? dockConfig.coverflowDepth : 1.2
-    readonly property real coverflowRest: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.coverflowRest > 0)
-        ? dockConfig.coverflowRest : 0.66
 
     property real hoverHeight: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.hoverHeight > 0)
         ? dockConfig.hoverHeight : 48                    // whole-dock baseline height on hover
@@ -90,9 +70,7 @@ Item {
         var t = root.magnifyMode === "parabolic"
             ? (1.0 - u * u)
             : 0.5 * (1.0 + Math.cos(Math.PI * u))
-        // Cover Flow leans on 3D depth, so its grow is gentler than the plain fisheye peak.
-        var peak = root.coverflow ? (root.baseSize + (root.peakHeight - root.baseSize) * 0.5) : root.peakHeight
-        return root.baseSize + (peak - root.baseSize) * t
+        return root.baseSize + (root.peakHeight - root.baseSize) * t
     }
 
     ListView {
@@ -135,14 +113,6 @@ Item {
             readonly property real sz: root.iconSize(centerX)
             opacity: cell.focused || cell.urgent ? 1.0 : 0.72
 
-            // Cover Flow turn angle (RADIANS, for the shader): signed distance from the cursor,
-            // flat at the cursor, ±maxAngle past `influence`. 0 when not turning. NOT readonly —
-            // a Behavior can't animate a read-only property (load-time error that breaks the cell).
-            property real coverflowAngle: (root.coverflowReady && root.hovered && root.cursorX > -9.9e5)
-                ? (root.coverflowMaxAngle * Math.PI / 180) * Math.max(-1, Math.min(1, (cell.centerX - root.cursorX) / root.influence))
-                : 0
-            Behavior on coverflowAngle { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-
             // Urgent windows bounce for attention (macOS dock idiom): the icon hops
             // up out of the bar and settles, repeating while the window stays urgent.
             property real bounceY: 0
@@ -171,69 +141,31 @@ Item {
                 transform: Translate { y: cell.bounceY }
             }
 
-            // The icon "face": for Cover Flow it's an opaque rounded tile with the icon (the
-            // card the shader turns); otherwise just the icon, bottom-anchored, drawn directly.
-            // When coverflow is active, the ShaderEffectSource below textures this face and
-            // hides it in-scene (hideSource), and the ShaderEffect draws it turned in 3D.
-            Item {
-                id: face
+            Image {
+                id: icon
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
                 width: cell.sz
                 height: cell.sz
-                x: Math.round((cell.width - face.width) / 2)
-                y: cell.height - face.height
+                sourceSize.width: Math.ceil(root.peakHeight)
+                sourceSize.height: Math.ceil(root.peakHeight)
+                fillMode: Image.PreserveAspectFit
+                source: cell.appId.length > 0 ? "image://themeicon/" + cell.appId : ""
+                visible: status === Image.Ready
+                transform: Translate { y: cell.bounceY }
                 Behavior on width  { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
                 Behavior on height { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
-                transform: Translate { y: cell.bounceY }
-
-                Rectangle {   // opaque card tile — coverflow only
-                    anchors.fill: parent
-                    radius: Math.round(width * 0.2)
-                    color: "#262b38"
-                    antialiasing: true
-                    opacity: root.coverflowReady ? 1 : 0
-                }
-                Image {
-                    id: icon
-                    anchors.fill: parent
-                    anchors.margins: root.coverflowReady ? Math.round(face.width * 0.14) : 0
-                    sourceSize.width: Math.ceil(root.peakHeight)
-                    sourceSize.height: Math.ceil(root.peakHeight)
-                    fillMode: Image.PreserveAspectFit
-                    source: cell.appId.length > 0 ? "image://themeicon/" + cell.appId : ""
-                    visible: status === Image.Ready
-                }
-                Text {
-                    anchors.centerIn: parent
-                    visible: !icon.visible
-                    text: cell.appId.length > 0 ? cell.appId.charAt(0).toUpperCase() : "?"
-                    color: theme.foreground
-                    font.family: theme.fontFamily
-                    font.pointSize: Math.max(8, Math.round(cell.sz * 0.4))
-                }
             }
 
-            // Cover Flow: turn the tile via the perspective shader. The shader item is larger
-            // than the tile by 1/rest so the near vertical edge has headroom to grow taller,
-            // and is centred on the tile so the tile (drawn at `rest`) sits at the bar edge.
-            Loader {
-                active: root.coverflowReady
-                readonly property real cfSize: Math.round(cell.sz / root.coverflowRest)
-                width: cfSize
-                height: cfSize
-                x: Math.round((cell.width - cfSize) / 2)
-                y: Math.round(cell.height - (cfSize + cell.sz) / 2)
-                sourceComponent: ShaderEffect {
-                    property variant source: ShaderEffectSource {
-                        sourceItem: face
-                        hideSource: true
-                        live: true
-                    }
-                    property real angle: cell.coverflowAngle
-                    property real depth: root.coverflowDepth
-                    property real rest: root.coverflowRest
-                    fragmentShader: "qrc:/qbar/shaders/coverflow.frag.qsb"
-                    transform: Translate { y: cell.bounceY }
-                }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                visible: !icon.visible
+                text: cell.appId.length > 0 ? cell.appId.charAt(0).toUpperCase() : "?"
+                color: theme.foreground
+                font.family: theme.fontFamily
+                font.pointSize: Math.max(8, Math.round(cell.sz * 0.4))
+                transform: Translate { y: cell.bounceY }
             }
 
             // Focused/running indicator below the icon. "underline" widens an accent

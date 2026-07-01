@@ -745,7 +745,7 @@ void BarWindow::reloadConfigFromDisk()
         rootContext()->setContextProperty(QStringLiteral("customTools"), m_config.customTools);
     }
 
-    // Dock options (magnify/indicator/coverflow/heights): forward to the live dock so a
+    // Dock options (magnify/indicator/heights): forward to the live dock so a
     // config edit re-styles it without a restart.
     if (fresh.dock != m_config.dock) {
         m_config.dock = fresh.dock;

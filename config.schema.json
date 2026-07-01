@@ -62,13 +62,10 @@
       "additionalProperties": false,
       "description": "Dock applet animation options.",
       "properties": {
-        "magnify": { "type": "string", "enum": ["fisheye", "parabolic", "scale", "coverflow", "none"], "description": "Hover effect: cosine fisheye (default), sharper parabolic peak, uniform whole-dock scale, macOS coverflow (3D vertical-axis rotation), or no growth." },
+        "magnify": { "type": "string", "enum": ["fisheye", "parabolic", "scale", "none"], "description": "Hover effect: cosine fisheye (default), sharper parabolic peak, uniform whole-dock scale, or no growth." },
         "indicator": { "type": "string", "enum": ["underline", "dot", "pill", "none"], "description": "Focused-window marker: accent underline (default), round dot, translucent tile behind the icon, or none." },
         "hoverHeight": { "type": "integer", "description": "Whole-dock baseline height on hover, px (default 48)." },
-        "peakHeight": { "type": "integer", "description": "Cursor-focused fisheye peak height, px (default round(hoverHeight * 1.5))." },
-        "coverflowAngle": { "type": "number", "description": "Max tilt in degrees for the coverflow magnify mode (default 58)." },
-        "coverflowDepth": { "type": "number", "description": "Coverflow perspective distance (shader); smaller = stronger 3D (default 1.2)." },
-        "coverflowRest": { "type": "number", "description": "Coverflow resting card fraction of its shader cell; leaves headroom for the 3D turn (default 0.66)." }
+        "peakHeight": { "type": "integer", "description": "Cursor-focused fisheye peak height, px (default round(hoverHeight * 1.5))." }
       }
     },
     "cpu": { "$ref": "#/$defs/display" },

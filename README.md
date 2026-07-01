@@ -178,21 +178,15 @@ Its hover animation and focused-window marker are configurable via a `"dock"` bl
 
 ```jsonc
 "dock": {
-  "magnify":   "fisheye",   // "fisheye" | "parabolic" | "scale" | "coverflow" | "none"
+  "magnify":   "fisheye",   // "fisheye" | "parabolic" | "scale" | "none"
   "indicator": "underline"  // "underline" | "dot" | "pill" | "none"
   // "hoverHeight": 48,      // whole-dock height on hover (px)
-  // "peakHeight":  72,      // cursor-focused fisheye peak (px)
-  // "coverflowAngle": 58,   // coverflow max tilt (degrees)
-  // "coverflowDepth": 1.2,  // coverflow perspective — smaller = stronger 3D
-  // "coverflowRest":  0.66  // coverflow resting card fraction (turn headroom)
+  // "peakHeight":  72       // cursor-focused fisheye peak (px)
 }
 ```
 
 `magnify` picks the hover effect — a cosine **fisheye** (default), a sharper
-**parabolic** peak, a uniform whole-dock **scale**, a macOS-style **coverflow**
-(the cursor's icon faces front while neighbours turn around the vertical axis into
-3D perspective depth — a baked RHI shader, `coverflowAngle`/`coverflowDepth`/`coverflowRest`
-tunable; falls back to a flat grow if the shader wasn't built), or **none** (static).
+**parabolic** peak, a uniform whole-dock **scale**, or **none** (static).
 `indicator` picks the focused-window marker — an accent **underline** (default),
 a round **dot**, a translucent **pill** behind the icon, or **none**.
 

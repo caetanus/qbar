@@ -44,7 +44,7 @@ public:
     // Proxy gone / reserved width collapsed to 0 → hide the dock window.
     Q_INVOKABLE void hideDock();
 
-    // Live config reload: swap the dock options (magnify/indicator/heights/coverflow…)
+    // Live config reload: swap the dock options (magnify/indicator/heights)
     // and re-forward them to the running surface so changes take effect without a restart.
     void setDockConfig(const QVariantMap &dock);
 

@@ -97,11 +97,8 @@
     "network": { "format": ["cycle", "graph"], "text": "net" },
     // "taskbar": { "scope": "all", "middleClickClose": true, "rightClickMenu": true },
     // "dock": { "magnify": "fisheye", "indicator": "underline" },
-    //   magnify:   "fisheye" | "parabolic" | "scale" | "coverflow" | "none"
+    //   magnify:   "fisheye" | "parabolic" | "scale" | "none"
     //   indicator: "underline" | "dot" | "pill" | "none"
-    //   coverflowAngle: max tilt in degrees for "coverflow" (default 58)
-    //   coverflowDepth: perspective distance for "coverflow" (shader); smaller = stronger 3D (default 1.2)
-    //   coverflowRest:  resting card fraction of its cell — headroom for the 3D turn (default 0.66)
 
     // ── Custom tools ──────────────────────────────────────────────────────────
     // Two kinds:
