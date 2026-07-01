@@ -178,7 +178,7 @@ Its hover animation and focused-window marker are configurable via a `"dock"` bl
 
 ```jsonc
 "dock": {
-  "magnify":   "fisheye",   // "fisheye" | "parabolic" | "scale" | "none"
+  "magnify":   "fisheye",   // "fisheye" | "parabolic" | "scale" | "coverflow" | "none"
   "indicator": "underline"  // "underline" | "dot" | "pill" | "none"
   // "hoverHeight": 48,      // whole-dock height on hover (px)
   // "peakHeight":  72       // cursor-focused fisheye peak (px)
@@ -186,7 +186,9 @@ Its hover animation and focused-window marker are configurable via a `"dock"` bl
 ```
 
 `magnify` picks the hover effect — a cosine **fisheye** (default), a sharper
-**parabolic** peak, a uniform whole-dock **scale**, or **none** (static).
+**parabolic** peak, a uniform whole-dock **scale**, a macOS-style **coverflow**
+(the cursor's icon faces front while neighbours rotate around the vertical axis
+into 3D perspective depth), or **none** (static).
 `indicator` picks the focused-window marker — an accent **underline** (default),
 a round **dot**, a translucent **pill** behind the icon, or **none**.
 

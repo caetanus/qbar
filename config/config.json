@@ -97,7 +97,7 @@
     "network": { "format": ["cycle", "graph"], "text": "net" },
     // "taskbar": { "scope": "all", "middleClickClose": true, "rightClickMenu": true },
     // "dock": { "magnify": "fisheye", "indicator": "underline" },
-    //   magnify:   "fisheye" | "parabolic" | "scale" | "none"
+    //   magnify:   "fisheye" | "parabolic" | "scale" | "coverflow" | "none"
     //   indicator: "underline" | "dot" | "pill" | "none"
 
     // ── Custom tools ──────────────────────────────────────────────────────────

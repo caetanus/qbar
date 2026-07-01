@@ -24,7 +24,9 @@ Item {
     // DockWindow as the `dockConfig` context property):
     //   magnify   — hover effect: "fisheye" (cosine peak under the cursor, default),
     //               "parabolic" (sharper, more pointed peak), "scale" (whole dock grows
-    //               uniformly, no per-icon peak), "none" (no growth, static dock).
+    //               uniformly, no per-icon peak), "coverflow" (macOS Cover Flow: the icon
+    //               under the cursor faces front, neighbours rotate around the vertical
+    //               axis into 3D perspective depth, over a gentle grow), "none".
     //   indicator — focused-window marker: "underline" (accent bar, default), "dot"
     //               (round dots), "pill" (translucent accent tile behind the icon),
     //               "none".
@@ -34,8 +36,14 @@ Item {
         ? dockConfig.indicator : "underline"
     // Whole dock grows on hover for everything except "none".
     readonly property bool magnifies: root.magnifyMode !== "none"
-    // Per-icon peak under the cursor (fisheye/parabolic); "scale" grows uniformly.
+    // Per-icon peak under the cursor (fisheye/parabolic/coverflow); "scale" grows uniformly.
     readonly property bool fisheye: root.magnifyMode === "fisheye" || root.magnifyMode === "parabolic"
+                                    || root.magnifyMode === "coverflow"
+    readonly property bool coverflow: root.magnifyMode === "coverflow"
+    // Cover Flow tuning: neighbours rotate up to ±maxAngle around the vertical axis, with a
+    // perspective divide at `depth` px so the far edge genuinely recedes (real 3D, not affine).
+    property real coverflowMaxAngle: 58
+    property real coverflowDepth: 650
 
     property real hoverHeight: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.hoverHeight > 0)
         ? dockConfig.hoverHeight : 48                    // whole-dock baseline height on hover
@@ -70,7 +78,25 @@ Item {
         var t = root.magnifyMode === "parabolic"
             ? (1.0 - u * u)
             : 0.5 * (1.0 + Math.cos(Math.PI * u))
-        return root.baseSize + (root.peakHeight - root.baseSize) * t
+        // Cover Flow leans on 3D depth, so its grow is gentler than the plain fisheye peak.
+        var peak = root.coverflow ? (root.baseSize + (root.peakHeight - root.baseSize) * 0.5) : root.peakHeight
+        return root.baseSize + (peak - root.baseSize) * t
+    }
+
+    // Cover Flow transform for a cell: rotate `angleDeg` around the vertical (Y) axis about
+    // the cell's horizontal centre, with a perspective divide so the receding edge shrinks.
+    // Composed as translate-to-centre · perspective · rotateY · translate-back. angle 0 →
+    // identity, so attaching this unconditionally is a no-op for the other magnify modes.
+    function coverflowMatrix(angleDeg, w, h) {
+        if (!angleDeg)
+            return Qt.matrix4x4(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1)
+        var a = angleDeg * Math.PI / 180
+        var cx = w / 2, cy = h / 2, c = Math.cos(a), s = Math.sin(a)
+        var t1 = Qt.matrix4x4(1,0,0,-cx, 0,1,0,-cy, 0,0,1,0, 0,0,0,1)
+        var r  = Qt.matrix4x4(c,0,s,0, 0,1,0,0, -s,0,c,0, 0,0,0,1)
+        var p  = Qt.matrix4x4(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,-1 / root.coverflowDepth,1)
+        var t2 = Qt.matrix4x4(1,0,0,cx, 0,1,0,cy, 0,0,1,0, 0,0,0,1)
+        return t2.times(p).times(r).times(t1)
     }
 
     ListView {
@@ -112,6 +138,15 @@ Item {
             readonly property real centerX: x + width / 2   // content-local, stable (uniform slots)
             readonly property real sz: root.iconSize(centerX)
             opacity: cell.focused || cell.urgent ? 1.0 : 0.72
+
+            // Cover Flow: rotate this card around the vertical axis by its signed distance
+            // from the cursor (flat at the cursor, ±maxAngle past `influence`). 0 for every
+            // other magnify mode (and at rest), so the Matrix4x4 below is then identity.
+            readonly property real coverflowAngle: (root.coverflow && root.hovered && root.cursorX > -9.9e5)
+                ? root.coverflowMaxAngle * Math.max(-1, Math.min(1, (cell.centerX - root.cursorX) / root.influence))
+                : 0
+            Behavior on coverflowAngle { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            transform: Matrix4x4 { matrix: root.coverflowMatrix(cell.coverflowAngle, cell.width, cell.height) }
 
             // Urgent windows bounce for attention (macOS dock idiom): the icon hops
             // up out of the bar and settles, repeating while the window stays urgent.
