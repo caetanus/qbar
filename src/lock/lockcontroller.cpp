@@ -1,6 +1,13 @@
 #include "lockcontroller.h"
 
 #include <QCoreApplication>
+#include <QTimer>
+
+namespace {
+// Delay before re-arming a face (howdy) attempt after it fails, so we don't spin the
+// camera flat out. Fingerprint re-arms itself via fprintd's VerifyStatus.
+constexpr int kFaceRetryMs = 1500;
+} // namespace
 
 LockController::LockController(PamAuthenticator *authenticator,
                                LockBackend *backend,
@@ -22,16 +29,25 @@ LockController::LockController(PamAuthenticator *authenticator,
             setMessage(message);
         });
         connect(m_authenticator, &PamAuthenticator::authenticationSucceeded, this, [this]() {
-            if (m_backend != nullptr) {
-                m_backend->unlock();
-            }
-            emit unlocked();
-            QCoreApplication::quit();
+            succeed();
         });
         connect(m_authenticator, &PamAuthenticator::authenticationFailed, this, [this](const QString &reason) {
             setError(reason);
         });
     }
+
+    // Fingerprint (fprintd/D-Bus): wins immediately on match; cancelled on any other win.
+    connect(&m_fingerprint, &FprintAuthenticator::authenticationSucceeded, this, [this]() {
+        succeed();
+    });
+    connect(&m_fingerprint, &FprintAuthenticator::activeChanged, this, [this](bool active) {
+        setFingerprintActive(active);
+    });
+    connect(&m_fingerprint, &FprintAuthenticator::statusChanged, this, [this](const QString &status) {
+        if (!m_succeeded) {
+            setMessage(status);
+        }
+    });
 
     if (m_backend != nullptr) {
         connect(m_backend, &LockBackend::locked, this, [this]() {
@@ -45,6 +61,30 @@ LockController::LockController(PamAuthenticator *authenticator,
             }
         });
     }
+}
+
+void LockController::setFaceAuthenticator(PamAuthenticator *face)
+{
+    m_face = face;
+    if (m_face == nullptr) {
+        return;
+    }
+    // Only the pass/fail outcome matters for face — its prompts/messages must not clobber
+    // the primary (password) prompt line.
+    connect(m_face, &PamAuthenticator::authenticationSucceeded, this, [this]() {
+        succeed();
+    });
+    connect(m_face, &PamAuthenticator::authenticationFailed, this, [this]() {
+        if (!m_faceRunning || m_succeeded) {
+            return;
+        }
+        // Re-arm: keep watching the camera until another method wins.
+        QTimer::singleShot(kFaceRetryMs, this, [this]() {
+            if (m_faceRunning && !m_succeeded && m_face != nullptr) {
+                m_face->authenticate(QString());
+            }
+        });
+    });
 }
 
 QString LockController::user() const
@@ -66,6 +106,7 @@ void LockController::start()
 {
     if (m_demoMode) {
         setMessage(QStringLiteral("Demo mode"));
+        startMethods(); // exercise fingerprint/face wiring in demo too, but never auto-unlock
         return;
     }
     if (m_backend == nullptr) {
@@ -79,14 +120,57 @@ void LockController::start()
         return;
     }
     m_backend->lock();
+    startMethods();
+}
+
+void LockController::startMethods()
+{
+    // Fingerprint: start the continuous fprintd verify loop if a reader is present.
+    if (m_fingerprintEnabled && FprintAuthenticator::isAvailable()) {
+        m_fingerprint.setUser(user());
+        m_fingerprint.start();
+    }
+    // Face: kick the first howdy attempt; it re-arms via authenticationFailed.
+    if (m_face != nullptr) {
+        m_faceRunning = true;
+        setFaceActive(true);
+        m_face->authenticate(QString());
+    }
+}
+
+void LockController::stopMethods()
+{
+    m_faceRunning = false;
+    setFaceActive(false);
+    m_fingerprint.stop();
+    setFingerprintActive(false);
+}
+
+void LockController::succeed()
+{
+    if (m_succeeded) {
+        return; // first method already won
+    }
+    m_succeeded = true;
+    stopMethods();
+    setMessage(QStringLiteral("Unlocked"));
+    if (m_demoMode) {
+        emit unlocked();
+        QCoreApplication::quit();
+        return;
+    }
+    if (m_backend != nullptr) {
+        m_backend->unlock();
+    }
+    emit unlocked();
+    QCoreApplication::quit();
 }
 
 void LockController::submitPassword(const QString &password)
 {
     setError({});
     if (m_demoMode) {
-        emit unlocked();
-        QCoreApplication::quit();
+        succeed();
         return;
     }
     if (m_authenticator != nullptr) {
@@ -101,6 +185,7 @@ void LockController::submitPassword(const QString &password)
 void LockController::cancel()
 {
     if (m_demoMode) {
+        stopMethods();
         QCoreApplication::quit();
     }
 }
@@ -130,4 +215,22 @@ void LockController::setError(const QString &error)
     }
     m_error = error;
     emit errorChanged();
+}
+
+void LockController::setFingerprintActive(bool active)
+{
+    if (m_fingerprintActive == active) {
+        return;
+    }
+    m_fingerprintActive = active;
+    emit fingerprintActiveChanged();
+}
+
+void LockController::setFaceActive(bool active)
+{
+    if (m_faceActive == active) {
+        return;
+    }
+    m_faceActive = active;
+    emit faceActiveChanged();
 }

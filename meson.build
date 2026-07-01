@@ -435,6 +435,7 @@ if lockscreen_dep.found()
     dependency('Qt6Gui'),
     dependency('Qt6Qml'),
     dependency('Qt6Quick'),
+    dependency('Qt6DBus'),
     lockscreen_dep,
   ]
   if x11_dep.found()
@@ -455,6 +456,7 @@ if lockscreen_dep.found()
     'src/lock/lockbackend.h',
     'src/lock/lockcontroller.h',
     'src/lock/pamauthenticator.h',
+    'src/lock/fprintauthenticator.h',
     'src/lock/waylandlockbackend.h',
     'src/lock/x11lockbackend.h',
     'src/css/csstheme.h',
@@ -470,6 +472,7 @@ if lockscreen_dep.found()
       'src/lock/lockbackend.cpp',
       'src/lock/lockcontroller.cpp',
       'src/lock/pamauthenticator.cpp',
+      'src/lock/fprintauthenticator.cpp',
       'src/lock/waylandlockbackend.cpp',
       'src/lock/x11lockbackend.cpp',
       'src/css/csstheme.cpp',

@@ -108,6 +108,12 @@ int main(int argc, char *argv[])
                                    QStringLiteral("Lock face: panel (default) or ring (i3lock-style)."),
                                    QStringLiteral("style"),
                                    QStringLiteral("panel"));
+    QCommandLineOption noFingerprintOption(QStringLiteral("no-fingerprint"),
+                                           QStringLiteral("Disable fingerprint (fprintd) unlock."));
+    QCommandLineOption facePamServiceOption(QStringLiteral("face-pam-service"),
+                                            QStringLiteral("PAM service for face unlock (e.g. a pam_howdy stack); "
+                                                           "unset disables face unlock."),
+                                            QStringLiteral("service"));
     parser.addOption(demoOption);
     parser.addOption(authOnStartOption);
     parser.addOption(backendOption);
@@ -115,6 +121,8 @@ int main(int argc, char *argv[])
     parser.addOption(passwordPamServiceOption);
     parser.addOption(themeOption);
     parser.addOption(styleOption);
+    parser.addOption(noFingerprintOption);
+    parser.addOption(facePamServiceOption);
     parser.process(app);
 
     const bool demoMode = parser.isSet(demoOption);
@@ -129,6 +137,17 @@ int main(int argc, char *argv[])
     cssTheme.load(parser.value(themeOption));
 
     LockController controller(&authenticator, backend.get(), demoMode, parser.value(passwordPamServiceOption));
+    controller.setFingerprintEnabled(!parser.isSet(noFingerprintOption));
+
+    // Face unlock (howdy): a separate PAM authenticator on its own service, driven as a
+    // continuous re-arming loop by the controller. Only enabled when a service is given.
+    PamAuthenticator faceAuthenticator;
+    const QString faceService = parser.value(facePamServiceOption).trimmed();
+    if (!faceService.isEmpty()) {
+        faceAuthenticator.setService(faceService);
+        faceAuthenticator.setUser(authenticator.user());
+        controller.setFaceAuthenticator(&faceAuthenticator);
+    }
 
     // Lock face: the classic panel, or an i3lock-style single ring.
     const QUrl lockSource = parser.value(styleOption) == QStringLiteral("ring")
