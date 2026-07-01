@@ -29,6 +29,11 @@ Item {
     readonly property color busyColor: root.styleColor(root.ringStyle, "busy-color", "#e0af68")
     readonly property color errorColor: root.styleColor(root.ringStyle, "error-color", "#e0574b")
     readonly property color okColor: root.styleColor(root.ringStyle, "success-color", "#9ece6a")
+    // Per-keystroke arc highlight (i3lock): a BRIGHT segment for a typed char (must
+    // contrast the ring itself, which is idleColor) and a distinct amber for a delete.
+    // Both opaque — the fade is done via Canvas globalAlpha.
+    readonly property color keypressColor: root.styleColor(root.ringStyle, "keypress-color", Qt.lighter(root.idleColor, 1.6))
+    readonly property color keypressClearColor: root.styleColor(root.ringStyle, "keypress-clear-color", root.busyColor)
 
     // Solid backdrop (theme #lockscreen background-color, else near-black like i3lock).
     QBar.CssFill {
@@ -62,6 +67,72 @@ Item {
                         : root.idleColor
             opacity: 0.92
             Behavior on border.color { ColorAnimation { duration: 180 } }
+        }
+
+        // i3lock per-keystroke flourish: each key lights a randomly-placed arc segment
+        // ("pizza slice") on the ring that fades out. Drawn with Canvas (Context2D/QPainter)
+        // — NOT QtQuick.Shapes, whose CurveRenderer would paint the fading (alpha) stroke
+        // black. Per-segment alpha via ctx.globalAlpha; several can overlap while typing fast.
+        Canvas {
+            id: arcCanvas
+            anchors.fill: parent
+            antialiasing: true
+            property var segments: []   // each: { start, sweep, alpha, color }
+
+            function addSegment(color) {
+                var start = Math.random() * 2 * Math.PI
+                var sweep = (35 + Math.random() * 20) * Math.PI / 180
+                var segs = segments
+                segs.push({ start: start, sweep: sweep, alpha: 1.0, color: color })
+                if (segs.length > 6)
+                    segs.shift()
+                segments = segs
+                requestPaint()
+                fadeTimer.start()
+            }
+
+            onPaint: {
+                var ctx = getContext("2d")
+                ctx.reset()
+                var cx = width / 2
+                var cy = height / 2
+                // Centre the stroke on the ring border (match ringCircle line width/radius).
+                var r = width / 2 - ringCircle.border.width / 2
+                ctx.lineWidth = ringCircle.border.width
+                ctx.lineCap = "round"
+                for (var i = 0; i < segments.length; ++i) {
+                    var s = segments[i]
+                    if (s.alpha <= 0)
+                        continue
+                    ctx.globalAlpha = s.alpha
+                    ctx.strokeStyle = s.color
+                    ctx.beginPath()
+                    ctx.arc(cx, cy, r, s.start, s.start + s.sweep, false)
+                    ctx.stroke()
+                }
+            }
+
+            Timer {
+                id: fadeTimer
+                interval: 16
+                repeat: true
+                running: false
+                onTriggered: {
+                    var segs = arcCanvas.segments
+                    var alive = false
+                    for (var i = 0; i < segs.length; ++i) {
+                        segs[i].alpha -= 0.035   // ~450ms fade at 60fps
+                        if (segs[i].alpha > 0)
+                            alive = true
+                    }
+                    arcCanvas.segments = segs
+                    arcCanvas.requestPaint()
+                    if (!alive) {
+                        arcCanvas.segments = []
+                        running = false
+                    }
+                }
+            }
         }
 
         // Orbiting dot while authenticating.
@@ -183,10 +254,15 @@ Item {
         opacity: 0
         focus: true
         echoMode: TextInput.Password
+        property int prevLength: 0
         onTextChanged: {
             // Pulse the ring on any edit (type or delete).
             ring.scale = 1.09
             pulseReset.restart()
+            // Light a random arc segment: bright for a typed char, dimmer for a delete.
+            var deleted = text.length < prevLength
+            prevLength = text.length
+            arcCanvas.addSegment(deleted ? root.keypressClearColor : root.keypressColor)
         }
         onAccepted: {
             var password = text
