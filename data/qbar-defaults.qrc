@@ -35,6 +35,9 @@
     <file alias="widgets/BitcoinPopup.qml">../config/widgets/BitcoinPopup.qml</file>
     <file alias="widgets/Crypto.qml">../config/widgets/Crypto.qml</file>
     <file alias="widgets/CryptoPopup.qml">../config/widgets/CryptoPopup.qml</file>
+    <file alias="widgets/crypto-icons/btc.svg">../config/widgets/crypto-icons/btc.svg</file>
+    <file alias="widgets/crypto-icons/eth.svg">../config/widgets/crypto-icons/eth.svg</file>
+    <file alias="widgets/crypto-icons/xmr.svg">../config/widgets/crypto-icons/xmr.svg</file>
     <file alias="widgets/ExampleWidget.qml">../config/widgets/ExampleWidget.qml</file>
     <file alias="widgets/SpeedTest.qml">../config/widgets/SpeedTest.qml</file>
     <file alias="widgets/SpeedTestPopup.qml">../config/widgets/SpeedTestPopup.qml</file>

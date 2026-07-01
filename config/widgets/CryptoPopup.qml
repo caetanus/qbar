@@ -32,9 +32,9 @@ Item {
 
     // From the widget's payload.
     property var ticks: [
-        { "label": "BTC", "symbol": "BTCUSDT", "base": "BTC", "quote": "USDT", "icon": "₿", "color": "#f7931a" },
-        { "label": "ETH", "symbol": "ETHUSDT", "base": "ETH", "quote": "USDT", "icon": "Ξ", "color": "#627eea" },
-        { "label": "XMR", "symbol": "XMRUSDT", "base": "XMR", "quote": "USDT", "icon": "ɱ", "color": "#ff6600" }
+        { "label": "BTC", "symbol": "BTCUSDT", "base": "BTC", "quote": "USDT", "icon": "crypto-icons/btc.svg", "color": "#f7931a" },
+        { "label": "ETH", "symbol": "ETHUSDT", "base": "ETH", "quote": "USDT", "icon": "crypto-icons/eth.svg", "color": "#627eea" },
+        { "label": "XMR", "symbol": "XMRUSDT", "base": "XMR", "quote": "USDT", "icon": "crypto-icons/xmr.svg", "color": "#ff6600" }
     ]
     property int activeIndex: 0
     property real price: 0
@@ -1070,7 +1070,9 @@ Item {
         property: "title"
         when: (typeof detachedWindow !== "undefined") && detachedWindow && root.hostWindow !== null
         value: root.price > 0
-            ? (root.activeTick.icon + " " + root.activeBase + "/" + root.activeQuote + "  $" + root.price.toFixed(2) + "  "
+            // Drop the icon from the window title when it's an image path (only glyphs read as text).
+            ? ((/\.(svg|png|jpe?g)$/i.test(String(root.activeTick.icon)) ? "" : root.activeTick.icon + " ")
+               + root.activeBase + "/" + root.activeQuote + "  $" + root.price.toFixed(2) + "  "
                + (root.up ? "▲ " : "▼ ") + root.changePct.toFixed(2) + "%")
             : "QBar Crypto Applet — " + root.activeBase + "/" + root.activeQuote
     }

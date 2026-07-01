@@ -6,11 +6,13 @@ import "qrc:/qbar/Fetch.js" as Fetch
 // "custom/crypto": {
 //   "source": "widgets/Crypto.qml",
 //   "ticks": [
-//     { "label": "BTC", "symbol": "BTCUSDT", "base": "BTC", "quote": "USDT", "icon": "₿", "color": "#f7931a" },
-//     { "label": "ETH", "symbol": "ETHUSDT", "base": "ETH", "quote": "USDT", "icon": "Ξ", "color": "#627eea" },
-//     { "label": "XMR", "symbol": "XMRUSDT", "base": "XMR", "quote": "USDT", "icon": "ɱ", "color": "#ff6600" }
+//     { "label": "BTC", "symbol": "BTCUSDT", "base": "BTC", "quote": "USDT", "icon": "crypto-icons/btc.svg" },
+//     { "label": "ETH", "symbol": "ETHUSDT", "base": "ETH", "quote": "USDT", "icon": "crypto-icons/eth.svg" },
+//     { "label": "XMR", "symbol": "XMRUSDT", "base": "XMR", "quote": "USDT", "icon": "crypto-icons/xmr.svg" }
 //   ]
 // }
+// `icon` may be an SVG/PNG path (resolved relative to this widget's folder — edit the
+// SVGs to recolor) or a literal glyph character (e.g. "₿"); glyphs use `color`.
 QBar.CssRect {
     id: root
 
@@ -20,9 +22,9 @@ QBar.CssRect {
     readonly property var configuredTicks: widgetConfig.ticks && widgetConfig.ticks.length
         ? widgetConfig.ticks
         : [
-            { "label": "BTC", "symbol": "BTCUSDT", "base": "BTC", "quote": "USDT", "icon": "₿", "color": "#f7931a" },
-            { "label": "ETH", "symbol": "ETHUSDT", "base": "ETH", "quote": "USDT", "icon": "Ξ", "color": "#627eea" },
-            { "label": "XMR", "symbol": "XMRUSDT", "base": "XMR", "quote": "USDT", "icon": "ɱ", "color": "#ff6600" }
+            { "label": "BTC", "symbol": "BTCUSDT", "base": "BTC", "quote": "USDT", "icon": "crypto-icons/btc.svg", "color": "#f7931a" },
+            { "label": "ETH", "symbol": "ETHUSDT", "base": "ETH", "quote": "USDT", "icon": "crypto-icons/eth.svg", "color": "#627eea" },
+            { "label": "XMR", "symbol": "XMRUSDT", "base": "XMR", "quote": "USDT", "icon": "crypto-icons/xmr.svg", "color": "#ff6600" }
         ]
     property int activeIndex: 0
     readonly property string resolvedCssId: toolId === "custom/btc" ? "custom-btc" : "custom-crypto"
@@ -41,6 +43,17 @@ QBar.CssRect {
     readonly property bool up: changePct >= 0
     readonly property color tint: up ? "#33b864" : "#e8546a"
     readonly property var tick: normalizedTick(activeIndex)
+    // An icon is an image when it points at an SVG/PNG file; otherwise it's a literal glyph.
+    readonly property bool iconIsImage: /\.(svg|png|jpe?g)$/i.test(String(tick.icon))
+    function iconUrl(spec) {
+        var s = String(spec || "")
+        if (s === "")
+            return ""
+        // Absolute paths / explicit schemes pass through; bare names resolve next to this widget.
+        if (s.charAt(0) === "/" || /^(qrc|file|https?|image|data):/.test(s))
+            return s
+        return Qt.resolvedUrl(s)
+    }
 
     property bool loaded: false
     property bool stale: false
@@ -136,13 +149,31 @@ QBar.CssRect {
         anchors.centerIn: parent
         spacing: 5
 
-        Text {
+        // Icon: an SVG/PNG when the tick's `icon` is an image path, else the raw glyph.
+        Loader {
             anchors.verticalCenter: parent.verticalCenter
-            text: root.tick.icon
-            color: root.tick.color
-            font.family: theme.fontFamily
-            font.pointSize: theme.fontSize
-            font.bold: true
+            sourceComponent: root.iconIsImage ? iconImageComponent : iconGlyphComponent
+        }
+        Component {
+            id: iconGlyphComponent
+            Text {
+                text: root.tick.icon
+                color: root.tick.color
+                font.family: theme.fontFamily
+                font.pointSize: theme.fontSize
+                font.bold: true
+            }
+        }
+        Component {
+            id: iconImageComponent
+            Image {
+                // sourceSize drives both the rasterisation and the item's implicit size,
+                // so the Loader (and the Row) size to the icon without blur.
+                source: root.iconUrl(root.tick.icon)
+                sourceSize.height: Math.round(theme.fontSize * 1.9)
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+            }
         }
         Text {
             anchors.verticalCenter: parent.verticalCenter
