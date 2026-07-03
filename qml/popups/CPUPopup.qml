@@ -12,6 +12,11 @@ Item {
 
     property var cpu: null
     property string popupMode: (typeof popupData !== "undefined" && popupData && popupData.popupMode !== undefined) ? String(popupData.popupMode) : "cpu"
+
+    // Hold the model's details refcount while this popup lives: the per-process scan
+    // runs at the fast cadence only while someone is actually looking at it.
+    Component.onCompleted: if (cpu) cpu.acquireDetails()
+    Component.onDestruction: if (cpu) cpu.releaseDetails()
     property int coreColumns: 4
     property int coreTileHeight: 84
     property int coreSpacing: 8

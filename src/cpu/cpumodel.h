@@ -62,6 +62,14 @@ public:
     Q_INVOKABLE int coreUsage(int index) const;
     Q_INVOKABLE QVariantList coreHistory(int index) const;
 
+    // Details = the per-process scan (top CPU/memory lists, clock MHz) — popup data.
+    // Refcounted because two popups can be open at once (CPU + Memory, two bars).
+    // While held, the scan runs at the fast cadence; released, it drops to the idle
+    // heartbeat — still always-on, so a popup opened during an incident gets an
+    // instant delta against a baseline at most one heartbeat old.
+    Q_INVOKABLE void acquireDetails();
+    Q_INVOKABLE void releaseDetails();
+
 signals:
     void usageChanged();
     void usageHistoryChanged();
@@ -104,15 +112,19 @@ private:
         bool valid = false;
     };
 
-    QVector<Sample> readSamples() const;
+    // One /proc/stat read serves the cpu lines AND procs_running.
+    QVector<Sample> readSamples(int *procsRunning = nullptr) const;
     LoadAverageSample readLoadAverage() const;
     QVector<ProcessSample> readProcessSamples() const;
-    int readRunningProcesses() const;
-    int readMemoryUsage(qint64 *usedKb = nullptr, qint64 *totalKb = nullptr,
-                        qint64 *freeKb = nullptr) const;
-    int readSwapUsage() const;
+    // One /proc/meminfo read serves memory AND swap. Returns the memory usage %.
+    int readMemInfo(qint64 *usedKb, qint64 *totalKb, qint64 *freeKb, int *swapUsage) const;
     double readClockMhz() const;
-    void refresh();
+    // Cheap tick (5s, always): /proc/stat + /proc/loadavg + /proc/meminfo — feeds the
+    // bar graphs and the per-core histories exactly as before.
+    void refreshGlobal();
+    // Expensive tick (per-process scan): fast while a popup holds details, idle
+    // heartbeat otherwise.
+    void refreshDetails();
     void appendUsage(int usage);
     void appendLoadAverage(double loadAverage);
     void appendMemoryUsage(int usage);
@@ -120,7 +132,6 @@ private:
     void appendCoreUsage(int index, int usage);
     void resetSamples(const QVector<Sample> &samples);
     void updateProcessStats(const QVector<ProcessSample> &processes, qint64 totalDiff);
-    qint64 readProcessRssKb(int pid) const;
     qint64 readProcessPssKb(int pid) const;
 
     int m_usage = 0;
@@ -145,5 +156,13 @@ private:
     Sample m_lastSample;
     bool m_hasSample = false;
     QHash<int, qint64> m_lastProcessTicks;
-    QTimer m_timer;
+    // PID → comm cache: comm only changes on exec, so the sweep reads it once per
+    // process instead of once per tick. Pruned against live PIDs every sweep.
+    mutable QHash<int, QString> m_processNames;
+    QTimer m_timer;        // global (cheap) tick
+    QTimer m_detailsTimer; // per-process scan tick
+    int m_detailsRefs = 0;
+    // Overall cpu-ticks total at the LAST details scan: per-process deltas are
+    // normalized over the details window, not the (shorter) global one.
+    qint64 m_lastDetailsCpuTotal = 0;
 };

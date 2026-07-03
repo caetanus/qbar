@@ -1,27 +1,116 @@
 #include "cpumodel.h"
 
-#include <QFile>
 #include <QDir>
+#include <QDirIterator>
+#include <QFile>
 #include <QIODevice>
 #include <QtGlobal>
 #include <QVariantMap>
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
+#include <dirent.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 namespace {
 
 constexpr int kMaxHistory = 24;
+// Cheap tick: /proc/stat + /proc/loadavg + /proc/meminfo (three small files) — drives
+// the bar graphs; unchanged 5s cadence.
+constexpr int kGlobalIntervalMs = 5000;
+// Per-process scan cadence with a details popup open…
+constexpr int kDetailsOpenIntervalMs = 5000;
+// …and the always-on idle heartbeat with it closed. Deliberately NOT lazy: an
+// incident's forensics need a warm tick baseline so the popup answers instantly with
+// the average over the last window — including the seconds BEFORE it was opened.
+constexpr int kDetailsIdleIntervalMs = 12000;
+
+// All /proc parsing below sticks to QByteArray: these files are ASCII and the QString
+// fromUtf8+split round-trip was the bulk of the old per-tick cost.
+QByteArray readAll(const char *path)
+{
+    QFile file(QString::fromLatin1(path));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    return file.readAll();
+}
+
+// Hot-path variant for the per-PID scan: raw open/read into a stack buffer. With
+// thousands of tiny files per sweep, QFile's construction/locking overhead (~tens of
+// µs each) was costing more than the syscalls themselves. Returns the byte count,
+// or -1 when the file vanished (process exited mid-sweep — normal, skip it).
+int readSmall(const char *path, char *buf, int cap)
+{
+    const int fd = ::open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        return -1;
+    }
+    int total = 0;
+    for (;;) {
+        const ssize_t n = ::read(fd, buf + total, static_cast<size_t>(cap - total));
+        if (n <= 0 || total + n >= cap) {
+            total += n > 0 ? static_cast<int>(n) : 0;
+            break;
+        }
+        total += static_cast<int>(n);
+    }
+    ::close(fd);
+    return total;
+}
+
+// Advance past `count` space-separated tokens starting at p (NUL-terminated).
+const char *skipTokens(const char *p, int count)
+{
+    while (count > 0 && *p != '\0') {
+        while (*p == ' ') ++p;
+        while (*p != '\0' && *p != ' ') ++p;
+        --count;
+    }
+    while (*p == ' ') ++p;
+    return p;
+}
 
 } // namespace
 
 CpuModel::CpuModel(QObject *parent)
     : QObject(parent)
 {
-    refresh();
-    QTimer::singleShot(1000, this, &CpuModel::refresh);
-    m_timer.setInterval(5000);
+    refreshGlobal();
+    QTimer::singleShot(1000, this, &CpuModel::refreshGlobal);
+    m_timer.setInterval(kGlobalIntervalMs);
     m_timer.setSingleShot(false);
-    connect(&m_timer, &QTimer::timeout, this, &CpuModel::refresh);
+    connect(&m_timer, &QTimer::timeout, this, &CpuModel::refreshGlobal);
     m_timer.start();
+
+    // Seed the per-process tick baseline right away (deltas start meaningful one
+    // heartbeat later, same as the old first-refresh behaviour).
+    refreshDetails();
+    m_detailsTimer.setInterval(kDetailsIdleIntervalMs);
+    m_detailsTimer.setSingleShot(false);
+    connect(&m_detailsTimer, &QTimer::timeout, this, &CpuModel::refreshDetails);
+    m_detailsTimer.start();
+}
+
+void CpuModel::acquireDetails()
+{
+    ++m_detailsRefs;
+    if (m_detailsRefs == 1) {
+        m_detailsTimer.setInterval(kDetailsOpenIntervalMs);
+        // Paint the popup with fresh numbers immediately: the delta against the idle
+        // heartbeat's baseline (≤ one heartbeat old) is exactly the recent-window
+        // average an incident investigation wants.
+        refreshDetails();
+    }
+}
+
+void CpuModel::releaseDetails()
+{
+    m_detailsRefs = qMax(0, m_detailsRefs - 1);
+    if (m_detailsRefs == 0) {
+        m_detailsTimer.setInterval(kDetailsIdleIntervalMs);
+    }
 }
 
 int CpuModel::usage() const
@@ -170,23 +259,31 @@ QVariantList CpuModel::coreHistory(int index) const
     return m_cores.at(index).history;
 }
 
-QVector<CpuModel::Sample> CpuModel::readSamples() const
+QVector<CpuModel::Sample> CpuModel::readSamples(int *procsRunning) const
 {
-    QFile file(QStringLiteral("/proc/stat"));
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    const QByteArray content = readAll("/proc/stat");
+    if (content.isEmpty()) {
         return {};
     }
 
     QVector<Sample> samples;
-    const QString content = QString::fromUtf8(file.readAll());
-    const QStringList lines = content.split(QChar::LineFeed, Qt::SkipEmptyParts);
-    for (const QString &rawLine : lines) {
-        const QString line = rawLine.trimmed();
-        if (!line.startsWith(QStringLiteral("cpu"))) {
+    const QList<QByteArray> lines = content.split('\n');
+    for (const QByteArray &rawLine : lines) {
+        if (rawLine.startsWith("procs_running")) {
+            if (procsRunning != nullptr) {
+                bool ok = false;
+                const int running = rawLine.mid(13).trimmed().toInt(&ok);
+                if (ok) {
+                    *procsRunning = running;
+                }
+            }
+            continue;
+        }
+        if (!rawLine.startsWith("cpu")) {
             continue;
         }
 
-        const QStringList parts = line.split(QChar::Space, Qt::SkipEmptyParts);
+        const QList<QByteArray> parts = rawLine.simplified().split(' ');
         if (parts.size() < 5) {
             continue;
         }
@@ -212,7 +309,7 @@ QVector<CpuModel::Sample> CpuModel::readSamples() const
             continue;
         }
 
-        samples.append(Sample{parts.first(), total, idle, true});
+        samples.append(Sample{QString::fromLatin1(parts.first()), total, idle, true});
     }
 
     return samples;
@@ -220,13 +317,8 @@ QVector<CpuModel::Sample> CpuModel::readSamples() const
 
 CpuModel::LoadAverageSample CpuModel::readLoadAverage() const
 {
-    QFile file(QStringLiteral("/proc/loadavg"));
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return {};
-    }
-
-    const QString line = QString::fromUtf8(file.readLine()).trimmed();
-    const QStringList parts = line.split(QChar::Space, Qt::SkipEmptyParts);
+    const QByteArray line = readAll("/proc/loadavg");
+    const QList<QByteArray> parts = line.simplified().split(' ');
     if (parts.size() < 3) {
         return {};
     }
@@ -246,84 +338,93 @@ CpuModel::LoadAverageSample CpuModel::readLoadAverage() const
 
 QVector<CpuModel::ProcessSample> CpuModel::readProcessSamples() const
 {
+    // The hot path of the details scan: three tiny per-PID files, read with raw
+    // syscalls into stack buffers. stat gives the tick counter, comm the name, and
+    // statm the resident pages — statm is a single short line, unlike the old full
+    // /proc/N/status scan for VmRSS (same number, ~30 lines cheaper).
+    static const qint64 pageKb = sysconf(_SC_PAGESIZE) / 1024;
+
     QVector<ProcessSample> processes;
-    const QDir procDir(QStringLiteral("/proc"));
-    const QStringList entries = procDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    processes.reserve(entries.size());
+    processes.reserve(m_lastProcessTicks.size() + 64);
 
-    for (const QString &entry : entries) {
-        bool ok = false;
-        const int pid = entry.toInt(&ok);
-        if (!ok) {
+    DIR *proc = ::opendir("/proc");
+    if (proc == nullptr) {
+        return processes;
+    }
+
+    char path[64];
+    char buf[1024];
+
+    while (const dirent *entry = ::readdir(proc)) {
+        const char *name = entry->d_name;
+        if (name[0] < '0' || name[0] > '9') {
+            continue;
+        }
+        char *end = nullptr;
+        const long pid = std::strtol(name, &end, 10);
+        if (end == nullptr || *end != '\0' || pid <= 0) {
             continue;
         }
 
-        QFile statFile(QStringLiteral("/proc/%1/stat").arg(entry));
-        if (!statFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        // /proc/N/stat: "pid (comm) S ppid ..." — utime/stime are the 12th/13th
+        // fields after the closing paren (comm may contain spaces, hence the paren
+        // scan instead of a plain tokenizer from the start).
+        qsnprintf(path, sizeof(path), "/proc/%ld/stat", pid);
+        int len = readSmall(path, buf, sizeof(buf) - 1);
+        if (len <= 0) {
+            continue;
+        }
+        buf[len] = '\0';
+        const char *closeParen = ::strrchr(buf, ')');
+        if (closeParen == nullptr || closeParen[1] == '\0') {
+            continue;
+        }
+        const char *utimePos = skipTokens(closeParen + 2, 11);
+        char *afterUtime = nullptr;
+        const qint64 utime = std::strtoll(utimePos, &afterUtime, 10);
+        if (afterUtime == utimePos) {
+            continue;
+        }
+        char *afterStime = nullptr;
+        const qint64 stime = std::strtoll(afterUtime, &afterStime, 10);
+        if (afterStime == afterUtime) {
             continue;
         }
 
-        const QString statLine = QString::fromUtf8(statFile.readAll()).trimmed();
-        const int closeParen = statLine.lastIndexOf(QLatin1Char(')'));
-        if (closeParen < 0 || closeParen + 2 >= statLine.size()) {
-            continue;
+        // comm changes only on exec — cache it per PID and pay the read once. The
+        // cache is pruned against live PIDs after every sweep (see refreshDetails).
+        QString procName = m_processNames.value(static_cast<int>(pid));
+        if (procName.isEmpty()) {
+            qsnprintf(path, sizeof(path), "/proc/%ld/comm", pid);
+            len = readSmall(path, buf, sizeof(buf) - 1);
+            while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == ' ')) {
+                --len;
+            }
+            procName = len > 0 ? QString::fromUtf8(buf, len)
+                               : QStringLiteral("pid %1").arg(pid);
+            m_processNames.insert(static_cast<int>(pid), procName);
         }
 
-        const QString afterComm = statLine.mid(closeParen + 2);
-        const QStringList parts = afterComm.split(QChar::Space, Qt::SkipEmptyParts);
-        if (parts.size() < 13) {
-            continue;
-        }
-
-        bool okUtime = false;
-        bool okStime = false;
-        const qint64 utime = parts.at(11).toLongLong(&okUtime);
-        const qint64 stime = parts.at(12).toLongLong(&okStime);
-        if (!okUtime || !okStime) {
-            continue;
-        }
-
-        QFile commFile(QStringLiteral("/proc/%1/comm").arg(entry));
-        QString name = QStringLiteral("pid %1").arg(pid);
-        if (commFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            const QString comm = QString::fromUtf8(commFile.readLine()).trimmed();
-            if (!comm.isEmpty()) {
-                name = comm;
+        // /proc/N/statm: "size resident shared ..." (pages). RSS is instantaneous
+        // (no delta/baseline needed), so the idle heartbeat skips it entirely — the
+        // synchronous refresh in acquireDetails() fills it in before the popup's
+        // first frame.
+        qint64 rssKb = 0;
+        if (m_detailsRefs > 0) {
+            qsnprintf(path, sizeof(path), "/proc/%ld/statm", pid);
+            len = readSmall(path, buf, sizeof(buf) - 1);
+            if (len > 0) {
+                buf[len] = '\0';
+                const char *residentPos = skipTokens(buf, 1);
+                rssKb = qMax<qint64>(0, std::strtoll(residentPos, nullptr, 10)) * pageKb;
             }
         }
 
-        processes.append(ProcessSample{pid, name, utime + stime, readProcessRssKb(pid), true});
+        processes.append(ProcessSample{static_cast<int>(pid), procName, utime + stime, rssKb, true});
     }
 
+    ::closedir(proc);
     return processes;
-}
-
-qint64 CpuModel::readProcessRssKb(int pid) const
-{
-    QFile statusFile(QStringLiteral("/proc/%1/status").arg(pid));
-    if (!statusFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return 0;
-    }
-
-    const QString content = QString::fromUtf8(statusFile.readAll());
-    const QStringList lines = content.split(QChar::LineFeed, Qt::SkipEmptyParts);
-    for (const QString &rawLine : lines) {
-        const QString line = rawLine.trimmed();
-        if (!line.startsWith(QStringLiteral("VmRSS:"))) {
-            continue;
-        }
-
-        const QStringList parts = line.split(QChar::Space, Qt::SkipEmptyParts);
-        if (parts.size() < 2) {
-            return 0;
-        }
-
-        bool ok = false;
-        const qint64 rssKb = parts.at(1).toLongLong(&ok);
-        return ok ? qMax<qint64>(0, rssKb) : 0;
-    }
-
-    return 0;
 }
 
 qint64 CpuModel::readProcessPssKb(int pid) const
@@ -360,38 +461,10 @@ qint64 CpuModel::readProcessPssKb(int pid) const
     return 0;
 }
 
-int CpuModel::readRunningProcesses() const
+int CpuModel::readMemInfo(qint64 *usedKb, qint64 *totalKb, qint64 *freeKb, int *swapUsage) const
 {
-    QFile file(QStringLiteral("/proc/stat"));
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return 0;
-    }
-
-    const QString content = QString::fromUtf8(file.readAll());
-    const QStringList lines = content.split(QChar::LineFeed, Qt::SkipEmptyParts);
-    for (const QString &rawLine : lines) {
-        const QString line = rawLine.trimmed();
-        if (!line.startsWith(QStringLiteral("procs_running"))) {
-            continue;
-        }
-
-        const QStringList parts = line.split(QChar::Space, Qt::SkipEmptyParts);
-        if (parts.size() >= 2) {
-            bool ok = false;
-            const int running = parts.at(1).toInt(&ok);
-            if (ok) {
-                return running;
-            }
-        }
-    }
-
-    return 0;
-}
-
-int CpuModel::readMemoryUsage(qint64 *usedKb, qint64 *totalKb, qint64 *freeKb) const
-{
-    QFile file(QStringLiteral("/proc/meminfo"));
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    const QByteArray content = readAll("/proc/meminfo");
+    if (content.isEmpty()) {
         return 0;
     }
 
@@ -400,31 +473,43 @@ int CpuModel::readMemoryUsage(qint64 *usedKb, qint64 *totalKb, qint64 *freeKb) c
     qint64 memFree = 0;
     qint64 buffers = 0;
     qint64 cached = 0;
-    const QString content = QString::fromUtf8(file.readAll());
-    const QStringList lines = content.split(QChar::LineFeed, Qt::SkipEmptyParts);
-    for (const QString &rawLine : lines) {
-        const QString line = rawLine.trimmed();
-        auto valueFor = [](const QString &candidate) -> qint64 {
-            const QStringList parts = candidate.split(QChar::Space, Qt::SkipEmptyParts);
-            if (parts.size() < 2) {
-                return 0;
-            }
-            bool ok = false;
-            const qint64 value = parts.at(1).toLongLong(&ok);
-            return ok ? value : 0;
-        };
+    qint64 swapTotal = 0;
+    qint64 swapFree = 0;
 
-        if (line.startsWith(QStringLiteral("MemTotal:"))) {
-            memTotal = valueFor(line);
-        } else if (line.startsWith(QStringLiteral("MemAvailable:"))) {
-            memAvailable = valueFor(line);
-        } else if (line.startsWith(QStringLiteral("MemFree:"))) {
-            memFree = valueFor(line);
-        } else if (line.startsWith(QStringLiteral("Buffers:"))) {
-            buffers = valueFor(line);
-        } else if (line.startsWith(QStringLiteral("Cached:"))) {
-            cached = valueFor(line);
+    auto valueFor = [](const QByteArray &line) -> qint64 {
+        const QList<QByteArray> parts = line.simplified().split(' ');
+        if (parts.size() < 2) {
+            return 0;
         }
+        bool ok = false;
+        const qint64 value = parts.at(1).toLongLong(&ok);
+        return ok ? value : 0;
+    };
+
+    const QList<QByteArray> lines = content.split('\n');
+    for (const QByteArray &line : lines) {
+        if (line.startsWith("MemTotal:")) {
+            memTotal = valueFor(line);
+        } else if (line.startsWith("MemAvailable:")) {
+            memAvailable = valueFor(line);
+        } else if (line.startsWith("MemFree:")) {
+            memFree = valueFor(line);
+        } else if (line.startsWith("Buffers:")) {
+            buffers = valueFor(line);
+        } else if (line.startsWith("Cached:")) {
+            cached = valueFor(line);
+        } else if (line.startsWith("SwapTotal:")) {
+            swapTotal = valueFor(line);
+        } else if (line.startsWith("SwapFree:")) {
+            swapFree = valueFor(line);
+        }
+    }
+
+    if (swapUsage != nullptr) {
+        const qint64 swapUsed = qMax<qint64>(0, swapTotal - swapFree);
+        *swapUsage = swapTotal > 0
+            ? qBound(0, static_cast<int>((swapUsed * 100.0) / swapTotal), 100)
+            : 0;
     }
 
     if (memTotal <= 0) {
@@ -449,22 +534,37 @@ int CpuModel::readMemoryUsage(qint64 *usedKb, qint64 *totalKb, qint64 *freeKb) c
 
 double CpuModel::readClockMhz() const
 {
-    // Average the per-core "cpu MHz" lines from /proc/cpuinfo (current frequency
-    // on most kernels). Returns 0 when unavailable.
-    QFile file(QStringLiteral("/proc/cpuinfo"));
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return 0.0;
-    }
-
+    // Prefer sysfs: one tiny scaling_cur_freq file per core (kHz) instead of the old
+    // full /proc/cpuinfo parse — cpuinfo grows with the flags lines on every core.
     double sum = 0.0;
     int count = 0;
-    const QString content = QString::fromUtf8(file.readAll());
-    const QStringList lines = content.split(QChar::LineFeed, Qt::SkipEmptyParts);
-    for (const QString &line : lines) {
-        if (!line.startsWith(QStringLiteral("cpu MHz"))) {
+    QDirIterator it(QStringLiteral("/sys/devices/system/cpu"),
+                    {QStringLiteral("cpu[0-9]*")}, QDir::Dirs | QDir::NoDotAndDotDot);
+    while (it.hasNext()) {
+        const QString base = it.next();
+        QFile f(base + QStringLiteral("/cpufreq/scaling_cur_freq"));
+        if (!f.open(QIODevice::ReadOnly)) {
             continue;
         }
-        const int colon = line.indexOf(QChar::fromLatin1(':'));
+        bool ok = false;
+        const qint64 khz = f.readAll().trimmed().toLongLong(&ok);
+        if (ok && khz > 0) {
+            sum += khz / 1000.0;
+            count += 1;
+        }
+    }
+    if (count > 0) {
+        return sum / count;
+    }
+
+    // Fallback (no cpufreq, e.g. some VMs): the "cpu MHz" lines from /proc/cpuinfo.
+    const QByteArray content = readAll("/proc/cpuinfo");
+    const QList<QByteArray> lines = content.split('\n');
+    for (const QByteArray &line : lines) {
+        if (!line.startsWith("cpu MHz")) {
+            continue;
+        }
+        const int colon = line.indexOf(':');
         if (colon < 0) {
             continue;
         }
@@ -476,44 +576,6 @@ double CpuModel::readClockMhz() const
         }
     }
     return count > 0 ? sum / count : 0.0;
-}
-
-int CpuModel::readSwapUsage() const
-{
-    QFile file(QStringLiteral("/proc/meminfo"));
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return 0;
-    }
-
-    qint64 swapTotal = 0;
-    qint64 swapFree = 0;
-    const QString content = QString::fromUtf8(file.readAll());
-    const QStringList lines = content.split(QChar::LineFeed, Qt::SkipEmptyParts);
-    auto valueFor = [](const QString &candidate) -> qint64 {
-        const QStringList parts = candidate.split(QChar::Space, Qt::SkipEmptyParts);
-        if (parts.size() < 2) {
-            return 0;
-        }
-        bool ok = false;
-        const qint64 value = parts.at(1).toLongLong(&ok);
-        return ok ? value : 0;
-    };
-
-    for (const QString &rawLine : lines) {
-        const QString line = rawLine.trimmed();
-        if (line.startsWith(QStringLiteral("SwapTotal:"))) {
-            swapTotal = valueFor(line);
-        } else if (line.startsWith(QStringLiteral("SwapFree:"))) {
-            swapFree = valueFor(line);
-        }
-    }
-
-    if (swapTotal <= 0) {
-        return 0;
-    }
-
-    const qint64 used = qMax<qint64>(0, swapTotal - swapFree);
-    return qBound(0, static_cast<int>((used * 100.0) / swapTotal), 100);
 }
 
 void CpuModel::appendUsage(int usage)
@@ -571,10 +633,6 @@ void CpuModel::updateProcessStats(const QVector<ProcessSample> &processes, qint6
     const int processCount = processes.size();
     const bool processCountChanged = processCount != m_processCount;
     m_processCount = processCount;
-
-    const int runningProcesses = readRunningProcesses();
-    const bool runningChanged = runningProcesses != m_runningProcesses;
-    m_runningProcesses = runningProcesses;
 
     QVariantList topProcesses;
     QVariantList topMemoryProcesses;
@@ -644,7 +702,7 @@ void CpuModel::updateProcessStats(const QVector<ProcessSample> &processes, qint6
         topMemoryProcesses.append(item);
     }
 
-    if (processCountChanged || runningChanged || topProcesses != m_topProcesses || topMemoryProcesses != m_topMemoryProcesses) {
+    if (processCountChanged || topProcesses != m_topProcesses || topMemoryProcesses != m_topMemoryProcesses) {
         m_topProcesses = topProcesses;
         m_topMemoryProcesses = topMemoryProcesses;
         emit processStatsChanged();
@@ -686,7 +744,7 @@ void CpuModel::resetSamples(const QVector<Sample> &samples)
     emit coresChanged();
 }
 
-void CpuModel::refresh()
+void CpuModel::refreshGlobal()
 {
     const LoadAverageSample loadAverage = readLoadAverage();
     if (loadAverage.valid) {
@@ -702,25 +760,24 @@ void CpuModel::refresh()
         }
     }
 
-    const double clock = readClockMhz();
-    if (!qFuzzyCompare(m_clockMhz + 1.0, clock + 1.0)) {
-        m_clockMhz = clock;
-        emit clockChanged();
-    }
-
-    const QVector<ProcessSample> processes = readProcessSamples();
     qint64 memUsedKb = 0;
     qint64 memTotalKb = 0;
     qint64 memFreeKb = 0;
-    const int memoryUsage = readMemoryUsage(&memUsedKb, &memTotalKb, &memFreeKb);
+    int swapUsage = 0;
+    const int memoryUsage = readMemInfo(&memUsedKb, &memTotalKb, &memFreeKb, &swapUsage);
     if (memUsedKb != m_memoryUsedKb || memTotalKb != m_memoryTotalKb || memFreeKb != m_memoryFreeKb) {
         m_memoryUsedKb = memUsedKb;
         m_memoryTotalKb = memTotalKb;
         m_memoryFreeKb = memFreeKb;
         emit memoryStatsChanged();
     }
-    const int swapUsage = readSwapUsage();
-    const QVector<Sample> samples = readSamples();
+
+    int procsRunning = m_runningProcesses;
+    const QVector<Sample> samples = readSamples(&procsRunning);
+    if (procsRunning != m_runningProcesses) {
+        m_runningProcesses = procsRunning;
+        emit processStatsChanged();
+    }
 
     if (samples.isEmpty()) {
         if (memoryUsage != m_memoryUsage) {
@@ -731,11 +788,9 @@ void CpuModel::refresh()
             m_swapUsage = swapUsage;
             appendSwapUsage(swapUsage);
         }
-        updateProcessStats(processes, 0);
         return;
     }
 
-    qint64 totalDiff = 0;
     if (!m_hasSample || m_cores.size() != samples.size() - 1) {
         m_lastSample = samples.first();
         m_hasSample = true;
@@ -744,7 +799,7 @@ void CpuModel::refresh()
         emit usageChanged();
     } else {
         const Sample overall = samples.first();
-        totalDiff = overall.total - m_lastSample.total;
+        const qint64 totalDiff = overall.total - m_lastSample.total;
         const qint64 idleDiff = overall.idle - m_lastSample.idle;
         m_lastSample = overall;
 
@@ -796,6 +851,46 @@ void CpuModel::refresh()
         m_swapUsage = swapUsage;
         appendSwapUsage(swapUsage);
     }
+}
+
+void CpuModel::refreshDetails()
+{
+    const double clock = readClockMhz();
+    if (!qFuzzyCompare(m_clockMhz + 1.0, clock + 1.0)) {
+        m_clockMhz = clock;
+        emit clockChanged();
+    }
+
+    const QVector<ProcessSample> processes = readProcessSamples();
+
+    // Normalize the per-process tick deltas over the DETAILS window (last details
+    // scan → now), reading the overall counter fresh so a scan triggered by
+    // acquireDetails() doesn't reuse a global sample up to one global tick old.
+    const QVector<Sample> samples = readSamples();
+    const qint64 totalNow = samples.isEmpty() ? m_lastSample.total : samples.first().total;
+    const qint64 totalDiff = m_lastDetailsCpuTotal > 0
+        ? qMax<qint64>(0, totalNow - m_lastDetailsCpuTotal)
+        : 0;
+    m_lastDetailsCpuTotal = totalNow;
 
     updateProcessStats(processes, totalDiff);
+
+    // Prune bookkeeping for PIDs that died — both hashes would otherwise grow for
+    // the lifetime of the bar.
+    QHash<int, qint64> liveTicks;
+    QHash<int, QString> liveNames;
+    liveTicks.reserve(processes.size());
+    liveNames.reserve(processes.size());
+    for (const ProcessSample &process : processes) {
+        const auto ticksIt = m_lastProcessTicks.constFind(process.pid);
+        if (ticksIt != m_lastProcessTicks.constEnd()) {
+            liveTicks.insert(process.pid, ticksIt.value());
+        }
+        const auto nameIt = m_processNames.constFind(process.pid);
+        if (nameIt != m_processNames.constEnd()) {
+            liveNames.insert(process.pid, nameIt.value());
+        }
+    }
+    m_lastProcessTicks = std::move(liveTicks);
+    m_processNames = std::move(liveNames);
 }
