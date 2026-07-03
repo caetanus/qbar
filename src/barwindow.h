@@ -60,8 +60,7 @@ private slots:
     void applyTestWindowRules();
     void moveTestWindow();
     void handleQbarNodeFound(qint64 nodeId);
-    void onConfigFileChanged(const QString &path);
-    void reloadConfigFromDisk();
+    void applyReloadedConfig(const BarConfig &fresh);
 
 private:
     void configureWindow();
@@ -104,9 +103,6 @@ private:
     // Null otherwise — the daemon then shares m_cssTheme.
     CssTheme *m_notificationCssTheme = nullptr;
     QNetworkAccessManager *m_cssNam = nullptr; // lazily created for set-css over http(s)
-    QFileSystemWatcher *m_configWatcher = nullptr;
-    QTimer *m_configReloadTimer = nullptr; // debounces save-in-progress watcher events
-    QByteArray m_configHash;
     WidgetReloader *m_widgetReloader = nullptr;
     qint64 m_swayNodeId = -1;
     bool m_platformIntegrationApplied = false;

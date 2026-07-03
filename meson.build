@@ -277,6 +277,7 @@ endif
 sources = files(
   'src/main.cpp',
   'src/barwindow.cpp',
+  'src/configreloader.cpp',
   'src/qml/widgetreloader.cpp',
   'src/crashguard.cpp',
   'src/config.cpp',
@@ -334,6 +335,7 @@ sources = files(
 
 headers = files(
   'src/barwindow.h',
+  'src/configreloader.h',
   'src/qml/widgetreloader.h',
   'src/ipc/i3ipcclient.h',
   'src/platform/platformbarintegration.h',

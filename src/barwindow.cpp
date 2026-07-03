@@ -1,5 +1,6 @@
 #include "barwindow.h"
 
+#include "configreloader.h"
 #include "qml/qbarpopupservice.h"
 #include "qml/dockwindow.h"
 #include "qml/qbaripc.h"
@@ -333,23 +334,9 @@ BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
     m_configuredStyleSheet = m_config.styleSheet; // remembered so reset-css can revert a preview
     loadCssTheme();
 
-    m_configWatcher = new QFileSystemWatcher(this);
-    if (!m_config.configFilePath.isEmpty() && QFileInfo::exists(m_config.configFilePath)) {
-        QFile f(m_config.configFilePath);
-        if (f.open(QIODevice::ReadOnly)) {
-            m_configHash = QCryptographicHash::hash(f.readAll(), QCryptographicHash::Md5);
-        }
-        m_configWatcher->addPath(m_config.configFilePath);
-    }
-    connect(m_configWatcher, &QFileSystemWatcher::fileChanged, this, &BarWindow::onConfigFileChanged);
-
-    // Debounce reloads: editors save by truncating or atomically replacing the file, so the
-    // watcher often fires mid-write. Wait a beat so we read the SETTLED file, not a half-written
-    // one (which parsed as "invalid JSONC at offset 0" and dropped the reload).
-    m_configReloadTimer = new QTimer(this);
-    m_configReloadTimer->setSingleShot(true);
-    m_configReloadTimer->setInterval(120);
-    connect(m_configReloadTimer, &QTimer::timeout, this, &BarWindow::reloadConfigFromDisk);
+    // Config hot-reload: the reloader watches/debounces/parses; applying is ours.
+    auto *configReloader = new ConfigReloader(m_config.configFilePath, m_config.configIndex, this);
+    connect(configReloader, &ConfigReloader::configReloaded, this, &BarWindow::applyReloadedConfig);
 
     // Custom-widget hot-reload: Bar.qml binds its widget Loaders to the reloader's
     // generation via the forwarded widgetReloadGeneration property below.
@@ -641,56 +628,8 @@ void BarWindow::resolveCssImports(const QString &css, const QUrl &base,
     }
 }
 
-void BarWindow::onConfigFileChanged(const QString &path)
+void BarWindow::applyReloadedConfig(const BarConfig &fresh)
 {
-    // Editors atomically replace the file, swapping its inode — re-add so future saves fire.
-    if (!m_configWatcher->files().contains(path)) {
-        m_configWatcher->addPath(path);
-    }
-    m_configReloadTimer->start(); // coalesce + wait for the write to settle, then reload
-}
-
-void BarWindow::reloadConfigFromDisk()
-{
-    const QString path = m_config.configFilePath;
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qWarning() << "qbar: cannot read config file" << path;
-        return;
-    }
-    const QByteArray data = file.readAll();
-    if (data.isEmpty()) {
-        return; // still mid-save (truncated) — the next fileChanged re-arms the timer
-    }
-    const QByteArray hash = QCryptographicHash::hash(data, QCryptographicHash::Md5);
-    if (hash == m_configHash) {
-        return; // touch with no content change
-    }
-
-    QString jsonError;
-    const auto doc = Jsonc::parse(QString::fromUtf8(data), &jsonError);
-    QJsonObject root;
-    bool foundRoot = false;
-    if (doc.isArray()) {
-        const QJsonArray bars = doc.array();
-        if (m_config.configIndex >= 0 && m_config.configIndex < bars.size() && bars.at(m_config.configIndex).isObject()) {
-            root = bars.at(m_config.configIndex).toObject();
-            foundRoot = true;
-        }
-    } else if (doc.isObject()) {
-        root = doc.object();
-        foundRoot = true;
-    }
-
-    if (!foundRoot) {
-        // Likely a still-settling write; leave m_configHash untouched so the next event retries.
-        qWarning() << "qbar: config.json is broken (invalid JSONC), ignoring reload" << jsonError;
-        return;
-    }
-    m_configHash = hash; // commit only after a clean parse
-
-    const BarConfig fresh = parseBarObject(root);
-
     if (fresh.styleSheet != m_config.styleSheet || fresh.baseStyleSheet != m_config.baseStyleSheet) {
         m_config.styleSheet = fresh.styleSheet;
         m_configuredStyleSheet = fresh.styleSheet; // keep reset-css pointed at the config's theme
