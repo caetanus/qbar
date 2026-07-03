@@ -18,6 +18,7 @@ class DockWindow;
 class QNetworkAccessManager;
 class QTimer;
 class QUrl;
+class WidgetReloader;
 
 class BarWindow final : public QQuickView {
     Q_OBJECT
@@ -44,7 +45,7 @@ public slots:
 
 public:
     bool calendarAppAvailable() const;
-    int widgetReloadGeneration() const { return m_widgetReloadGeneration; }
+    int widgetReloadGeneration() const;
 
 signals:
     void widgetReloadGenerationChanged();
@@ -61,7 +62,6 @@ private slots:
     void handleQbarNodeFound(qint64 nodeId);
     void onConfigFileChanged(const QString &path);
     void reloadConfigFromDisk();
-    void onWidgetFileChanged(const QString &path);
 
 private:
     void configureWindow();
@@ -88,12 +88,6 @@ private:
     QString testWindowCriteria() const;
     void installTestWindowRule();
     void scheduleTestWindowRules();
-    void setupWidgetWatcher();
-    void refreshWidgetWatch();
-    void reloadWidgets();
-    QStringList runtimeWidgetFiles() const;
-    QByteArray widgetContentHash() const;
-
     BarConfig m_config;
     // The styleSheet the config file specifies — preserved so `reset-css` can revert a
     // `set-css` preview (which overwrites m_config.styleSheet). Tracks config hot-reloads.
@@ -113,10 +107,7 @@ private:
     QFileSystemWatcher *m_configWatcher = nullptr;
     QTimer *m_configReloadTimer = nullptr; // debounces save-in-progress watcher events
     QByteArray m_configHash;
-    QFileSystemWatcher *m_widgetWatcher = nullptr;
-    QStringList m_widgetFiles;
-    QByteArray m_widgetHash;
-    int m_widgetReloadGeneration = 0;
+    WidgetReloader *m_widgetReloader = nullptr;
     qint64 m_swayNodeId = -1;
     bool m_platformIntegrationApplied = false;
 };

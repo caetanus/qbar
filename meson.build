@@ -277,6 +277,7 @@ endif
 sources = files(
   'src/main.cpp',
   'src/barwindow.cpp',
+  'src/qml/widgetreloader.cpp',
   'src/crashguard.cpp',
   'src/config.cpp',
   'src/brightness/brightnessmodel.cpp',
@@ -333,6 +334,7 @@ sources = files(
 
 headers = files(
   'src/barwindow.h',
+  'src/qml/widgetreloader.h',
   'src/ipc/i3ipcclient.h',
   'src/platform/platformbarintegration.h',
   'src/css/csstheme.h',
@@ -423,7 +425,7 @@ executable(
   qt_sources,
   qbar_i18n,
   cpp_args: platform_args,
-  include_directories: platform_includes,
+  include_directories: platform_includes + [include_directories('src')],
   dependencies: qt_deps + platform_deps,
   pie: false,
   install: true,
