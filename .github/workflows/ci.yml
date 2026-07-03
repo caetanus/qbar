@@ -28,8 +28,13 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      # Every feature explicitly enabled: with 'auto', a missing dependency would
+      # silently drop the feature and the build would go green without it.
       - name: Configure
-        run: meson setup build
+        run: >
+          meson setup build
+          -Dx11=enabled -Dwayland=enabled -Dlockscreen=enabled
+          -Dwireplumber=enabled -Dprivacy=enabled
 
       - name: Build
         run: ninja -C build
