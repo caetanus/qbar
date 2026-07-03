@@ -1,8 +1,8 @@
 #include "qbarsessionlockintegration.h"
 
-#include <QtWaylandClient/6.11.1/QtWaylandClient/private/qwaylanddisplay_p.h>
-#include <QtWaylandClient/6.11.1/QtWaylandClient/private/qwaylandwindow_p.h>
-#include <QtWaylandClient/6.11.1/QtWaylandClient/private/qwaylandscreen_p.h>
+#include <QtWaylandClient/private/qwaylanddisplay_p.h>
+#include <QtWaylandClient/private/qwaylandwindow_p.h>
+#include <QtWaylandClient/private/qwaylandscreen_p.h>
 
 #include <QCoreApplication>
 #include <QGuiApplication>

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <QtWaylandClient/6.11.1/QtWaylandClient/private/qwaylandshellintegration_p.h>
-#include <QtWaylandClient/6.11.1/QtWaylandClient/private/qwaylandshellsurface_p.h>
-#include <QtWaylandClient/6.11.1/QtWaylandClient/private/qwaylandshellintegrationplugin_p.h>
+#include <QtWaylandClient/private/qwaylandshellintegration_p.h>
+#include <QtWaylandClient/private/qwaylandshellsurface_p.h>
+#include <QtWaylandClient/private/qwaylandshellintegrationplugin_p.h>
 
 #include <QSize>
 
