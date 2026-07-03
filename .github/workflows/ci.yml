@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  arch:
+    name: Arch Linux (Qt 6, full feature set)
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      # qbar tracks current Qt on a rolling distro; building against Arch's Qt is
+      # exactly the configuration that catches private-header breakage early.
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            git meson ninja gcc pkgconf python \
+            qt6-base qt6-declarative qt6-wayland qt6-svg qt6-websockets \
+            qt6-tools qt6-shadertools \
+            wayland wayland-protocols wlroots0.19 \
+            libxcb xcb-util-wm libxkbcommon \
+            pam libpulse wireplumber libpipewire \
+            evolution-data-server sqlite \
+            dbus ttf-dejavu
+
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: meson setup build
+
+      - name: Build
+        run: ninja -C build
+
+      # Offscreen platform + a private session bus: the QML applet tests need a
+      # QPA platform and some models touch D-Bus.
+      - name: Test
+        run: dbus-run-session -- meson test -C build --print-errorlogs
+        env:
+          QT_QPA_PLATFORM: offscreen
