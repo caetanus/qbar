@@ -2,7 +2,7 @@
 Type=Application
 Name=QBar Lock
 Comment=QBar QML lockscreen
-Exec=qbar-lock
+Exec=qbar-lock --lock-style ring --theme /usr/share/qbar/themes/i3lock.css
 Icon=system-lock-screen
 Terminal=false
 Categories=System;Security;

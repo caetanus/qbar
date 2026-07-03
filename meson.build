@@ -498,6 +498,7 @@ if lockscreen_dep.found()
   install_data(
     'data/themes/bliss-98-lock.css',
     'data/themes/i3lock.css',
+    'data/themes/macchiato-lock.css',
     install_dir: get_option('datadir') / 'qbar' / 'themes',
   )
   install_data(
