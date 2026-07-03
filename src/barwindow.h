@@ -18,6 +18,7 @@ class DockWindow;
 class QNetworkAccessManager;
 class QTimer;
 class QUrl;
+class TestWindowRules;
 class WidgetReloader;
 
 class BarWindow final : public QQuickView {
@@ -57,9 +58,6 @@ protected:
     void showEvent(QShowEvent *event) override;
 
 private slots:
-    void applyTestWindowRules();
-    void moveTestWindow();
-    void handleQbarNodeFound(qint64 nodeId);
     void applyReloadedConfig(const BarConfig &fresh);
 
 private:
@@ -84,9 +82,7 @@ private:
     void buildLayout();
     void positionAtTop();
     QRect targetBarGeometry() const;
-    QString testWindowCriteria() const;
-    void installTestWindowRule();
-    void scheduleTestWindowRules();
+
     BarConfig m_config;
     // The styleSheet the config file specifies — preserved so `reset-css` can revert a
     // `set-css` preview (which overwrites m_config.styleSheet). Tracks config hot-reloads.
@@ -104,6 +100,6 @@ private:
     CssTheme *m_notificationCssTheme = nullptr;
     QNetworkAccessManager *m_cssNam = nullptr; // lazily created for set-css over http(s)
     WidgetReloader *m_widgetReloader = nullptr;
-    qint64 m_swayNodeId = -1;
+    TestWindowRules *m_testWindowRules = nullptr;
     bool m_platformIntegrationApplied = false;
 };
