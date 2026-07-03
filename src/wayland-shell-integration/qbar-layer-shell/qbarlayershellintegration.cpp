@@ -159,11 +159,14 @@ QtWaylandClient::QWaylandShellSurface *QBarLayerShellIntegration::createShellSur
     // sized layer surface, not an xdg_popup — exclude it from the popup test too.
     const bool dock = window != nullptr && window->window() != nullptr
         && window->window()->property("qbarDock").toBool();
+    // Same for the notification toast surface.
+    const bool notifications = window != nullptr && window->window() != nullptr
+        && window->window()->property("qbarNotifications").toBool();
     if (detached) {
         qDebug() << "QBar layer-shell create detached xdg_toplevel surface";
         return new QBarXdgToplevelSurface(this, window);
     }
-    if (!overlay && !dock && window != nullptr && window->window() != nullptr
+    if (!overlay && !dock && !notifications && window != nullptr && window->window() != nullptr
         && (window->window()->flags() & Qt::Popup) == Qt::Popup) {
         qDebug() << "QBar layer-shell create popup surface";
         return new QBarXdgPopupSurface(this, window);
@@ -199,12 +202,24 @@ QBarLayerShellSurface::QBarLayerShellSurface(QBarLayerShellIntegration *integrat
     // fullscreen image viewer. The dock's layer surface is created lazily, after its
     // bar's, so within TOP it stacks above the bar — its magnified icons still draw
     // over the bar, while a fullscreen window now correctly covers the dock.
+    //
+    // The namespace defaults to "qbar"; a window may claim its own via the
+    // qbarLayerNamespace property (the notification surface uses "qbar-notifications")
+    // so compositor layer rules — e.g. Hyprland `layerrule = blur, qbar-notifications`
+    // — can target it without touching the bar.
+    QByteArray layerNamespace("qbar");
+    if (window != nullptr && window->window() != nullptr) {
+        const QVariant ns = window->window()->property("qbarLayerNamespace");
+        if (ns.isValid() && !ns.toString().isEmpty()) {
+            layerNamespace = ns.toString().toUtf8();
+        }
+    }
     m_layerSurface = zwlr_layer_shell_v1_get_layer_surface(
         integration->layerShell(),
         wlSurface(),
         output,
         ZWLR_LAYER_SHELL_V1_LAYER_TOP,
-        "qbar");
+        layerNamespace.constData());
     zwlr_layer_surface_v1_add_listener(m_layerSurface, &layerSurfaceListener, this);
     applyLayerState();
     wl_surface_commit(wlSurface());
@@ -242,9 +257,24 @@ bool QBarLayerShellSurface::eventFilter(QObject *watched, QEvent *event)
             || name == "qbarOverlayKeyboard"
             || name == "qbarDockX" || name == "qbarDockWidth" || name == "qbarDockHeight"
             || name == "qbarDockInputX" || name == "qbarDockInputY"
-            || name == "qbarDockInputWidth" || name == "qbarDockInputHeight") {
+            || name == "qbarDockInputWidth" || name == "qbarDockInputHeight"
+            || name.startsWith("qbarNotif")) {
             applyLayerState();
-            wl_surface_commit(wlSurface());
+            // Do NOT wl_surface_commit here: this runs on the GUI thread, and the render
+            // thread owns the surface's attach/damage/commit cycle — an interleaved commit
+            // can publish a half-built frame (a visible flicker on every toast entry/exit,
+            // each of which bumps the input region). The layer state set above is double-
+            // buffered; scheduling a render pass makes its commit carry it atomically.
+            if (m_filteredWindow != nullptr) {
+                QMetaObject::invokeMethod(
+                    m_filteredWindow,
+                    [w = QPointer<QWindow>(m_filteredWindow)]() {
+                        if (w) {
+                            w->requestUpdate();
+                        }
+                    },
+                    Qt::QueuedConnection);
+            }
         }
     }
     return QtWaylandClient::QWaylandShellSurface::eventFilter(watched, event);
@@ -435,6 +465,50 @@ void QBarLayerShellSurface::applyLayerState()
                               dockWin->property("qbarDockInputY").toInt(),
                               std::max(1, dockWin->property("qbarDockInputWidth").toInt()),
                               std::max(1, dockWin->property("qbarDockInputHeight").toInt()));
+                wl_surface_set_input_region(wlSurface(), region);
+                wl_region_destroy(region);
+            }
+            return;
+        }
+    }
+
+    // The notification surface (flagged via "qbarNotifications" by NotificationWindow)
+    // is a fixed-width, full-height strip on a screen corner side (or centered when
+    // neither left nor right is set). Anchoring both vertical edges stretches it
+    // between them; exclusive zone 0 keeps it inside the area the bar reserved. Only
+    // the card stack accepts input (qbarNotifInput*), the empty rest of the strip
+    // passes pointer events through.
+    {
+        const QWindow *notifWin = window() != nullptr ? window()->window() : nullptr;
+        if (notifWin != nullptr && notifWin->property("qbarNotifications").toBool()) {
+            const bool left = notifWin->property("qbarNotifCornerLeft").toBool();
+            const bool center = notifWin->property("qbarNotifCornerCenter").toBool();
+            const int notifWidth = std::max(1, notifWin->property("qbarNotifWidth").toInt());
+            uint32_t anchor = ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;
+            if (!center) {
+                anchor |= left ? ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT : ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
+            }
+            zwlr_layer_surface_v1_set_anchor(m_layerSurface, anchor);
+            zwlr_layer_surface_v1_set_size(m_layerSurface, static_cast<uint32_t>(notifWidth), 0);
+            zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, 0);
+            zwlr_layer_surface_v1_set_margin(m_layerSurface,
+                                             notifWin->property("qbarNotifMarginTop").toInt(),
+                                             notifWin->property("qbarNotifMarginRight").toInt(),
+                                             notifWin->property("qbarNotifMarginBottom").toInt(),
+                                             notifWin->property("qbarNotifMarginLeft").toInt());
+            zwlr_layer_surface_v1_set_keyboard_interactivity(
+                m_layerSurface, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+            if (window() != nullptr && window()->display() != nullptr
+                && window()->display()->compositor() != nullptr) {
+                wl_region *region = window()->display()->compositor()->create_region();
+                const int inputHeight = notifWin->property("qbarNotifInputHeight").toInt();
+                if (inputHeight > 0) {
+                    wl_region_add(region,
+                                  notifWin->property("qbarNotifInputX").toInt(),
+                                  notifWin->property("qbarNotifInputY").toInt(),
+                                  std::max(1, notifWin->property("qbarNotifInputWidth").toInt()),
+                                  inputHeight);
+                }
                 wl_surface_set_input_region(wlSurface(), region);
                 wl_region_destroy(region);
             }

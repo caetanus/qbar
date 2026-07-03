@@ -138,3 +138,10 @@ window#waybar {
 }
 
 #overlay { background-color: rgba(0, 0, 0, 0.22); }
+
+/*
+ * Notifications (the qbar org.freedesktop.Notifications daemon) are NOT styled
+ * here on purpose: sensible frosted-glass defaults are built in, and a dedicated
+ * look goes in its own stylesheet via `"notifications": { "styleSheet": ... }`
+ * (see config/themes/<name>-notify.css) — same separation as the *-lock.css themes.
+ */

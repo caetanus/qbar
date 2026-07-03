@@ -1,0 +1,61 @@
+/*
+ * Aqua Glass notifications — matches the aqua-glass bar theme.
+ * Bright frosted glass with a deep emboss bevel, a bounce-in drop from the top
+ * and a genie-ish shrink away. Pair with a compositor gaussian blur on the layer
+ * (Hyprland: `layerrule = blur, qbar-notifications` + ignorezero) for the full effect.
+ * Use via `"notifications": { "styleSheet": "themes/aqua-glass-notify.css" }`.
+ */
+
+@define-color ink #18202a;
+@define-color blue #3b8cff;
+@define-color graphite #5e6874;
+@define-color rose #ff7aa8;
+
+#notifications { width: 380px; margin: 16px; spacing: 12px; }
+
+@keyframes aqua-notif-in {
+    0%   { opacity: 0; transform: translateY(-28px) scale(0.92); }
+    62%  { opacity: 1; transform: translateY(5px) scale(1.012); }
+    100% { opacity: 1; transform: translateY(0px) scale(1.0); }
+}
+@keyframes aqua-notif-out {
+    0%   { opacity: 1;    transform: scale(1.0); }
+    35%  { opacity: 0.9;  transform: scale(1.03); }
+    100% { opacity: 0;    transform: scale(0.82); }
+}
+
+#notification {
+    background-color: rgba(238, 246, 255, 0.55);
+    border-color: rgba(255, 255, 255, 0.75);
+    border-width: 1px;
+    border-radius: 16px;
+    box-shadow: 0px 16px 34px rgba(20, 32, 48, 0.35);
+    padding: 13px;
+    emboss: 0.60;
+    emboss-highlight: rgba(255, 255, 255, 0.98);
+    emboss-shadow: rgba(70, 90, 110, 0.55);
+    emboss-edge: 14px;
+    animation: aqua-notif-in 340ms ease-out;
+    transition: all 160ms ease-out;
+}
+#notification:exit  { animation: aqua-notif-out 240ms ease-in; }
+#notification:hover { border-color: #ffffff; }
+#notification:critical {
+    background-color: rgba(255, 122, 168, 0.42);
+    border-color: @rose;
+}
+#notification:low { background-color: rgba(238, 246, 255, 0.40); }
+
+#notification.app     { color: @graphite; font-size: 10px; }
+#notification.summary { color: @ink; font-size: 12px; }
+#notification.body    { color: #33414f; font-size: 11px; }
+#notification.close   { color: @graphite; }
+#notification.close:hover { color: @rose; }
+#notification.action {
+    background-color: rgba(255, 255, 255, 0.55);
+    color: @ink;
+    border-radius: 999px;
+}
+#notification.action:hover { background-color: rgba(255, 255, 255, 0.85); }
+#notification.progress { background-color: rgba(24, 32, 42, 0.10); color: @blue; height: 3px; }
+#notification.value    { background-color: rgba(24, 32, 42, 0.12); color: @blue; }

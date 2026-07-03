@@ -44,6 +44,12 @@ struct BarConfig {
     // effect, indicator ("underline"|"dot"|"pill"|"none") for the focused window,
     // and optional hoverHeight/peakHeight overrides (px). Defaults set in config.cpp.
     QVariantMap dock;
+    // Notification daemon (org.freedesktop.Notifications) options: enabled (bool),
+    // corner ("top-right"|"top-left"|"top-center"|"bottom-right"|"bottom-left"|
+    // "bottom-center"), maxVisible, timeout/timeoutLow/timeoutCritical (ms; 0 = sticky),
+    // width/margin (px fallbacks — the CSS `#notifications` block wins). Defaults in
+    // config.cpp. Only the first bar creates the daemon (one bus name per process).
+    QVariantMap notifications;
     // CPU/Memory/Network display: { "format": [parts...], "text": "<label>" }.
     // Parts (composable, ordered): "text" (the literal label), "percentage",
     // "clock" (cpu), "absolute" (mem used/total, net rate), "graph", and "cycle"

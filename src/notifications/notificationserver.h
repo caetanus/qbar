@@ -1,0 +1,107 @@
+#pragma once
+
+#include "notificationmodel.h"
+
+#include <QDBusAbstractAdaptor>
+#include <QDBusMessage>
+#include <QHash>
+#include <QObject>
+#include <QStringList>
+#include <QVariantMap>
+
+class QQmlEngine;
+class QWindow;
+class NotificationServer;
+class NotificationWindow;
+class QTimer;
+
+// The org.freedesktop.Notifications interface (Desktop Notifications spec 1.2),
+// forwarded onto NotificationServer. Method/arg casing is fixed by the spec.
+class NotificationsAdaptor final : public QDBusAbstractAdaptor {
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.Notifications")
+
+public:
+    explicit NotificationsAdaptor(NotificationServer *server);
+
+public slots:
+    uint Notify(const QString &app_name, uint replaces_id, const QString &app_icon,
+                const QString &summary, const QString &body, const QStringList &actions,
+                const QVariantMap &hints, int expire_timeout);
+    void CloseNotification(uint id);
+    QStringList GetCapabilities();
+    QString GetServerInformation(QString &vendor, QString &version, QString &spec_version);
+
+signals:
+    void NotificationClosed(uint id, uint reason);
+    void ActionInvoked(uint id, const QString &action_key);
+
+private:
+    NotificationServer *m_server;
+};
+
+// Owns the D-Bus service, the notification model, the expiry timers and the toast
+// window. ONE per process (the first BarWindow whose config enables notifications
+// creates it) — a second instance could not register the bus name anyway.
+class NotificationServer final : public QObject {
+    Q_OBJECT
+    // Global do-not-disturb: toasts are suppressed (closed as expired on arrival)
+    // while set; critical notifications still show.
+    Q_PROPERTY(bool doNotDisturb READ doNotDisturb WRITE setDoNotDisturb NOTIFY doNotDisturbChanged)
+
+public:
+    // NotificationClosed reason codes (spec).
+    enum CloseReason { Expired = 1, Dismissed = 2, Closed = 3 };
+
+    explicit NotificationServer(QQmlEngine *engine,
+                                QVariantMap theme,
+                                QVariantMap config,
+                                QObject *cssTheme,
+                                QObject *parent = nullptr);
+    ~NotificationServer() override;
+
+    static NotificationServer *instance() { return s_instance; }
+
+    NotificationModel *model() { return &m_model; }
+    void setBarWindow(QWindow *window);
+    void setConfig(const QVariantMap &config);
+
+    bool doNotDisturb() const { return m_doNotDisturb; }
+    void setDoNotDisturb(bool on);
+
+    // QML-side interactions (card click, action button, close button, hover).
+    Q_INVOKABLE void invokeAction(uint id, const QString &actionKey);
+    Q_INVOKABLE void dismiss(uint id);
+    Q_INVOKABLE void setHovered(uint id, bool hovered);
+
+    // Adaptor entry points.
+    uint notify(const QString &appName, uint replacesId, const QString &appIcon,
+                const QString &summary, const QString &body, const QStringList &actions,
+                const QVariantMap &hints, int expireTimeout);
+    void closeNotification(uint id, CloseReason reason);
+
+signals:
+    void doNotDisturbChanged();
+    // Relayed onto the adaptor's D-Bus signals (signal→signal connect).
+    void notificationClosed(uint id, uint reason);
+    void actionInvoked(uint id, const QString &actionKey);
+
+private:
+    void armExpiry(quint32 id, int ms);
+    void disarmExpiry(quint32 id);
+    QString resolveAppIcon(const QString &appIcon, const QVariantMap &hints, quint32 id);
+    int resolveTimeout(int expireTimeout, int urgency) const;
+
+    static NotificationServer *s_instance;
+
+    NotificationModel m_model;
+    NotificationsAdaptor *m_adaptor = nullptr;
+    NotificationWindow *m_window = nullptr;
+    NotificationImageProvider *m_imageProvider = nullptr; // owned by the QML engine
+    QVariantMap m_config;
+    QHash<quint32, QTimer *> m_expiry;
+    quint32 m_nextId = 1;
+    quint32 m_imageSerial = 0;
+    bool m_doNotDisturb = false;
+    bool m_registered = false;
+};

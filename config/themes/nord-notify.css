@@ -1,0 +1,53 @@
+/*
+ * Nord notifications — matches the nord bar theme.
+ * Polar frost: translucent Nord glass with a soft emboss, gentle scale-in,
+ * dissolve-and-lift exit. A compositor blur rule on the `qbar-notifications`
+ * layer completes the frost.
+ * Use via `"notifications": { "styleSheet": "themes/nord-notify.css" }`.
+ */
+
+#notifications { width: 380px; margin: 14px; spacing: 10px; }
+
+@keyframes nord-notif-in {
+    0%   { opacity: 0; transform: scale(0.90); }
+    100% { opacity: 1; transform: scale(1.0); }
+}
+@keyframes nord-notif-out {
+    0%   { opacity: 1; transform: translateY(0px) scale(1.0); }
+    100% { opacity: 0; transform: translateY(-16px) scale(0.96); }
+}
+
+#notification {
+    background-color: rgba(46, 52, 64, 0.75);
+    border-color: rgba(216, 222, 233, 0.20);
+    border-width: 1px;
+    border-radius: 12px;
+    box-shadow: 0px 12px 28px rgba(0, 0, 0, 0.35);
+    padding: 12px;
+    emboss: 0.28;
+    emboss-highlight: rgba(236, 239, 244, 0.80);
+    emboss-shadow: rgba(36, 41, 51, 0.90);
+    animation: nord-notif-in 260ms ease-out;
+    transition: all 150ms ease-out;
+}
+#notification:exit  { animation: nord-notif-out 210ms ease-in; }
+#notification:hover { border-color: #88c0d0; }
+#notification:critical {
+    background-color: rgba(78, 42, 48, 0.85);
+    border-color: #bf616a;
+}
+#notification:low { background-color: rgba(46, 52, 64, 0.60); }
+
+#notification.app     { color: #7b88a1; font-size: 10px; }
+#notification.summary { color: #eceff4; font-size: 12px; }
+#notification.body    { color: #d8dee9; font-size: 11px; }
+#notification.close   { color: #4c566a; }
+#notification.close:hover { color: #bf616a; }
+#notification.action {
+    background-color: #3b4252;
+    color: #eceff4;
+    border-radius: 6px;
+}
+#notification.action:hover { background-color: #434c5e; }
+#notification.progress { background-color: rgba(216, 222, 233, 0.10); color: #88c0d0; height: 3px; }
+#notification.value    { background-color: rgba(216, 222, 233, 0.12); color: #81a1c1; }

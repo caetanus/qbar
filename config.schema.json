@@ -68,6 +68,22 @@
         "peakHeight": { "type": "integer", "description": "Cursor-focused fisheye peak height, px (default round(hoverHeight * 1.5))." }
       }
     },
+    "notifications": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The org.freedesktop.Notifications daemon (CSS-themed toasts). Stop any other daemon (dunst/mako) or set enabled: false.",
+      "properties": {
+        "enabled": { "type": "boolean", "description": "Own the notification bus name and show toasts. OPT-IN (default false) — enabling displaces dunst/mako. Not hot-reloadable." },
+        "styleSheet": { "type": "string", "description": "Dedicated stylesheet for the toasts — separate from the bar theme, like the lock's *-lock.css (e.g. \"themes/nord-notify.css\"; relative paths resolve against the config dir). Omit to inherit the bar theme's #notification rules." },
+        "corner": { "type": "string", "enum": ["top-left", "top-right", "bottom-left", "bottom-right"], "description": "Screen corner the toast stack grows from (default top-right)." },
+        "maxVisible": { "type": "integer", "description": "Cards shown at once; the rest queue (default 5)." },
+        "timeout": { "type": "integer", "description": "Default expiry for normal urgency, ms (default 6000)." },
+        "timeoutLow": { "type": "integer", "description": "Expiry for low urgency, ms (default 4000)." },
+        "timeoutCritical": { "type": "integer", "description": "Expiry for critical urgency, ms (default 0 = never; dismissed via the ✕)." },
+        "width": { "type": "integer", "description": "Toast width fallback, px — the CSS `#notifications { width }` wins (default 380)." },
+        "margin": { "type": "integer", "description": "Gap to the screen edges fallback, px — CSS `#notifications { margin }` wins (default 12)." }
+      }
+    },
     "cpu": { "$ref": "#/$defs/display" },
     "memory": { "$ref": "#/$defs/display" },
     "network": { "$ref": "#/$defs/display" }

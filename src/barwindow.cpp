@@ -10,6 +10,7 @@
 #include "qml/localstorage.h"
 #include "qml/modelcapsules.h"
 #include "json/jsonc.h"
+#include "notifications/notificationserver.h"
 #include "caffeine/caffeinemodel.h"
 #include "platform/capslockmonitor.h"
 #include "css/csstheme.h"
@@ -276,6 +277,43 @@ QVariantMap themeMap(const BarConfig &config)
     };
 }
 
+// Default notification-toast styling, applied as a prelude (lowest priority) to
+// whichever stylesheet the notifier uses — the bar's, or its own dedicated one
+// (`notifications.styleSheet`). Every theme gets presentable frosted-glass toasts
+// with entry/exit animations out of the box, and the theme's own `#notification*`
+// rules override any of it. Translucent backgrounds on purpose — a compositor blur
+// rule on the `qbar-notifications` layer namespace turns them into glass.
+QString notificationCssPrelude()
+{
+    return QStringLiteral(
+        "#notifications { width: 380px; margin: 14px; spacing: 10px; }\n"
+        "@keyframes qbar-notif-in {\n"
+        "  0%   { opacity: 0; transform: translateX(340px) scale(0.96); }\n"
+        "  70%  { opacity: 1; transform: translateX(-6px); }\n"
+        "  100% { opacity: 1; transform: translateX(0px); }\n"
+        "}\n"
+        "#notification {\n"
+        "  background-color: rgba(40, 44, 58, 0.80);\n"
+        "  border-color: rgba(255, 255, 255, 0.16);\n"
+        "  border-width: 1px;\n"
+        "  border-radius: 12px;\n"
+        "  box-shadow: 0px 12px 28px rgba(0, 0, 0, 0.34);\n"
+        "  padding: 12px;\n"
+        "  animation: qbar-notif-in 320ms ease-out;\n"
+        "}\n"
+        "#notification:exit { transition: opacity 200ms ease-in; }\n"
+        "#notification:hover { border-color: rgba(255, 255, 255, 0.30); }\n"
+        "#notification:critical { background-color: rgba(96, 38, 48, 0.86); border-color: rgba(240, 110, 120, 0.85); }\n"
+        "#notification:low { background-color: rgba(40, 44, 58, 0.62); }\n"
+        "#notification.app { font-size: 10px; }\n"
+        "#notification.summary { font-size: 12px; }\n"
+        "#notification.body { font-size: 11px; }\n"
+        "#notification.action { background-color: rgba(255, 255, 255, 0.10); border-radius: 6px; }\n"
+        "#notification.action:hover { background-color: rgba(255, 255, 255, 0.20); }\n"
+        "#notification.progress { background-color: rgba(255, 255, 255, 0.10); height: 3px; }\n"
+        "#notification.value { background-color: rgba(255, 255, 255, 0.12); }\n");
+}
+
 } // namespace
 
 BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
@@ -377,40 +415,65 @@ void BarWindow::loadCssTheme()
                        .arg(name)
                        .arg(drawer.value(QStringLiteral("transition-duration")).toInt());
     }
+    // Default toast styling only matters here while the notifier shares this theme —
+    // with a dedicated `notifications.styleSheet` the prelude lives on THAT theme
+    // instead (see loadNotificationCssTheme).
+    if (m_config.notifications.value(QStringLiteral("enabled"), false).toBool()
+        && m_config.notifications.value(QStringLiteral("styleSheet")).toString().isEmpty()) {
+        prelude += notificationCssPrelude();
+    }
     m_cssTheme->setStylePrelude(prelude);
 
     // The CSS cascade, in order: an optional base (only if configured) that the theme
     // cascades over, then the theme itself (explicit styleSheet, else the conventional
     // qbar/style.css). loadLayered concatenates them so the theme wins on equal specificity.
-    // Resolve a theme reference: http(s)/file URLs and absolute paths pass through; a bare
-    // relative path resolves against the directory of THIS config file (so it works the same
-    // whether the config is at ~/.config/qbar/ or wherever --config points). Lets the bundled
-    // default config portably say "themes/nord.css".
-    const QString configBaseDir = !m_config.configFilePath.isEmpty()
-        ? QFileInfo(m_config.configFilePath).absolutePath()
-        : QDir(configDir).filePath(QStringLiteral("qbar"));
-    const auto resolveTheme = [&configBaseDir](const QString &p) -> QString {
-        if (p.isEmpty())
-            return p;
-        const QString scheme = QUrl(p).scheme();
-        if (scheme == QLatin1String("http") || scheme == QLatin1String("https")
-            || scheme == QLatin1String("file") || QDir::isAbsolutePath(p)) {
-            return p;
-        }
-        return QDir(configBaseDir).filePath(p);
-    };
-
     QStringList layer;
     if (!m_config.baseStyleSheet.isEmpty())
-        layer.append(resolveTheme(m_config.baseStyleSheet));
+        layer.append(resolveThemeReference(m_config.baseStyleSheet));
     if (!m_config.styleSheet.isEmpty())
-        layer.append(resolveTheme(m_config.styleSheet));
+        layer.append(resolveThemeReference(m_config.styleSheet));
     else
         layer.append(QDir(configDir).filePath(QStringLiteral("qbar/style.css")));
 
     m_cssTheme->loadLayered(layer);
     // loadLayered emits loadedChanged → updateBarMarginsFromCss(), so the bar margins are
     // already current here; no explicit call needed.
+}
+
+// Resolve a theme reference: http(s)/file URLs and absolute paths pass through; a bare
+// relative path resolves against the directory of THIS config file (so it works the same
+// whether the config is at ~/.config/qbar/ or wherever --config points). Lets the bundled
+// default config portably say "themes/nord.css".
+QString BarWindow::resolveThemeReference(const QString &pathOrUrl) const
+{
+    if (pathOrUrl.isEmpty())
+        return pathOrUrl;
+    const QString scheme = QUrl(pathOrUrl).scheme();
+    if (scheme == QLatin1String("http") || scheme == QLatin1String("https")
+        || scheme == QLatin1String("file") || QDir::isAbsolutePath(pathOrUrl)) {
+        return pathOrUrl;
+    }
+    const QString configBaseDir = !m_config.configFilePath.isEmpty()
+        ? QFileInfo(m_config.configFilePath).absolutePath()
+        : QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation))
+              .filePath(QStringLiteral("qbar"));
+    return QDir(configBaseDir).filePath(pathOrUrl);
+}
+
+void BarWindow::loadNotificationCssTheme()
+{
+    if (m_notificationCssTheme == nullptr) {
+        return;
+    }
+    const QString sheet = m_config.notifications.value(QStringLiteral("styleSheet")).toString();
+    if (sheet.isEmpty()) {
+        // The key was removed at runtime; keep the last dedicated theme (the daemon's
+        // window can't be re-pointed at the bar's CssTheme without a restart).
+        qWarning() << "qbar: notifications.styleSheet removed — restart qbar to re-share the bar theme";
+        return;
+    }
+    m_notificationCssTheme->setStylePrelude(notificationCssPrelude());
+    m_notificationCssTheme->loadLayered({resolveThemeReference(sheet)});
 }
 
 void BarWindow::updateBarMarginsFromCss()
@@ -754,6 +817,27 @@ void BarWindow::reloadConfigFromDisk()
         }
     }
 
+    // Notification options (corner/timeouts/maxVisible): forward to the daemon.
+    // (enabled cannot be toggled live — the bus name registration is per-process.)
+    if (fresh.notifications != m_config.notifications) {
+        const QString oldSheet =
+            m_config.notifications.value(QStringLiteral("styleSheet")).toString();
+        m_config.notifications = fresh.notifications;
+        if (NotificationServer::instance() != nullptr) {
+            NotificationServer::instance()->setConfig(m_config.notifications);
+        }
+        const QString newSheet =
+            m_config.notifications.value(QStringLiteral("styleSheet")).toString();
+        if (newSheet != oldSheet) {
+            if (m_notificationCssTheme != nullptr) {
+                loadNotificationCssTheme(); // re-point the dedicated theme at the new file
+            } else if (!newSheet.isEmpty()) {
+                qWarning() << "qbar: notifications.styleSheet added — restart qbar to apply "
+                              "(the daemon was created sharing the bar theme)";
+            }
+        }
+    }
+
     // Module/group changes: update the applet lists the Bar.qml Repeaters bind to (and expose
     // any newly-configured applet's backend), so adding/removing an applet takes effect live.
     if (fresh.appletsLeft != m_config.appletsLeft || fresh.appletsCenter != m_config.appletsCenter
@@ -891,6 +975,26 @@ void BarWindow::buildLayout()
     // Dock pay nothing. Exposed to QML as `dockController`.
     m_dockWindow = new DockWindow(engine(), theme, m_config.dock, m_wm->windowModel(), m_wm, m_cssTheme, this);
     m_dockWindow->setBarWindow(this);
+
+    // The notification daemon (org.freedesktop.Notifications → CSS-themed toasts).
+    // ONE per process — only the first bar that enables it creates the server (the
+    // bus name can only be owned once anyway); later bars just reuse it.
+    if (m_config.notifications.value(QStringLiteral("enabled"), false).toBool()
+        && NotificationServer::instance() == nullptr) {
+        // `notifications.styleSheet` gives the toasts their OWN stylesheet (own
+        // CssTheme, own file watcher/hot-reload), independent of the bar's theme —
+        // the same separation the lock's *-lock.css files have. Unset = share the
+        // bar's theme, whose `#notification*` rules (or the prelude defaults) apply.
+        QObject *notificationTheme = m_cssTheme;
+        if (!m_config.notifications.value(QStringLiteral("styleSheet")).toString().isEmpty()) {
+            m_notificationCssTheme = new CssTheme(this);
+            loadNotificationCssTheme();
+            notificationTheme = m_notificationCssTheme;
+        }
+        auto *notifications =
+            new NotificationServer(engine(), theme, m_config.notifications, notificationTheme, this);
+        notifications->setBarWindow(this);
+    }
 
     rootContext()->setContextProperty(QStringLiteral("theme"), theme);
     // Directory of the active config file — relative custom-widget `source` paths

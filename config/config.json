@@ -100,6 +100,22 @@
     //   magnify:   "fisheye" | "parabolic" | "scale" | "none"
     //   indicator: "underline" | "dot" | "pill" | "none"
 
+    // ── Notifications (OPT-IN) ────────────────────────────────────────────────
+    // With "enabled": true qbar owns org.freedesktop.Notifications and renders the
+    // toasts itself — stop dunst/mako first (`systemctl --user mask dunst.service`),
+    // or qbar waits politely for the bus name to free up. "styleSheet" gives the
+    // toasts their OWN stylesheet — separate from the bar theme, like the lock's
+    // *-lock.css. Bundled looks: macchiato-notify, aqua-glass-notify,
+    // tokyo-night-notify, nord-notify, neon-shrine-notify (in ./themes/).
+    // Omit styleSheet to inherit the bar theme.
+    "notifications": {
+        "enabled": true,
+        "styleSheet": "themes/nord-notify.css",
+        "corner": "top-right",  // "top-left" | "top-right" | "bottom-left" | "bottom-right"
+        "maxVisible": 5
+        // "timeout": 6000,         // default expiry (ms); critical never expires
+    },
+
     // ── Custom tools ──────────────────────────────────────────────────────────
     // Two kinds:
     //   • "source": a runtime QML widget (.qml) — full custom rendering, popups,

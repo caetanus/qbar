@@ -67,6 +67,12 @@ private:
     void configureWindow();
     void exposeModels();
     void loadCssTheme();
+    // Resolve a theme reference from the config: http(s)/file URLs and absolute paths pass
+    // through; a bare relative path resolves against the directory of the active config file.
+    QString resolveThemeReference(const QString &pathOrUrl) const;
+    // (Re)load the notifier's dedicated stylesheet (`notifications.styleSheet`) into
+    // m_notificationCssTheme. No-op unless the daemon was created with its own theme.
+    void loadNotificationCssTheme();
     // Re-derive the bar's edge gap (CSS margin-top/bottom) into the qbarBarMargin* window
     // properties the layer-shell plugin reads. Connected to CssTheme::loadedChanged so it runs
     // on every (re)load — including the CSS hot-reload path that bypasses loadCssTheme().
@@ -99,6 +105,10 @@ private:
     WindowManagerBackend *m_wm = nullptr;
     CapsLockMonitor *m_capsLockMonitor = nullptr;
     CssTheme *m_cssTheme = nullptr;
+    // Only when `notifications.styleSheet` is configured: the notifier's own theme, so
+    // toasts are styled independently of the bar (like the lock's dedicated *-lock.css).
+    // Null otherwise — the daemon then shares m_cssTheme.
+    CssTheme *m_notificationCssTheme = nullptr;
     QNetworkAccessManager *m_cssNam = nullptr; // lazily created for set-css over http(s)
     QFileSystemWatcher *m_configWatcher = nullptr;
     QTimer *m_configReloadTimer = nullptr; // debounces save-in-progress watcher events

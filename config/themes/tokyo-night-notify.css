@@ -1,0 +1,48 @@
+/*
+ * Tokyo Night notifications — matches the tokyo-night bar theme.
+ * Flat dark panels: quick slide from the right, slide back out on dismiss.
+ * Use via `"notifications": { "styleSheet": "themes/tokyo-night-notify.css" }`.
+ */
+
+#notifications { width: 380px; margin: 12px; spacing: 8px; }
+
+@keyframes tn-notif-in {
+    0%   { opacity: 0; transform: translateX(340px); }
+    100% { opacity: 1; transform: translateX(0px); }
+}
+@keyframes tn-notif-out {
+    0%   { opacity: 1; transform: translateX(0px); }
+    100% { opacity: 0; transform: translateX(340px); }
+}
+
+#notification {
+    background-color: rgba(26, 27, 38, 0.92);
+    border-color: #283457;
+    border-width: 1px;
+    border-radius: 8px;
+    box-shadow: 0px 10px 24px rgba(0, 0, 0, 0.45);
+    padding: 12px;
+    animation: tn-notif-in 240ms ease-out;
+    transition: all 140ms ease-out;
+}
+#notification:exit  { animation: tn-notif-out 190ms ease-in; }
+#notification:hover { border-color: #7aa2f7; }
+#notification:critical {
+    background-color: rgba(58, 26, 34, 0.94);
+    border-color: #f7768e;
+}
+#notification:low { background-color: rgba(26, 27, 38, 0.80); }
+
+#notification.app     { color: #565f89; font-size: 10px; }
+#notification.summary { color: #c0caf5; font-size: 12px; }
+#notification.body    { color: #a9b1d6; font-size: 11px; }
+#notification.close   { color: #565f89; }
+#notification.close:hover { color: #f7768e; }
+#notification.action {
+    background-color: #283457;
+    color: #c0caf5;
+    border-radius: 6px;
+}
+#notification.action:hover { background-color: #3d59a1; }
+#notification.progress { background-color: rgba(192, 202, 245, 0.08); color: #7aa2f7; height: 3px; }
+#notification.value    { background-color: rgba(192, 202, 245, 0.10); color: #bb9af7; }

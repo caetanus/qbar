@@ -4,6 +4,7 @@
     <file alias="config.schema.json">../config.schema.json</file>
     <file alias="style.css">../config/style.css</file>
     <file alias="themes/aqua-glass.css">../config/themes/aqua-glass.css</file>
+    <file alias="themes/aqua-glass-notify.css">../config/themes/aqua-glass-notify.css</file>
     <file alias="themes/bliss-xp.css">../config/themes/bliss-xp.css</file>
     <file alias="themes/catppuccin-frappe.css">../config/themes/catppuccin-frappe.css</file>
     <file alias="themes/catppuccin-latte.css">../config/themes/catppuccin-latte.css</file>
@@ -18,10 +19,13 @@
     <file alias="themes/high-contrast.css">../config/themes/high-contrast.css</file>
     <file alias="themes/kanagawa.css">../config/themes/kanagawa.css</file>
     <file alias="themes/macchiato.css">../config/themes/macchiato.css</file>
+    <file alias="themes/macchiato-notify.css">../config/themes/macchiato-notify.css</file>
     <file alias="themes/material-ocean.css">../config/themes/material-ocean.css</file>
     <file alias="themes/mojave-drift.css">../config/themes/mojave-drift.css</file>
     <file alias="themes/neon-shrine.css">../config/themes/neon-shrine.css</file>
+    <file alias="themes/neon-shrine-notify.css">../config/themes/neon-shrine-notify.css</file>
     <file alias="themes/nord.css">../config/themes/nord.css</file>
+    <file alias="themes/nord-notify.css">../config/themes/nord-notify.css</file>
     <file alias="themes/one-dark.css">../config/themes/one-dark.css</file>
     <file alias="themes/palenight.css">../config/themes/palenight.css</file>
     <file alias="themes/paper-sun.css">../config/themes/paper-sun.css</file>
@@ -29,6 +33,7 @@
     <file alias="themes/solarized-dark.css">../config/themes/solarized-dark.css</file>
     <file alias="themes/solarized-light.css">../config/themes/solarized-light.css</file>
     <file alias="themes/tokyo-night.css">../config/themes/tokyo-night.css</file>
+    <file alias="themes/tokyo-night-notify.css">../config/themes/tokyo-night-notify.css</file>
     <file alias="themes/tundra-signal.css">../config/themes/tundra-signal.css</file>
     <file alias="themes/vinyl-dusk.css">../config/themes/vinyl-dusk.css</file>
     <file alias="widgets/Bitcoin.qml">../config/widgets/Bitcoin.qml</file>

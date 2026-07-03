@@ -417,6 +417,30 @@ QVariantMap parseDock(const QJsonObject &root)
     return dock;
 }
 
+QVariantMap parseNotifications(const QJsonObject &root)
+{
+    // Opt-in on purpose: owning org.freedesktop.Notifications displaces whatever
+    // daemon (dunst/mako) the user already runs — that must be an explicit choice
+    // (`"notifications": { "enabled": true }`), not a surprise side effect of qbar.
+    QVariantMap notifications{
+        {QStringLiteral("enabled"), false},
+        {QStringLiteral("corner"), QStringLiteral("top-right")},
+        {QStringLiteral("maxVisible"), 5},
+        {QStringLiteral("timeout"), 6000},
+        {QStringLiteral("timeoutLow"), 4000},
+        {QStringLiteral("timeoutCritical"), 0},
+        {QStringLiteral("width"), 380},
+        {QStringLiteral("margin"), 12},
+    };
+    if (root.contains(QStringLiteral("notifications")) && root.value(QStringLiteral("notifications")).isObject()) {
+        const QVariantMap overrides = root.value(QStringLiteral("notifications")).toObject().toVariantMap();
+        for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
+            notifications.insert(it.key(), it.value());
+        }
+    }
+    return notifications;
+}
+
 BarConfig parseBarObject(const QJsonObject &root)
 {
     BarConfig config;
@@ -472,6 +496,7 @@ BarConfig parseBarObject(const QJsonObject &root)
     config.customTools = parseCustomTools(root);
     config.taskbar = parseTaskbar(root);
     config.dock = parseDock(root);
+    config.notifications = parseNotifications(root);
     // The graph is always rendered; these defaults list only the value part shown
     // beside it, reproducing the historical look.
     config.cpu = parseDisplay(root, QStringLiteral("cpu"), {QStringLiteral("cycle")}, QStringLiteral("cpu"));

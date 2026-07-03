@@ -1,0 +1,67 @@
+/*
+ * Neon Shrine notifications — matches the neon-shrine bar theme.
+ * Jade neon signs: pop-in with overshoot, zoom-out fade, glowing jade border
+ * (coral when critical).
+ * Use via `"notifications": { "styleSheet": "themes/neon-shrine-notify.css" }`.
+ */
+
+@define-color text  #d9fff2;
+@define-color muted #8cc7b4;
+@define-color jade  #00e6a7;
+@define-color mint  #80ffd7;
+@define-color coral #ff6b8a;
+@define-color cyan  #39d7ff;
+
+#notifications { width: 380px; margin: 14px; spacing: 12px; }
+
+@keyframes neon-notif-in {
+    0%   { opacity: 0; transform: scale(0.75); }
+    64%  { opacity: 1; transform: scale(1.06); }
+    100% { opacity: 1; transform: scale(1.0); }
+}
+@keyframes neon-notif-out {
+    0%   { opacity: 1; transform: scale(1.0); }
+    100% { opacity: 0; transform: scale(1.18); }
+}
+
+#notification {
+    background-color: rgba(13, 33, 27, 0.86);
+    border-color: rgba(0, 230, 167, 0.55);
+    border-width: 1px;
+    border-radius: 12px;
+    box-shadow: 0px 0px 22px rgba(0, 230, 167, 0.28);
+    padding: 12px;
+    animation: neon-notif-in 300ms ease-out;
+    transition: all 150ms ease-out;
+}
+#notification:exit  { animation: neon-notif-out 220ms ease-in; }
+#notification:hover {
+    border-color: @mint;
+    box-shadow: 0px 0px 30px rgba(0, 230, 167, 0.45);
+}
+#notification:critical {
+    background-color: rgba(46, 16, 25, 0.90);
+    border-color: @coral;
+    box-shadow: 0px 0px 26px rgba(255, 107, 138, 0.40);
+}
+#notification:low {
+    background-color: rgba(13, 33, 27, 0.70);
+    border-color: rgba(0, 230, 167, 0.30);
+    box-shadow: none;
+}
+
+#notification.app     { color: @muted; font-size: 10px; }
+#notification.summary { color: @mint; font-size: 12px; }
+#notification.body    { color: @text; font-size: 11px; }
+#notification.close   { color: @muted; }
+#notification.close:hover { color: @coral; }
+#notification.action {
+    background-color: rgba(0, 230, 167, 0.14);
+    color: @jade;
+    border-color: rgba(0, 230, 167, 0.40);
+    border-width: 1px;
+    border-radius: 8px;
+}
+#notification.action:hover { background-color: rgba(0, 230, 167, 0.28); }
+#notification.progress { background-color: rgba(217, 255, 242, 0.08); color: @jade; height: 3px; }
+#notification.value    { background-color: rgba(217, 255, 242, 0.10); color: @cyan; }
