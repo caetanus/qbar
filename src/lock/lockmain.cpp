@@ -9,12 +9,15 @@
 #include <QCommandLineParser>
 #include <QCursor>
 #include <QGuiApplication>
+#include <QLibraryInfo>
+#include <QLocale>
 #include <QQmlContext>
 #include <QQuickView>
 #include <QScreen>
 #include <QStandardPaths>
 #include <QSurfaceFormat>
 #include <QTimer>
+#include <QTranslator>
 
 #include <cstdio>
 #include <memory>
@@ -145,6 +148,20 @@ int main(int argc, char *argv[])
 
     QGuiApplication app(argc, argv);
     QGuiApplication::setDesktopFileName(QStringLiteral("qbar-lock"));
+
+    // LANG/LC_MESSAGES support: Qt's own catalogs (built-in component strings)
+    // first, then ours (":/i18n", embedded via meson compile_translations).
+    // Both live on main's stack, outliving app.exec().
+    QTranslator qtTranslator;
+    if (qtTranslator.load(QLocale(), QStringLiteral("qt"), QStringLiteral("_"),
+                          QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
+        QCoreApplication::installTranslator(&qtTranslator);
+    }
+    QTranslator translator;
+    if (translator.load(QLocale(), QStringLiteral("qbar-lock"), QStringLiteral("_"),
+                        QStringLiteral(":/i18n"))) {
+        QCoreApplication::installTranslator(&translator);
+    }
 
     std::unique_ptr<LockBackend> backend = createBackend(backendName);
 

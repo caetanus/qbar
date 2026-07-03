@@ -86,9 +86,9 @@ bool WaylandLockBackend::isAvailable() const
 QString WaylandLockBackend::unavailableReason() const
 {
     if (qgetenv("WAYLAND_DISPLAY").isEmpty()) {
-        return QStringLiteral("Wayland display is not available");
+        return tr("Wayland display is not available");
     }
-    return QStringLiteral("Compositor does not support ext-session-lock-v1");
+    return tr("Compositor does not support ext-session-lock-v1");
 }
 
 void WaylandLockBackend::lock()
@@ -135,9 +135,9 @@ bool WaylandLockBackend::isAvailable() const
 QString WaylandLockBackend::unavailableReason() const
 {
     if (qgetenv("WAYLAND_DISPLAY").isEmpty()) {
-        return QStringLiteral("Wayland display is not available");
+        return tr("Wayland display is not available");
     }
-    return QStringLiteral("qbar-lock was built without Wayland (ext-session-lock-v1) support");
+    return tr("qbar-lock was built without Wayland (ext-session-lock-v1) support");
 }
 
 void WaylandLockBackend::lock()

@@ -51,7 +51,7 @@ Item {
         spacing: 10
 
         Text {
-            text: "Network — last " + root.windowLabel
+            text: qsTr("Network — last %1").arg(root.windowLabel)
             color: root.fg
             font.bold: true
             font.family: theme.fontFamily
@@ -91,7 +91,7 @@ Item {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 anchors.margins: 5
-                text: "peak " + root.fmt(root.maxv)
+                text: qsTr("peak") + " " + root.fmt(root.maxv)
                 color: root.fgSoft
                 font.family: theme.fontFamily
                 font.pointSize: theme.fontSize - 2
@@ -109,7 +109,7 @@ Item {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 anchors.margins: 5
-                text: "now"
+                text: qsTr("now")
                 color: root.fgSoft
                 font.family: theme.fontFamily
                 font.pointSize: theme.fontSize - 2
@@ -151,7 +151,7 @@ Item {
             visible: root.topTalkers.length > 0
 
             Text {
-                text: "Top processes"
+                text: qsTr("Top processes")
                 color: root.fgSoft
                 font.family: theme.fontFamily
                 font.pointSize: theme.fontSize - 1

@@ -116,7 +116,7 @@ void PamAuthenticator::authenticateWithService(const QString &password, const QS
     m_latestAttemptId = attemptId;
     ++m_activeAttempts;
     setBusy(true);
-    emit promptChanged(QStringLiteral("Authenticating"));
+    emit promptChanged(tr("Authenticating"));
 
     const QString service = requestedService;
     const QString user = m_user;
@@ -140,7 +140,7 @@ void PamAuthenticator::authenticateWithService(const QString &password, const QS
 
         const QString reason = handle != nullptr
             ? QString::fromLocal8Bit(pam_strerror(handle, result))
-            : QStringLiteral("PAM failed to start");
+            : tr("PAM failed to start");
         if (handle != nullptr) {
             pam_end(handle, result);
         }
@@ -149,10 +149,10 @@ void PamAuthenticator::authenticateWithService(const QString &password, const QS
             m_activeAttempts = std::max(0, m_activeAttempts - 1);
             setBusy(m_activeAttempts > 0);
             if (result == PAM_SUCCESS) {
-                emit messageChanged(QStringLiteral("Unlocked"));
+                emit messageChanged(tr("Unlocked"));
                 emit authenticationSucceeded();
             } else if (attemptId == m_latestAttemptId) {
-                emit promptChanged(QStringLiteral("Try again"));
+                emit promptChanged(tr("Try again"));
                 emit authenticationFailed(reason);
             }
         }, Qt::QueuedConnection);

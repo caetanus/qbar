@@ -224,8 +224,8 @@ QBar.CssRect {
                             if (root.rightClickMenu) {
                                 root.menuTargetId = entry.windowId
                                 taskMenu.model = [
-                                    { text: "Focus", action: "focus" },
-                                    { text: "Close", action: "close" },
+                                    { text: qsTr("Focus"), action: "focus" },
+                                    { text: qsTr("Close"), action: "close" },
                                 ]
                                 taskMenu.anchorItem = entry
                                 taskMenu.toggle()

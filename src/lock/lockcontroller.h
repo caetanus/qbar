@@ -81,7 +81,9 @@ private:
     bool m_faceActive = false;
     bool m_succeeded = false;
     QString m_passwordService;
-    QString m_prompt = QStringLiteral("Enter password, or use fingerprint / face");
+    // tr() here is evaluated at construction time, after main() installs the
+    // translators, so the default prompt is localized like every other string.
+    QString m_prompt = tr("Enter password, or use fingerprint / face");
     QString m_message;
     QString m_error;
 };

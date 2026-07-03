@@ -66,9 +66,9 @@ bool X11LockBackend::isAvailable() const
 QString X11LockBackend::unavailableReason() const
 {
 #ifdef QBAR_LOCK_HAVE_X11
-    return QStringLiteral("X11 display is not available");
+    return tr("X11 display is not available");
 #else
-    return QStringLiteral("qbar-lock was built without X11/xlock support");
+    return tr("qbar-lock was built without X11/xlock support");
 #endif
 }
 
@@ -84,7 +84,7 @@ void X11LockBackend::lock()
         return;
     }
     if (!grab()) {
-        emit lockFailed(QStringLiteral("Failed to grab X11 keyboard and pointer"));
+        emit lockFailed(tr("Failed to grab X11 keyboard and pointer"));
         return;
     }
     emit locked();

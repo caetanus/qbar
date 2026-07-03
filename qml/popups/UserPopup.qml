@@ -131,7 +131,7 @@ Item {
             spacing: 4
 
             Text {
-                text: "Sessions"
+                text: qsTr("Sessions")
                 color: root.fgSoft
                 font.family: theme.fontFamily
                 font.pointSize: theme.fontSize - 1

@@ -147,7 +147,10 @@ Item {
     Chrome.Tooltip {
         anchorItem: root
         hovered: root.tooltipHovered && !netPopup.isOpen
-        text: "down " + root.formatRate(root.downloadRateBytesPerSecond) + ", up " + root.formatRate(root.uploadRateBytesPerSecond) + ", total " + root.formatRate(root.totalRateBytesPerSecond)
+        text: qsTr("down %1, up %2, total %3")
+            .arg(root.formatRate(root.downloadRateBytesPerSecond))
+            .arg(root.formatRate(root.uploadRateBytesPerSecond))
+            .arg(root.formatRate(root.totalRateBytesPerSecond))
         side: "auto"
     }
 

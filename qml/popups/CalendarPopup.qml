@@ -170,7 +170,7 @@ Item {
                     Text {
                         width: parent.width - 56
                         height: parent.height
-                        text: Qt.formatDate(root.monthTransitioning ? root.transitionDate : root.displayedDate, "MMMM yyyy")
+                        text: (root.monthTransitioning ? root.transitionDate : root.displayedDate).toLocaleDateString(Qt.locale(), "MMMM yyyy")
                         color: root.popupForeground
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize
@@ -207,7 +207,11 @@ Item {
                     spacing: 0
 
                     Repeater {
-                        model: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+                        // Localized short day names, keeping the grid's fixed
+                        // Sunday-first order (dayName takes 1=Monday..7=Sunday).
+                        model: [7, 1, 2, 3, 4, 5, 6].map(function(day) {
+                            return Qt.locale().standaloneDayName(day, Locale.ShortFormat)
+                        })
 
                         delegate: Text {
                             width: 38
@@ -345,7 +349,7 @@ Item {
 
                 Text {
                     width: parent.width
-                    text: Qt.formatDate(root.selectedDate, "dddd, d MMM yyyy")
+                    text: root.selectedDate.toLocaleDateString(Qt.locale(), "dddd, d MMM yyyy")
                     color: root.popupForeground
                     font.family: theme.fontFamily
                     font.pointSize: theme.fontSize + 1
@@ -357,7 +361,7 @@ Item {
 
                 Text {
                     width: parent.width
-                    text: "Selected day"
+                    text: qsTr("Selected day")
                     color: root.popupForeground
                     opacity: 0.85
                     font.family: theme.fontFamily
@@ -501,7 +505,7 @@ Item {
 
                 Text {
                     width: parent.width
-                    text: "Next"
+                    text: qsTr("Next")
                     color: root.popupForeground
                     opacity: 0.85
                     font.family: theme.fontFamily
@@ -517,7 +521,7 @@ Item {
 
                     delegate: Text {
                         width: ListView.view.width
-                        text: modelData.dayText + " | " + modelData.startText + "  " + modelData.title + (modelData.cancelled ? " | Cancelled" : "")
+                        text: modelData.dayText + " | " + modelData.startText + "  " + modelData.title + (modelData.cancelled ? " | " + qsTr("Cancelled") : "")
                         color: root.popupForeground
                         opacity: 0.98
                         font.family: theme.fontFamily
@@ -541,7 +545,7 @@ Item {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "abrir calendário"
+                        text: qsTr("open calendar")
                         color: root.popupForeground
                         opacity: 0.96
                         font.family: theme.fontFamily

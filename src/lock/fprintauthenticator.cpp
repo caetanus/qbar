@@ -64,7 +64,7 @@ void FprintAuthenticator::start()
         return;
     }
     if (!resolveDevice()) {
-        emit unavailable(QStringLiteral("No fingerprint device"));
+        emit unavailable(tr("No fingerprint device"));
         return;
     }
 
@@ -79,7 +79,7 @@ void FprintAuthenticator::start()
         deviceCall(m_devicePath, QStringLiteral("Claim"))
             << (m_user.isEmpty() ? QString() : m_user));
     if (!claim.isValid()) {
-        emit unavailable(QStringLiteral("Fingerprint device busy: %1").arg(claim.error().message()));
+        emit unavailable(tr("Fingerprint device busy: %1").arg(claim.error().message()));
         return;
     }
     m_claimed = true;
@@ -97,7 +97,7 @@ void FprintAuthenticator::beginVerify()
     if (reply.isValid()) {
         m_verifying = true;
         setActive(true);
-        emit statusChanged(QStringLiteral("Touch the fingerprint reader"));
+        emit statusChanged(tr("Touch the fingerprint reader"));
     }
 }
 
@@ -143,7 +143,7 @@ void FprintAuthenticator::handleVerifyStatus(const QString &result, bool done)
 
     if (!done) {
         // Transient feedback (retry-scan, swipe-too-short, finger-not-centered, ...).
-        emit statusChanged(QStringLiteral("Fingerprint not recognized, try again"));
+        emit statusChanged(tr("Fingerprint not recognized, try again"));
         return;
     }
 
@@ -151,9 +151,9 @@ void FprintAuthenticator::handleVerifyStatus(const QString &result, bool done)
     // listening for another finger, unless we've been told to stop.
     endVerify();
     if (result == QLatin1String("verify-no-match")) {
-        emit scanFailed(QStringLiteral("Fingerprint did not match"));
+        emit scanFailed(tr("Fingerprint did not match"));
     } else if (result == QLatin1String("verify-disconnected")) {
-        emit unavailable(QStringLiteral("Fingerprint reader disconnected"));
+        emit unavailable(tr("Fingerprint reader disconnected"));
         m_running = false;
         return;
     }

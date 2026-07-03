@@ -60,7 +60,7 @@ Item {
             Text {
                 width: parent.width
                 elide: Text.ElideRight
-                text: mprisModel && mprisModel.title.length > 0 ? mprisModel.title : "Nothing playing"
+                text: mprisModel && mprisModel.title.length > 0 ? mprisModel.title : qsTr("Nothing playing")
                 color: root.fg
                 font.bold: true
                 font.family: theme.fontFamily

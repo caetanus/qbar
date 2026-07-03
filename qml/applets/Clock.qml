@@ -11,8 +11,10 @@ QBar.CssRect {
     height: theme.height
 
     // Tooltip text: time on the first line, full date on the second.
-    property string tooltipText: Qt.formatDateTime(new Date(), "HH:mm:ss") + "\n"
-        + Qt.formatDateTime(new Date(), "dddd, d MMMM yyyy")
+    // toLocaleString (not Qt.formatDateTime): Qt6 formats day/month names with the
+    // C locale regardless of LANG; only the Locale overloads honour it.
+    property string tooltipText: new Date().toLocaleTimeString(Qt.locale(), "HH:mm:ss") + "\n"
+        + new Date().toLocaleDateString(Qt.locale(), "dddd, d MMMM yyyy")
     property bool tooltipHovered: false
 
     // The engine (CssTheme::loadCss) PUSHES the resolved #clock rules into CssRect's
@@ -88,13 +90,13 @@ QBar.CssRect {
             return
         }
         formatIndex = normalized
-        clockText.text = Qt.formatDateTime(new Date(), root.currentFormat())
+        clockText.text = new Date().toLocaleString(Qt.locale(), root.currentFormat())
         syncPreferredWidth()
     }
 
     Component.onCompleted: {
         formatIndex = clockSettings.formatIndex
-        clockText.text = Qt.formatDateTime(new Date(), root.currentFormat())
+        clockText.text = new Date().toLocaleString(Qt.locale(), root.currentFormat())
         syncPreferredWidth()
         if (typeof qbarIpc !== "undefined" && qbarIpc)
             qbarIpc.registerPopup("clock", root)
@@ -121,7 +123,7 @@ QBar.CssRect {
         anchors.topMargin: root.paddingTop
         anchors.bottomMargin: root.paddingBottom
         horizontalAlignment: Text.AlignHCenter
-        text: Qt.formatDateTime(new Date(), root.currentFormat())
+        text: new Date().toLocaleString(Qt.locale(), root.currentFormat())
         onImplicitWidthChanged: root.syncPreferredWidth()
     }
 
@@ -131,9 +133,9 @@ QBar.CssRect {
         repeat: true
         onTriggered: {
             var now = new Date()
-            clockText.text = Qt.formatDateTime(now, root.currentFormat())
-            root.tooltipText = Qt.formatDateTime(now, "HH:mm:ss") + "\n"
-                + Qt.formatDateTime(now, "dddd, d MMMM yyyy")
+            clockText.text = now.toLocaleString(Qt.locale(), root.currentFormat())
+            root.tooltipText = now.toLocaleTimeString(Qt.locale(), "HH:mm:ss") + "\n"
+                + now.toLocaleDateString(Qt.locale(), "dddd, d MMMM yyyy")
         }
     }
 

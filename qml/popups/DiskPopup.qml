@@ -85,7 +85,7 @@ Item {
             font.family: theme.fontFamily
             font.pointSize: theme.fontSize + 1
             font.bold: true
-            text: "disk usage"
+            text: qsTr("disk usage")
         }
 
         Flickable {

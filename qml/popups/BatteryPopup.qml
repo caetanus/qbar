@@ -70,13 +70,13 @@ Item {
             return "--"
         }
         if (battery.charging) {
-            return "Charging"
+            return qsTr("Charging")
         }
         if (battery.full) {
-            return "Charged"
+            return qsTr("Charged")
         }
         if (battery.discharging) {
-            return "Discharging"
+            return qsTr("Discharging")
         }
         return battery.status
     }
@@ -86,9 +86,9 @@ Item {
             return "--"
         }
         if (battery.charging) {
-            return "Time to full:"
+            return qsTr("Time to full:")
         }
-        return "Time to empty:"
+        return qsTr("Time to empty:")
     }
 
     function statusColor() {
@@ -214,19 +214,19 @@ Item {
 
             DetailRow {
                 visible: battery ? battery.cyclesAvailable : false
-                label: "Cycles:"
+                label: qsTr("Cycles:")
                 value: battery ? battery.cycles : ""
             }
 
             DetailRow {
                 visible: battery ? battery.healthAvailable : false
-                label: "Health:"
+                label: qsTr("Health:")
                 value: battery ? battery.health + "%" : ""
             }
 
             DetailRow {
                 visible: battery ? battery.energyRateAvailable : false
-                label: "Power draw:"
+                label: qsTr("Power draw:")
                 value: battery ? battery.energyRate.toFixed(1) + " W" : ""
             }
         }

@@ -406,6 +406,10 @@ if popup_emboss_shader_enabled
   qresources += [popup_emboss_shader_qrc]
 endif
 
+# LANG support: translation catalogs for qbar (qbar_i18n) and qbar-lock
+# (lockscreen_i18n), embedded under :/i18n.
+subdir('i18n')
+
 qt_sources = qt6.preprocess(
   moc_headers: headers + platform_moc_headers,
   qresources: qresources,
@@ -417,6 +421,7 @@ executable(
   platform_sources,
   platform_generated,
   qt_sources,
+  qbar_i18n,
   cpp_args: platform_args,
   include_directories: platform_includes,
   dependencies: qt_deps + platform_deps,
@@ -490,6 +495,7 @@ if lockscreen_dep.found()
     ),
     lockscreen_qt_sources,
     lockscreen_generated,
+    lockscreen_i18n,
     cpp_args: lockscreen_args,
     include_directories: [include_directories('src'), qtgui_private_include],
     dependencies: lockscreen_deps,

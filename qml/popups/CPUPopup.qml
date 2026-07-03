@@ -233,7 +233,7 @@ Item {
                         font.family: theme.fontFamily
                         font.pointSize: theme.fontSize
                         horizontalAlignment: Text.AlignRight
-                        text: "load " + root.formatLoad(cpu ? cpu.loadAverage1 : 0) + " " + root.formatLoad(cpu ? cpu.loadAverage5 : 0) + " " + root.formatLoad(cpu ? cpu.loadAverage15 : 0)
+                        text: qsTr("load") + " " + root.formatLoad(cpu ? cpu.loadAverage1 : 0) + " " + root.formatLoad(cpu ? cpu.loadAverage5 : 0) + " " + root.formatLoad(cpu ? cpu.loadAverage15 : 0)
                     }
 
                     PopupText {
@@ -520,7 +520,7 @@ Item {
                         Rectangle { width: 8; height: 8; radius: 2; color: root.memoryGreen; anchors.verticalCenter: parent.verticalCenter }
                         PopupText {
                             color: root.panelTextSoft; font.family: theme.fontFamily; font.pointSize: theme.fontSize - 1
-                            text: "used " + root.formatMemoryKb(ramBar.memUsed / 1024)
+                            text: qsTr("used") + " " + root.formatMemoryKb(ramBar.memUsed / 1024)
                         }
                     }
                     Row {
@@ -528,7 +528,7 @@ Item {
                         Rectangle { width: 8; height: 8; radius: 2; color: root.memoryCache; anchors.verticalCenter: parent.verticalCenter }
                         PopupText {
                             color: root.panelTextSoft; font.family: theme.fontFamily; font.pointSize: theme.fontSize - 1
-                            text: "cache " + root.formatMemoryKb(ramBar.memCache / 1024)
+                            text: qsTr("cache") + " " + root.formatMemoryKb(ramBar.memCache / 1024)
                         }
                     }
                     Row {
@@ -536,7 +536,7 @@ Item {
                         Rectangle { width: 8; height: 8; radius: 2; color: Qt.rgba(1, 1, 1, 0.25); anchors.verticalCenter: parent.verticalCenter }
                         PopupText {
                             color: root.panelTextSoft; font.family: theme.fontFamily; font.pointSize: theme.fontSize - 1
-                            text: "free " + root.formatMemoryKb(ramBar.memFree / 1024)
+                            text: qsTr("free") + " " + root.formatMemoryKb(ramBar.memFree / 1024)
                         }
                     }
                 }

@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/i18n">
+        <file>qbar-lock_pt_BR.qm</file>
+        <file>qbar-lock_pt_PT.qm</file>
+        <file>qbar-lock_fr.qm</file>
+        <file>qbar-lock_de.qm</file>
+        <file>qbar-lock_es.qm</file>
+    </qresource>
+</RCC>

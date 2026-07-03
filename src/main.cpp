@@ -16,6 +16,8 @@
 #include <QHash>
 #include <QIcon>
 #include <QKeyEvent>
+#include <QLibraryInfo>
+#include <QLocale>
 #include <QProcess>
 #include <QScreen>
 #include <QSet>
@@ -23,6 +25,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QTranslator>
 #include <QVBoxLayout>
 #include <QtQml/qqml.h>
 #include <algorithm>
@@ -358,6 +361,20 @@ int main(int argc, char *argv[])
     qmlRegisterType<CustomToolModel>("QBar", 1, 0, "CustomToolModel");
     qmlRegisterType<Sparkline>("QBar", 1, 0, "Sparkline");
     configureIconTheme();
+
+    // LANG/LC_MESSAGES support: Qt's own catalogs (built-in components such as
+    // QCalendarWidget) first, then ours (":/i18n", embedded via meson
+    // compile_translations). Both live on main's stack, outliving app.exec().
+    QTranslator qtTranslator;
+    if (qtTranslator.load(QLocale(), QStringLiteral("qt"), QStringLiteral("_"),
+                          QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
+        QCoreApplication::installTranslator(&qtTranslator);
+    }
+    QTranslator translator;
+    if (translator.load(QLocale(), QStringLiteral("qbar"), QStringLiteral("_"),
+                        QStringLiteral(":/i18n"))) {
+        QCoreApplication::installTranslator(&translator);
+    }
 
     if (hasArg(argc, argv, "--calendar-popup")) {
         const QString popupAppId = calendarPopupString(argc, argv, "--popup-app-id", QStringLiteral("qbar-calendar-popup"));

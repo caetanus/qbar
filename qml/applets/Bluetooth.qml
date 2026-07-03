@@ -45,13 +45,13 @@ QBar.CssRect {
     // Right-click menu: toggle power and connect/disconnect paired devices.
     function buildMenu() {
         var items = []
-        items.push({ text: root.powered ? "Turn Bluetooth off" : "Turn Bluetooth on", action: "power" })
+        items.push({ text: root.powered ? qsTr("Turn Bluetooth off") : qsTr("Turn Bluetooth on"), action: "power" })
 
         if (root.powered) {
             items.push({ separator: true })
             var devices = bluetoothModel ? bluetoothModel.devices : []
             if (devices.length === 0) {
-                items.push({ text: "No paired devices", enabled: false })
+                items.push({ text: qsTr("No paired devices"), enabled: false })
             } else {
                 for (var i = 0; i < devices.length; i++) {
                     var d = devices[i]

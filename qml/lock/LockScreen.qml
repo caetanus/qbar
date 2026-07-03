@@ -217,13 +217,13 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 18
                 Text {
-                    text: keyLocks.active ? "CAPS LOCK ON" : "Caps Lock"
+                    text: keyLocks.active ? qsTr("CAPS LOCK ON") : qsTr("Caps Lock")
                     color: keyLocks.active ? "#f7768e" : "#5b6272"
                     font.bold: keyLocks.active
                     font.pixelSize: 12
                 }
                 Text {
-                    text: keyLocks.numLockActive ? "Num Lock On" : "Num Lock Off"
+                    text: keyLocks.numLockActive ? qsTr("Num Lock On") : qsTr("Num Lock Off")
                     color: keyLocks.numLockActive ? "#9ece6a" : "#5b6272"
                     font.pixelSize: 12
                 }

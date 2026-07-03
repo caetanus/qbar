@@ -72,7 +72,7 @@ LockController::LockController(PamAuthenticator *authenticator,
 
     if (m_backend != nullptr) {
         connect(m_backend, &LockBackend::locked, this, [this]() {
-            setMessage(QStringLiteral("Locked with %1").arg(m_backend->name()));
+            setMessage(tr("Locked with %1").arg(m_backend->name()));
         });
         connect(m_backend, &LockBackend::lockFailed, this, [this](const QString &reason) {
             setError(reason);
@@ -126,12 +126,12 @@ bool LockController::busy() const
 void LockController::start()
 {
     if (m_demoMode) {
-        setMessage(QStringLiteral("Demo mode"));
+        setMessage(tr("Demo mode"));
         startMethods(); // exercise fingerprint/face wiring in demo too, but never auto-unlock
         return;
     }
     if (m_backend == nullptr) {
-        emit fatalError(QStringLiteral("No lock backend configured"));
+        emit fatalError(tr("No lock backend configured"));
         QCoreApplication::exit(2);
         return;
     }
@@ -174,7 +174,7 @@ void LockController::succeed()
     }
     m_succeeded = true;
     stopMethods();
-    setMessage(QStringLiteral("Unlocked"));
+    setMessage(tr("Unlocked"));
     if (m_demoMode) {
         emit unlocked();
         QCoreApplication::quit();
