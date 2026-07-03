@@ -280,6 +280,7 @@ sources = files(
   'src/configreloader.cpp',
   'src/thememanager.cpp',
   'src/qml/baractions.cpp',
+  'src/qml/enginebootstrap.cpp',
   'src/qml/widgetreloader.cpp',
   'src/wm/testwindowrules.cpp',
   'src/crashguard.cpp',
