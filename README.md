@@ -22,7 +22,8 @@ a JSON IPC for scripting, and a matching QML/PAM lock screen.
 - **JSON IPC** over a `QLocalSocket` — open/toggle popups from keyboard shortcuts or scripts.
 - **Try a theme before you keep it.** `qbar-ipc set-css <path-or-URL>` hot-swaps the live bar to any stylesheet — even a remote one — so you can preview a community theme straight from a URL, or a file you just downloaded (a relative path resolves from your shell's cwd). `qbar-ipc reset-css` snaps back to your configured theme — no restart, no config edits.
 - **Async by design.** Network (`QNetworkAccessManager`) and JSON parsing run off the GUI thread, and the marquee scrolls on the render thread, so the bar stays smooth.
-- **qbar-lock**: an optional QML/PAM lock screen that shares qbar's CSS engine.
+- **Native notifications** — **new**: opt-in `org.freedesktop.Notifications` daemon (replaces dunst/mako) rendering toasts with the same CSS engine: frosted-glass blur, an emboss relief shader, `@keyframes` entry **and exit** animations, hover-to-expand, and stack-tag coalescing for volume/brightness OSDs. Actions, urgency states, progress/value gauges included.
+- **qbar-lock** — **new**: an optional QML/PAM lock screen that shares qbar's CSS engine. Wayland `ext-session-lock-v1` (a real session lock) or an X11 grab, with password + fingerprint + face racing in parallel.
 
 ## Screenshots
 
@@ -259,6 +260,69 @@ bindsym $mod+t exec qbar-ipc toggle clock
 
 Popups are registered by name; any applet's popup can be exposed by giving its `QBar.Popup` a `name`.
 
+## Notifications
+
+qbar ships a native **`org.freedesktop.Notifications` daemon** (Desktop Notifications spec) —
+the toasts render through qbar's CSS engine instead of dunst/mako. Cards support the
+standard capabilities (actions, body markup, icons/images, urgency, the `value` hint for
+volume/brightness-style gauges, `replaces_id`), plus a timeout countdown bar that pauses
+while hovered, **hover-to-expand** (an elided "…" body grows to full text under the pointer),
+and right/middle-click to dismiss anywhere on the card.
+
+<img src="docs/assets/notifications.png" alt="qbar notifications (macchiato-notify theme)" width="400">
+
+**Opt-in by config** — owning the notification bus name displaces your current daemon, so
+nothing happens until you say so. Stop dunst/mako (`systemctl --user mask dunst.service`)
+and add:
+
+```jsonc
+"notifications": {
+  "enabled": true,                         // REQUIRED — off by default
+  "styleSheet": "themes/nord-notify.css",  // the toasts' OWN theme (optional)
+  "corner": "top-right",                   // top/bottom × left/right
+  "maxVisible": 5,
+  "timeout": 6000                          // ms; critical notifications never expire
+}
+```
+
+If another daemon still holds the bus name, qbar waits and grabs it the moment it frees.
+
+**Volume/brightness OSDs work out of the box** — notifications with a *stack tag*
+(`x-dunst-stack-tag`, or the `synchronous` family notify-osd used) coalesce into a single
+live card per app + tag, updated in place — a held volume key is one gauge, not a stack:
+
+```bash
+notify-send -h string:synchronous:volume -h int:value:72 "Volume" "72%"
+```
+
+**Own stylesheet.** `styleSheet` gives the notifier a dedicated CSS file — separate from the
+bar's theme, exactly like the lock's `*-lock.css` (hot-reloads on save too). Five bundled looks
+ship in [`config/themes/`](config/themes): `macchiato-notify`, `aqua-glass-notify`,
+`tokyo-night-notify`, `nord-notify` and `neon-shrine-notify`. Omit the key and the toasts
+inherit the bar theme's `#notification` rules (with presentable built-in defaults).
+
+**Theming.** Everything is standard CSS on `#notification` (with `.app`, `.summary`, `.body`,
+`.icon`, `.close`, `.action`, `.progress`, `.value` parts and `:low`/`:normal`/`:critical`/
+`:hover` states). Entry **and exit** animations are real CSS `@keyframes` over `opacity` and
+`transform` (translate/scale):
+
+```css
+@keyframes notif-in  { 0% { opacity: 0; transform: translateX(340px) scale(0.96); }
+                       70% { opacity: 1; transform: translateX(-8px); }
+                       100% { transform: translateX(0px); } }
+@keyframes notif-out { 0% { opacity: 1; } 100% { opacity: 0; transform: translateY(-22px) scale(0.94); } }
+
+#notification       { animation: notif-in 320ms ease-out; emboss: 0.35; }
+#notification:exit  { animation: notif-out 200ms ease-in; }
+```
+
+**Frosted glass & emboss.** Backgrounds in the bundled looks are translucent on purpose: add a
+compositor blur rule on the `qbar-notifications` layer namespace (Hyprland:
+`layerrule = blur, qbar-notifications` + `layerrule = ignorezero, qbar-notifications`) and the
+cards become gaussian-blurred glass. `emboss: <0..1>` swaps the flat fill for a shader-drawn
+rounded slab with a soft gradient bevel (tunable via `emboss-highlight`, `emboss-shadow`,
+`emboss-edge`) — combined with the blur it reads as frosted glass with relief.
+
 ## Lock screen
 
 `qbar-lock` is an optional QML/PAM lock screen (built when `pam` is present). It picks its
@@ -268,11 +332,19 @@ sway/Hyprland/wlroots) or **X11** via a keyboard+pointer grab. On X11 also set
 
 Two faces, chosen with `--lock-style`:
 
+| Panel (default) | Ring (i3lock-style) |
+|---|---|
+| ![qbar-lock panel](docs/assets/lock-panel.png) | ![qbar-lock ring](docs/assets/lock-ring.png) |
+
 ```bash
 qbar-lock                                   # panel (default): avatar, clock, name, password box
 qbar-lock --lock-style ring --theme \
     /usr/share/qbar/themes/i3lock.css       # i3lock-style: solid screen + a single unlock ring
 ```
+
+Failure is **loud** on both faces: the password box shakes and holds an error-red border
+(the ring flashes red), including on a rejected **fingerprint scan** — which auto-clears
+as the reader re-arms. `--no-avatar` hides your photo (a monogram disc replaces it).
 
 **Parallel unlock** — password, fingerprint and face run at once; the first to succeed wins:
 
@@ -297,6 +369,8 @@ bindsym $mod+Escape exec qbar-lock --lock-style ring                           #
 Full reference docs (Sphinx) live in [`docs/`](docs/) — configuration, CSS theming, and the
 custom-tools QML API. Build with `sphinx-build -b html docs docs/_build/html`.
 
+- [Notifications](docs/notifications.rst) — the opt-in daemon, CSS hooks, animations, stack tags
+- [Lock screen](docs/lock-screen.rst) — faces, parallel auth, failure feedback, options
 - [Window-manager backends](docs/window-manager-backends.md)
 - [Tray icon resolution](docs/tray-icon-resolution.md)
 

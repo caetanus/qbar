@@ -14,6 +14,8 @@ This reference covers the three things you will configure and extend most:
    configuration
    theming
    custom-tools
+   notifications
+   lock-screen
 
 Quick start
 -----------

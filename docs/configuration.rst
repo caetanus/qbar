@@ -85,6 +85,9 @@ Bar options
    * - ``taskbar``
      - object
      - Taskbar options: ``scope`` (``workspace`` | ``all`` | ``monitor``), ``middleClickClose``, ``rightClickMenu``.
+   * - ``notifications``
+     - object
+     - The opt-in ``org.freedesktop.Notifications`` daemon (``"enabled": true`` required) — see :doc:`notifications`.
    * - ``cpu`` / ``memory`` / ``network``
      - object
      - Per-applet display options (see *Composable displays*).
