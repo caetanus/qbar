@@ -203,6 +203,20 @@ void CalendarModel::startOnlineRefresh(bool showLoading)
             const time_t start = static_cast<time_t>(startWindow.toSecsSinceEpoch());
             const time_t end = static_cast<time_t>(endWindow.toSecsSinceEpoch());
 
+            // Two passes. qbar only ever READS the EDS local store; with no other
+            // EDS consumer running (Evolution closed), nothing pokes the backends
+            // to hit the network, so events created elsewhere never arrive — the
+            // calendar "stops syncing" after the first load. Pass 1 connects and
+            // REQUESTS a backend refresh (async on the EDS side); after a short
+            // settle, pass 2 reads. Anything the server delivers later than the
+            // settle window is picked up by the next periodic cycle.
+            struct ConnectedSource {
+                EClient *client;
+                QString label;
+                bool refreshRequested;
+            };
+            QVector<ConnectedSource> connected;
+
             for (GList *link = sources; link != nullptr; link = link->next) {
                 auto *source = static_cast<ESource *>(link->data);
                 if (source == nullptr) {
@@ -237,17 +251,44 @@ void CalendarModel::startOnlineRefresh(bool showLoading)
                     continue;
                 }
 
+                bool refreshRequested = false;
+                if (e_client_check_refresh_supported(client)) {
+                    if (e_client_refresh_sync(client, nullptr, &error)) {
+                        refreshRequested = true;
+                    } else {
+                        qWarning() << "[calendar] refresh request failed for" << sourceLabel
+                                   << (error != nullptr ? error->message : "unknown error");
+                        if (error != nullptr) {
+                            g_error_free(error);
+                            error = nullptr;
+                        }
+                    }
+                }
+                connected.append(ConnectedSource{client, sourceLabel, refreshRequested});
+            }
+
+            // Give the backends a moment to pull from their servers before reading.
+            // Worker thread — blocking here never touches the GUI.
+            bool anyRefresh = false;
+            for (const ConnectedSource &cs : connected) {
+                anyRefresh = anyRefresh || cs.refreshRequested;
+            }
+            if (anyRefresh) {
+                g_usleep(3 * G_USEC_PER_SEC);
+            }
+
+            for (const ConnectedSource &cs : connected) {
                 CalendarLoadContext context;
                 context.events = &events;
-                context.sourceLabel = sourceLabel;
+                context.sourceLabel = cs.label;
 
-                e_cal_client_generate_instances_sync(E_CAL_CLIENT(client),
+                e_cal_client_generate_instances_sync(E_CAL_CLIENT(cs.client),
                                                      start,
                                                      end,
                                                      nullptr,
                                                      &CalendarModel::collectInstance,
                                                      &context);
-                g_object_unref(client);
+                g_object_unref(cs.client);
             }
 
             if (sources != nullptr) {
