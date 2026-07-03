@@ -15,8 +15,19 @@ Item {
 
     // Hold the model's details refcount while this popup lives: the per-process scan
     // runs at the fast cadence only while someone is actually looking at it.
-    Component.onCompleted: if (cpu) cpu.acquireDetails()
-    Component.onDestruction: if (cpu) cpu.releaseDetails()
+    // NB: the popup service maps popupData onto this item in PopupShell's onLoaded,
+    // which fires AFTER Component.onCompleted — `cpu` is still null then. Acquire when
+    // the property actually lands, guarded so the refcount stays balanced.
+    property bool _detailsHeld: false
+    function _holdDetails() {
+        if (cpu && !_detailsHeld) {
+            _detailsHeld = true
+            cpu.acquireDetails()
+        }
+    }
+    onCpuChanged: _holdDetails()
+    Component.onCompleted: _holdDetails()
+    Component.onDestruction: if (_detailsHeld && cpu) cpu.releaseDetails()
     property int coreColumns: 4
     property int coreTileHeight: 84
     property int coreSpacing: 8
