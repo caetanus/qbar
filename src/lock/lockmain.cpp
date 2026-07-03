@@ -16,6 +16,7 @@
 #include <QSurfaceFormat>
 #include <QTimer>
 
+#include <cstdio>
 #include <memory>
 
 namespace {
@@ -55,37 +56,12 @@ std::unique_ptr<LockBackend> createBackend(const QString &name)
 
 int main(int argc, char *argv[])
 {
-    // The Wayland lock backend drives ext-session-lock-v1 through the qbar-session-lock
-    // shell-integration plugin, which Qt must select BEFORE the platform plugin loads —
-    // i.e. before QGuiApplication. Resolve the backend from argv/env here (mirroring the
-    // QCommandLineParser default below) and point Qt at the plugin on Wayland.
-    {
-        QString requestedBackend = QStringLiteral("auto");
-        for (int i = 1; i < argc; ++i) {
-            const QString arg = QString::fromLocal8Bit(argv[i]);
-            if (arg == QStringLiteral("--backend") && i + 1 < argc) {
-                requestedBackend = QString::fromLocal8Bit(argv[i + 1]);
-                break;
-            }
-            if (arg.startsWith(QStringLiteral("--backend="))) {
-                requestedBackend = arg.mid(QStringLiteral("--backend=").size());
-                break;
-            }
-        }
-        if (detectBackendName(requestedBackend) == QStringLiteral("wayland")
-            && qEnvironmentVariableIsEmpty("QT_WAYLAND_SHELL_INTEGRATION")) {
-            qputenv("QT_WAYLAND_SHELL_INTEGRATION", "qbar-session-lock");
-        }
-    }
-
-    QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("qbar-lock"));
     QCoreApplication::setOrganizationName(QStringLiteral("qbar"));
-    QGuiApplication::setDesktopFileName(QStringLiteral("qbar-lock"));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("QBar QML/PAM lockscreen"));
-    parser.addHelpOption();
+    const QCommandLineOption helpOption = parser.addHelpOption();
     QCommandLineOption demoOption(QStringLiteral("demo"), QStringLiteral("Run without acquiring a real lock."));
     QCommandLineOption authOnStartOption(QStringLiteral("auth-on-start"),
                                          QStringLiteral("Start a PAM authentication attempt immediately, useful for pam_fprintd."));
@@ -129,11 +105,47 @@ int main(int argc, char *argv[])
     parser.addOption(noFingerprintOption);
     parser.addOption(noAvatarOption);
     parser.addOption(facePamServiceOption);
-    parser.process(app);
+
+    // Parse argv BEFORE QGuiApplication. On Wayland the qbar-session-lock shell
+    // integration acquires the REAL ext-session-lock as soon as the platform
+    // plugin loads (i.e. inside the QGuiApplication constructor). Any invocation
+    // that exits through the parser afterwards (--help, a mistyped flag) would
+    // die holding the lock without unlock_and_destroy — and ext-session-lock-v1
+    // is fail-secure, so the compositor keeps the session locked with no client
+    // left to unlock it. Resolve every early-exit path here, pre-lock.
+    QStringList arguments;
+    arguments.reserve(argc);
+    for (int i = 0; i < argc; ++i) {
+        arguments.append(QString::fromLocal8Bit(argv[i]));
+    }
+    const bool parseOk = parser.parse(arguments);
+    if (!parseOk || parser.isSet(helpOption) || parser.isSet(QStringLiteral("help-all"))) {
+        // Exit path (help or usage error). A QCoreApplication loads no platform
+        // plugin, so it cannot touch the compositor; it only lets the parser
+        // print the real executable name instead of "<executable_name>".
+        QCoreApplication helpApp(argc, argv);
+        if (!parseOk) {
+            fprintf(stderr, "%s\n", qPrintable(parser.errorText()));
+            return 1;
+        }
+        parser.showHelp(0);
+    }
 
     const bool demoMode = parser.isSet(demoOption);
     const bool authOnStart = parser.isSet(authOnStartOption);
     const QString backendName = detectBackendName(parser.value(backendOption));
+
+    // Select the session-lock shell integration before the platform plugin loads —
+    // but never for --demo: the integration locks the session for real at init,
+    // and demo promises to run without acquiring a real lock.
+    if (!demoMode && backendName == QStringLiteral("wayland")
+        && qEnvironmentVariableIsEmpty("QT_WAYLAND_SHELL_INTEGRATION")) {
+        qputenv("QT_WAYLAND_SHELL_INTEGRATION", "qbar-session-lock");
+    }
+
+    QGuiApplication app(argc, argv);
+    QGuiApplication::setDesktopFileName(QStringLiteral("qbar-lock"));
+
     std::unique_ptr<LockBackend> backend = createBackend(backendName);
 
     PamAuthenticator authenticator;
