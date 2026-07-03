@@ -278,6 +278,7 @@ sources = files(
   'src/main.cpp',
   'src/barwindow.cpp',
   'src/configreloader.cpp',
+  'src/qml/baractions.cpp',
   'src/qml/widgetreloader.cpp',
   'src/wm/testwindowrules.cpp',
   'src/crashguard.cpp',
@@ -337,6 +338,7 @@ sources = files(
 headers = files(
   'src/barwindow.h',
   'src/configreloader.h',
+  'src/qml/baractions.h',
   'src/qml/widgetreloader.h',
   'src/wm/testwindowrules.h',
   'src/ipc/i3ipcclient.h',

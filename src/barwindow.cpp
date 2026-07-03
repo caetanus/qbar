@@ -2,6 +2,7 @@
 
 #include "configreloader.h"
 #include "wm/testwindowrules.h"
+#include "qml/baractions.h"
 #include "qml/qbarpopupservice.h"
 #include "qml/dockwindow.h"
 #include "qml/qbaripc.h"
@@ -322,10 +323,10 @@ QString notificationCssPrelude()
 BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
     : QQuickView(parent)
     , m_config(config)
-    , m_evolutionCalendarExecutable(QStandardPaths::findExecutable(QStringLiteral("evolution")))
 {
     configureWindow();
     m_wm = createWindowManagerBackend(m_config.windowManagerBackend, this);
+    m_actions = new BarActions(this, m_wm, m_config, this);
     m_capsLockMonitor = new CapsLockMonitor(this);
     m_cssTheme = new CssTheme(this);
     // Recompute the bar's CSS edge gap on every theme (re)load. CssTheme's own file watcher
@@ -359,7 +360,7 @@ BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
 
 bool BarWindow::calendarAppAvailable() const
 {
-    return !m_evolutionCalendarExecutable.isEmpty();
+    return m_actions->calendarAppAvailable();
 }
 
 int BarWindow::widgetReloadGeneration() const
@@ -802,11 +803,7 @@ void BarWindow::buildLayout()
     m_popupService = new QBarPopupService(engine(), theme, m_wm->workspaceModel(), m_wm, m_cssTheme, this);
     m_popupService->setOverlayKeyboardFocus(m_config.popupKeyboardFocus);
     m_popupService->setBarWindow(this);
-    connect(m_popupService, &QBarPopupService::popupClosed, this, [this](const QString &id) {
-        if (id == m_calendarPopupId) {
-            m_calendarPopupId.clear();
-        }
-    });
+    m_actions->setPopupService(m_popupService);
     connect(m_wm, &WindowManagerBackend::workspaceFocusEvent, m_popupService, &QBarPopupService::closeAll);
 
     // The macOS-style Dock controller. Cheap to construct and creates no window until
@@ -905,81 +902,20 @@ QRect BarWindow::targetBarGeometry() const
 
 void BarWindow::openCalendar(QObject *anchorObject)
 {
-    if (m_popupService == nullptr) {
-        return;
-    }
-
-    if (!m_calendarPopupId.isEmpty()) {
-        m_popupService->closePopup(m_calendarPopupId);
-        m_calendarPopupId.clear();
-        return;
-    }
-
-    const int popupWidth = 560;
-    const int popupHeight = 380;
-    const QSize popupSize(popupWidth, popupHeight);
-    const int gap = 0;
-    auto *anchorItem = qobject_cast<QQuickItem *>(anchorObject);
-    QPoint anchorTopLeft = mapToGlobal(QPoint(0, 0));
-    QPoint anchorBottomRight = mapToGlobal(QPoint(width(), height()));
-
-    if (anchorItem != nullptr) {
-        const QPointF itemTopLeft = anchorItem->mapToScene(QPointF(0.0, 0.0));
-        const QPointF itemBottomRight = anchorItem->mapToScene(QPointF(anchorItem->width(), anchorItem->height()));
-        anchorTopLeft = mapToGlobal(QPoint(qRound(itemTopLeft.x()), qRound(itemTopLeft.y())));
-        anchorBottomRight = mapToGlobal(QPoint(qRound(itemBottomRight.x()), qRound(itemBottomRight.y())));
-    }
-
-    int x = anchorBottomRight.x() - popupWidth;
-    int y = m_config.position == BarPosition::Bottom
-        ? anchorTopLeft.y() - popupHeight - gap
-        : anchorBottomRight.y() + gap;
-
-    const QScreen *screen = QGuiApplication::screenAt(anchorTopLeft);
-    if (screen != nullptr) {
-        const QPoint clamped = clampedPopupPosition(screen->availableGeometry(), QPoint(x, y), popupSize);
-        x = clamped.x();
-        y = clamped.y();
-    }
-
-    QVariantMap properties;
-    properties.insert(QStringLiteral("selectedDate"), QDate::currentDate());
-    m_calendarPopupId = m_popupService->openPopup(QUrl(QStringLiteral("qrc:/popups/CalendarPopup.qml")),
-                                                  properties,
-                                                  x,
-                                                  y,
-                                                  popupWidth,
-                                                  popupHeight,
-                                                  QStringLiteral("calendar"));
-    if (m_calendarPopupId.isEmpty()) {
-        qWarning() << "QBar calendar popup failed to open";
-    }
+    m_actions->openCalendar(anchorObject);
 }
 
 void BarWindow::openEvolutionCalendar()
 {
-    if (!calendarAppAvailable()) {
-        return;
-    }
-
-    const QStringList arguments = {QStringLiteral("--component=calendar")};
-    if (!QProcess::startDetached(m_evolutionCalendarExecutable, arguments)) {
-        qWarning() << "QBar failed to launch Evolution Calendar" << m_evolutionCalendarExecutable << arguments;
-    }
+    m_actions->openEvolutionCalendar();
 }
 
 void BarWindow::cycleKeyboardLayout()
 {
-    if (m_wm != nullptr) {
-        m_wm->cycleKeyboardLayout();
-    }
+    m_actions->cycleKeyboardLayout();
 }
 
 void BarWindow::toggleCaffeine()
 {
-    auto *model = qobject_cast<CaffeineModel *>(
-        ModelCapsules::instance()->acquire(QStringLiteral("caffeine"), this));
-    if (model != nullptr) {
-        model->toggle();
-    }
+    m_actions->toggleCaffeine();
 }

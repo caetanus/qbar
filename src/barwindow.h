@@ -13,6 +13,7 @@
 
 #include <functional>
 
+class BarActions;
 class QBarPopupService;
 class DockWindow;
 class QNetworkAccessManager;
@@ -89,8 +90,7 @@ private:
     QString m_configuredStyleSheet;
     QBarPopupService *m_popupService = nullptr;
     DockWindow *m_dockWindow = nullptr;
-    QString m_calendarPopupId;
-    QString m_evolutionCalendarExecutable;
+    BarActions *m_actions = nullptr;
     WindowManagerBackend *m_wm = nullptr;
     CapsLockMonitor *m_capsLockMonitor = nullptr;
     CssTheme *m_cssTheme = nullptr;
