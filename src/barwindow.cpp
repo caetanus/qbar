@@ -1,6 +1,7 @@
 #include "barwindow.h"
 
 #include "configreloader.h"
+#include "thememanager.h"
 #include "wm/testwindowrules.h"
 #include "qml/baractions.h"
 #include "qml/qbarpopupservice.h"
@@ -13,7 +14,6 @@
 #include "qml/localstorage.h"
 #include "qml/modelcapsules.h"
 #include "qml/widgetreloader.h"
-#include "json/jsonc.h"
 #include "notifications/notificationserver.h"
 #include "caffeine/caffeinemodel.h"
 #include "platform/capslockmonitor.h"
@@ -29,7 +29,6 @@
 #include <QCloseEvent>
 #include <QColor>
 #include <QCoreApplication>
-#include <QCryptographicHash>
 #include <QDebug>
 #include <QDir>
 #include <QDirIterator>
@@ -38,12 +37,8 @@
 #include <QGuiApplication>
 #include <QHideEvent>
 #include <QIcon>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QPainter>
 #include <QPoint>
-#include <QDate>
-#include <QProcess>
 #include <QQuickImageProvider>
 #include <QQuickItem>
 #include <QQmlContext>
@@ -53,17 +48,12 @@
 #include <QStandardPaths>
 #include <QShowEvent>
 #include <QPointF>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
 #include <QRegularExpression>
-#include <QSharedPointer>
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantMap>
 #include <algorithm>
-#include <chrono>
 #include <unistd.h>
 
 namespace {
@@ -231,93 +221,6 @@ private:
     }
 };
 
-int clampCoordinate(int value, int minValue, int maxValue)
-{
-    return std::clamp(value, minValue, std::max(minValue, maxValue));
-}
-
-QPoint clampedPopupPosition(const QRect &screenArea, const QPoint &preferred, const QSize &popupSize)
-{
-    const int maxX = screenArea.x() + screenArea.width() - popupSize.width();
-    const int maxY = screenArea.y() + screenArea.height() - popupSize.height();
-    return QPoint(clampCoordinate(preferred.x(), screenArea.x(), maxX),
-                  clampCoordinate(preferred.y(), screenArea.y(), maxY));
-}
-
-static QColor contrastColorFor(const QColor &background)
-{
-    const double luminance = (0.2126 * background.redF())
-        + (0.7152 * background.greenF())
-        + (0.0722 * background.blueF());
-    return luminance < 0.5 ? QColor(QStringLiteral("#ffffff")) : QColor(QStringLiteral("#1f2933"));
-}
-
-static QColor contrastGreenFor(const QColor &background)
-{
-    const double luminance = (0.2126 * background.redF())
-        + (0.7152 * background.greenF())
-        + (0.0722 * background.blueF());
-    return luminance < 0.5 ? QColor(QStringLiteral("#86efac")) : QColor(QStringLiteral("#166534"));
-}
-
-QVariantMap themeMap(const BarConfig &config)
-{
-    return {
-        {QStringLiteral("background"), config.background.name(QColor::HexArgb)},
-        {QStringLiteral("foreground"), config.foreground.name(QColor::HexArgb)},
-        {QStringLiteral("accent"), config.accent.name(QColor::HexArgb)},
-        {QStringLiteral("accentForeground"), contrastColorFor(config.accent).name(QColor::HexArgb)},
-        {QStringLiteral("contrastIcon"), contrastColorFor(config.background).name(QColor::HexArgb)},
-        {QStringLiteral("eventDot"), contrastGreenFor(config.background).name(QColor::HexArgb)},
-        {QStringLiteral("eventDotOnAccent"), contrastGreenFor(config.accent).name(QColor::HexArgb)},
-        {QStringLiteral("fontFamily"), config.fontFamily},
-        {QStringLiteral("fontSize"), config.fontSize},
-        {QStringLiteral("trayItemPadding"), config.trayItemPadding},
-        {QStringLiteral("animationDuration"), config.animationDuration},
-        {QStringLiteral("animationEasing"), static_cast<int>(config.animationEasing.type())},
-        {QStringLiteral("height"), config.height},
-        {QStringLiteral("margin"), config.margin},
-        {QStringLiteral("spacing"), config.spacing},
-    };
-}
-
-// Default notification-toast styling, applied as a prelude (lowest priority) to
-// whichever stylesheet the notifier uses — the bar's, or its own dedicated one
-// (`notifications.styleSheet`). Every theme gets presentable frosted-glass toasts
-// with entry/exit animations out of the box, and the theme's own `#notification*`
-// rules override any of it. Translucent backgrounds on purpose — a compositor blur
-// rule on the `qbar-notifications` layer namespace turns them into glass.
-QString notificationCssPrelude()
-{
-    return QStringLiteral(
-        "#notifications { width: 380px; margin: 14px; spacing: 10px; }\n"
-        "@keyframes qbar-notif-in {\n"
-        "  0%   { opacity: 0; transform: translateX(340px) scale(0.96); }\n"
-        "  70%  { opacity: 1; transform: translateX(-6px); }\n"
-        "  100% { opacity: 1; transform: translateX(0px); }\n"
-        "}\n"
-        "#notification {\n"
-        "  background-color: rgba(40, 44, 58, 0.80);\n"
-        "  border-color: rgba(255, 255, 255, 0.16);\n"
-        "  border-width: 1px;\n"
-        "  border-radius: 12px;\n"
-        "  box-shadow: 0px 12px 28px rgba(0, 0, 0, 0.34);\n"
-        "  padding: 12px;\n"
-        "  animation: qbar-notif-in 320ms ease-out;\n"
-        "}\n"
-        "#notification:exit { transition: opacity 200ms ease-in; }\n"
-        "#notification:hover { border-color: rgba(255, 255, 255, 0.30); }\n"
-        "#notification:critical { background-color: rgba(96, 38, 48, 0.86); border-color: rgba(240, 110, 120, 0.85); }\n"
-        "#notification:low { background-color: rgba(40, 44, 58, 0.62); }\n"
-        "#notification.app { font-size: 10px; }\n"
-        "#notification.summary { font-size: 12px; }\n"
-        "#notification.body { font-size: 11px; }\n"
-        "#notification.action { background-color: rgba(255, 255, 255, 0.10); border-radius: 6px; }\n"
-        "#notification.action:hover { background-color: rgba(255, 255, 255, 0.20); }\n"
-        "#notification.progress { background-color: rgba(255, 255, 255, 0.10); height: 3px; }\n"
-        "#notification.value { background-color: rgba(255, 255, 255, 0.12); }\n");
-}
-
 } // namespace
 
 BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
@@ -328,13 +231,13 @@ BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
     m_wm = createWindowManagerBackend(m_config.windowManagerBackend, this);
     m_actions = new BarActions(this, m_wm, m_config, this);
     m_capsLockMonitor = new CapsLockMonitor(this);
-    m_cssTheme = new CssTheme(this);
+    m_themeManager = new ThemeManager(m_config, this);
     // Recompute the bar's CSS edge gap on every theme (re)load. CssTheme's own file watcher
-    // reloads the stylesheet WITHOUT going through loadCssTheme(), so without this the margin
-    // would only update on a full restart or theme swap, not on a live CSS edit.
-    connect(m_cssTheme, &CssTheme::loadedChanged, this, &BarWindow::updateBarMarginsFromCss);
-    m_configuredStyleSheet = m_config.styleSheet; // remembered so reset-css can revert a preview
-    loadCssTheme();
+    // reloads the stylesheet WITHOUT going through ThemeManager::load(), so without this the
+    // margin would only update on a full restart or theme swap, not on a live CSS edit.
+    connect(m_themeManager->cssTheme(), &CssTheme::loadedChanged,
+            this, &BarWindow::updateBarMarginsFromCss);
+    m_themeManager->load();
 
     // Config hot-reload: the reloader watches/debounces/parses; applying is ours.
     auto *configReloader = new ConfigReloader(m_config.configFilePath, m_config.configIndex, this);
@@ -398,99 +301,19 @@ void BarWindow::showEvent(QShowEvent *event)
     }
 }
 
-void BarWindow::loadCssTheme()
-{
-    const QString configDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
-
-    // Translate config-derived drawer `transition-duration`s into a CSS prelude that the
-    // engine prepends (lowest priority) to the theme. This keeps the CSS the single source
-    // of truth for the drawer animation: an explicit `#<name> { transition }` in the theme
-    // overrides this default; otherwise the config value drives it.
-    QString prelude;
-    for (auto it = m_config.groups.constBegin(); it != m_config.groups.constEnd(); ++it) {
-        const QVariantMap drawer = it.value().toMap().value(QStringLiteral("drawer")).toMap();
-        if (!drawer.contains(QStringLiteral("transition-duration")))
-            continue;
-        QString name = it.key(); // "group/<name>"
-        if (name.startsWith(QStringLiteral("group/")))
-            name = name.mid(6);
-        prelude += QStringLiteral("#%1 { transition: %2ms; }\n")
-                       .arg(name)
-                       .arg(drawer.value(QStringLiteral("transition-duration")).toInt());
-    }
-    // Default toast styling only matters here while the notifier shares this theme —
-    // with a dedicated `notifications.styleSheet` the prelude lives on THAT theme
-    // instead (see loadNotificationCssTheme).
-    if (m_config.notifications.value(QStringLiteral("enabled"), false).toBool()
-        && m_config.notifications.value(QStringLiteral("styleSheet")).toString().isEmpty()) {
-        prelude += notificationCssPrelude();
-    }
-    m_cssTheme->setStylePrelude(prelude);
-
-    // The CSS cascade, in order: an optional base (only if configured) that the theme
-    // cascades over, then the theme itself (explicit styleSheet, else the conventional
-    // qbar/style.css). loadLayered concatenates them so the theme wins on equal specificity.
-    QStringList layer;
-    if (!m_config.baseStyleSheet.isEmpty())
-        layer.append(resolveThemeReference(m_config.baseStyleSheet));
-    if (!m_config.styleSheet.isEmpty())
-        layer.append(resolveThemeReference(m_config.styleSheet));
-    else
-        layer.append(QDir(configDir).filePath(QStringLiteral("qbar/style.css")));
-
-    m_cssTheme->loadLayered(layer);
-    // loadLayered emits loadedChanged → updateBarMarginsFromCss(), so the bar margins are
-    // already current here; no explicit call needed.
-}
-
-// Resolve a theme reference: http(s)/file URLs and absolute paths pass through; a bare
-// relative path resolves against the directory of THIS config file (so it works the same
-// whether the config is at ~/.config/qbar/ or wherever --config points). Lets the bundled
-// default config portably say "themes/nord.css".
-QString BarWindow::resolveThemeReference(const QString &pathOrUrl) const
-{
-    if (pathOrUrl.isEmpty())
-        return pathOrUrl;
-    const QString scheme = QUrl(pathOrUrl).scheme();
-    if (scheme == QLatin1String("http") || scheme == QLatin1String("https")
-        || scheme == QLatin1String("file") || QDir::isAbsolutePath(pathOrUrl)) {
-        return pathOrUrl;
-    }
-    const QString configBaseDir = !m_config.configFilePath.isEmpty()
-        ? QFileInfo(m_config.configFilePath).absolutePath()
-        : QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation))
-              .filePath(QStringLiteral("qbar"));
-    return QDir(configBaseDir).filePath(pathOrUrl);
-}
-
-void BarWindow::loadNotificationCssTheme()
-{
-    if (m_notificationCssTheme == nullptr) {
-        return;
-    }
-    const QString sheet = m_config.notifications.value(QStringLiteral("styleSheet")).toString();
-    if (sheet.isEmpty()) {
-        // The key was removed at runtime; keep the last dedicated theme (the daemon's
-        // window can't be re-pointed at the bar's CssTheme without a restart).
-        qWarning() << "qbar: notifications.styleSheet removed — restart qbar to re-share the bar theme";
-        return;
-    }
-    m_notificationCssTheme->setStylePrelude(notificationCssPrelude());
-    m_notificationCssTheme->loadLayered({resolveThemeReference(sheet)});
-}
-
 void BarWindow::updateBarMarginsFromCss()
 {
-    if (m_cssTheme == nullptr) {
+    if (m_themeManager == nullptr) {
         return;
     }
+    CssTheme *cssTheme = m_themeManager->cssTheme();
     // Bar edge gap from the bar's CSS (#qbar / window#waybar are synonyms here) — margin-top /
     // margin-bottom, or the `margin` shorthand (waybar floating-bar idiom). The layer-shell
     // integration reads these window properties. CSS-ONLY on purpose: the JSON `margin` has
     // never driven the layer gap, so honouring it now would shift every existing config.
     // Horizontal insets stay with Bar.qml (margin-left/right → content inset).
-    QVariantMap barRule = m_cssTheme->resolve(QStringLiteral("waybar"));
-    const QVariantMap qbarRule = m_cssTheme->resolveExact(QStringLiteral("qbar"));
+    QVariantMap barRule = cssTheme->resolve(QStringLiteral("waybar"));
+    const QVariantMap qbarRule = cssTheme->resolveExact(QStringLiteral("qbar"));
     for (auto it = qbarRule.constBegin(); it != qbarRule.constEnd(); ++it) {
         barRule.insert(it.key(), it.value());
     }
@@ -502,13 +325,13 @@ void BarWindow::updateBarMarginsFromCss()
             QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
         if (!parts.isEmpty()) {
             hasShorthand = true;
-            shorthandTop = qRound(m_cssTheme->parseLength(parts.first(), 0));
-            shorthandBottom = parts.size() >= 3 ? qRound(m_cssTheme->parseLength(parts.at(2), 0)) : shorthandTop;
+            shorthandTop = qRound(cssTheme->parseLength(parts.first(), 0));
+            shorthandBottom = parts.size() >= 3 ? qRound(cssTheme->parseLength(parts.at(2), 0)) : shorthandTop;
         }
     }
     const auto verticalMargin = [&](const char *key, int shorthandVal) -> int {
         if (barRule.contains(QLatin1String(key))) {
-            return qRound(m_cssTheme->parseLength(barRule.value(QLatin1String(key)).toString(), 0));
+            return qRound(cssTheme->parseLength(barRule.value(QLatin1String(key)).toString(), 0));
         }
         return hasShorthand ? shorthandVal : 0;
     };
@@ -520,128 +343,17 @@ void BarWindow::updateBarMarginsFromCss()
 
 bool BarWindow::setStyleSheet(const QString &pathOrUrl)
 {
-    if (pathOrUrl.isEmpty() || m_cssTheme == nullptr) {
-        return false;
-    }
-
-    // Treat the argument as a URL when applicable: http(s) → fetch and apply the CSS body;
-    // file:// or a bare path → load from disk (the default).
-    const QUrl url(pathOrUrl);
-    const QString scheme = url.scheme();
-
-    if (scheme == QLatin1String("http") || scheme == QLatin1String("https")) {
-        if (m_cssNam == nullptr) {
-            m_cssNam = new QNetworkAccessManager(this);
-        }
-        QNetworkRequest request(url);
-        request.setTransferTimeout(std::chrono::seconds(15));
-        QNetworkReply *reply = m_cssNam->get(request);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, url]() {
-            reply->deleteLater();
-            if (reply->error() != QNetworkReply::NoError) {
-                qWarning() << "QBar set-css: fetch failed:" << reply->errorString();
-                return;
-            }
-            // Resolve @import relative to the fetched URL (so a web theme's relative
-            // imports load from the web too), then apply the inlined CSS.
-            auto visited = QSharedPointer<QStringList>::create();
-            visited->append(url.toString(QUrl::RemoveFragment));
-            resolveCssImports(QString::fromUtf8(reply->readAll()), url, visited,
-                              [this](const QString &css) { m_cssTheme->loadFromString(css); });
-        });
-        return true; // request dispatched; the theme applies when it arrives
-    }
-
-    const QString path = url.isLocalFile() ? url.toLocalFile() : pathOrUrl;
-    if (!QFileInfo::exists(path)) {
-        qWarning() << "QBar set-css: file not found:" << path;
-        return false;
-    }
-    m_config.styleSheet = path; // so a later reload keeps the swapped theme
-    loadCssTheme();             // re-layer: keeps baseStyleSheet (if any) under the new theme
-    return true;
+    return m_themeManager->setStyleSheet(pathOrUrl);
 }
 
 bool BarWindow::resetStyleSheet()
 {
-    if (m_cssTheme == nullptr) {
-        return false;
-    }
-    m_config.styleSheet = m_configuredStyleSheet; // revert a set-css preview to the configured theme
-    loadCssTheme();
-    return true;
-}
-
-void BarWindow::resolveCssImports(const QString &css, const QUrl &base,
-                                  QSharedPointer<QStringList> visited,
-                                  std::function<void(const QString &)> done)
-{
-    static const QRegularExpression importRe(
-        QStringLiteral(R"(@import\s+(?:url\(\s*)?['"]?([^'")\s]+)['"]?\s*\)?\s*;)"));
-    const QRegularExpressionMatch m = importRe.match(css);
-    if (!m.hasMatch()) {
-        done(css);
-        return;
-    }
-
-    const QString before = css.left(m.capturedStart());
-    const QString after = css.mid(m.capturedEnd());
-    // CSS @import resolves relative to the importing document's URL — so a relative ref in
-    // a web theme stays on the web, and a relative ref in a file theme stays on disk.
-    const QUrl target = base.resolved(QUrl(m.captured(1)));
-    const QString key = target.toString(QUrl::RemoveFragment);
-
-    // Splice the imported content (after expanding ITS own imports, relative to ITS url)
-    // in place of the @import, then continue resolving the rest of the parent document.
-    const auto onContent = [this, before, after, target, base, visited, done](const QString &sub) {
-        resolveCssImports(sub, target, visited,
-                          [this, before, after, base, visited, done](const QString &expanded) {
-                              resolveCssImports(before + expanded + after, base, visited, done);
-                          });
-    };
-
-    if (visited->contains(key)) { // already imported (cycle / duplicate) — drop it
-        resolveCssImports(before + after, base, visited, done);
-        return;
-    }
-    visited->append(key);
-
-    const QString scheme = target.scheme();
-    if (scheme == QLatin1String("http") || scheme == QLatin1String("https")) {
-        if (m_cssNam == nullptr) {
-            m_cssNam = new QNetworkAccessManager(this);
-        }
-        QNetworkRequest request(target);
-        request.setTransferTimeout(std::chrono::seconds(15));
-        QNetworkReply *reply = m_cssNam->get(request);
-        connect(reply, &QNetworkReply::finished, this, [reply, onContent]() {
-            reply->deleteLater();
-            if (reply->error() != QNetworkReply::NoError) {
-                qWarning() << "QBar @import: fetch failed:" << reply->errorString();
-            }
-            onContent(reply->error() == QNetworkReply::NoError
-                          ? QString::fromUtf8(reply->readAll()) : QString());
-        });
-    } else {
-        const QString local = target.isLocalFile() ? target.toLocalFile() : target.path();
-        QFile file(local);
-        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            qWarning() << "QBar @import: cannot read" << local;
-            onContent(QString());
-            return;
-        }
-        onContent(QString::fromUtf8(file.readAll()));
-    }
+    return m_themeManager->resetStyleSheet();
 }
 
 void BarWindow::applyReloadedConfig(const BarConfig &fresh)
 {
-    if (fresh.styleSheet != m_config.styleSheet || fresh.baseStyleSheet != m_config.baseStyleSheet) {
-        m_config.styleSheet = fresh.styleSheet;
-        m_configuredStyleSheet = fresh.styleSheet; // keep reset-css pointed at the config's theme
-        m_config.baseStyleSheet = fresh.baseStyleSheet;
-        loadCssTheme();
-    }
+    m_themeManager->handleConfigReload(fresh);
 
     if (fresh.customTools != m_config.customTools) {
         m_config.customTools = fresh.customTools;
@@ -669,8 +381,8 @@ void BarWindow::applyReloadedConfig(const BarConfig &fresh)
         const QString newSheet =
             m_config.notifications.value(QStringLiteral("styleSheet")).toString();
         if (newSheet != oldSheet) {
-            if (m_notificationCssTheme != nullptr) {
-                loadNotificationCssTheme(); // re-point the dedicated theme at the new file
+            if (m_themeManager->notificationCssTheme() != nullptr) {
+                m_themeManager->reloadNotificationTheme(); // re-point the dedicated theme at the new file
             } else if (!newSheet.isEmpty()) {
                 qWarning() << "qbar: notifications.styleSheet added — restart qbar to apply "
                               "(the daemon was created sharing the bar theme)";
@@ -781,7 +493,7 @@ void BarWindow::exposeModels()
 
 void BarWindow::buildLayout()
 {
-    const QVariantMap theme = themeMap(m_config);
+    const QVariantMap theme = ThemeManager::themeMap(m_config);
     if (engine()->imageProvider(QStringLiteral("themeicon")) == nullptr) {
         engine()->addImageProvider(QStringLiteral("themeicon"), new ThemeIconProvider);
     }
@@ -800,7 +512,8 @@ void BarWindow::buildLayout()
     // external commands (the QML side has no process API). Async + self-cleaning like Http.
     JsProcess::install(engine());
 
-    m_popupService = new QBarPopupService(engine(), theme, m_wm->workspaceModel(), m_wm, m_cssTheme, this);
+    m_popupService = new QBarPopupService(engine(), theme, m_wm->workspaceModel(), m_wm,
+                                          m_themeManager->cssTheme(), this);
     m_popupService->setOverlayKeyboardFocus(m_config.popupKeyboardFocus);
     m_popupService->setBarWindow(this);
     m_actions->setPopupService(m_popupService);
@@ -809,7 +522,8 @@ void BarWindow::buildLayout()
     // The macOS-style Dock controller. Cheap to construct and creates no window until
     // the in-bar "Dock" proxy applet first reports a non-empty slot, so bars without a
     // Dock pay nothing. Exposed to QML as `dockController`.
-    m_dockWindow = new DockWindow(engine(), theme, m_config.dock, m_wm->windowModel(), m_wm, m_cssTheme, this);
+    m_dockWindow = new DockWindow(engine(), theme, m_config.dock, m_wm->windowModel(), m_wm,
+                                  m_themeManager->cssTheme(), this);
     m_dockWindow->setBarWindow(this);
 
     // The notification daemon (org.freedesktop.Notifications → CSS-themed toasts).
@@ -821,11 +535,9 @@ void BarWindow::buildLayout()
         // CssTheme, own file watcher/hot-reload), independent of the bar's theme —
         // the same separation the lock's *-lock.css files have. Unset = share the
         // bar's theme, whose `#notification*` rules (or the prelude defaults) apply.
-        QObject *notificationTheme = m_cssTheme;
+        QObject *notificationTheme = m_themeManager->cssTheme();
         if (!m_config.notifications.value(QStringLiteral("styleSheet")).toString().isEmpty()) {
-            m_notificationCssTheme = new CssTheme(this);
-            loadNotificationCssTheme();
-            notificationTheme = m_notificationCssTheme;
+            notificationTheme = m_themeManager->createNotificationTheme();
         }
         auto *notifications =
             new NotificationServer(engine(), theme, m_config.notifications, notificationTheme, this);
@@ -861,7 +573,7 @@ void BarWindow::buildLayout()
     rootContext()->setContextProperty(QStringLiteral("capsLock"), m_capsLockMonitor);
     rootContext()->setContextProperty(QStringLiteral("wm"), m_wm);
     rootContext()->setContextProperty(QStringLiteral("i3Ipc"), m_wm);
-    rootContext()->setContextProperty(QStringLiteral("cssTheme"), m_cssTheme);
+    rootContext()->setContextProperty(QStringLiteral("cssTheme"), m_themeManager->cssTheme());
     rootContext()->setContextProperty(QStringLiteral("dbus"), new DBusService(engine(), this));
     rootContext()->setContextProperty(QStringLiteral("customTools"), m_config.customTools);
     rootContext()->setContextProperty(QStringLiteral("appletNames"), m_config.applets);

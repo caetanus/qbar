@@ -278,6 +278,7 @@ sources = files(
   'src/main.cpp',
   'src/barwindow.cpp',
   'src/configreloader.cpp',
+  'src/thememanager.cpp',
   'src/qml/baractions.cpp',
   'src/qml/widgetreloader.cpp',
   'src/wm/testwindowrules.cpp',
@@ -338,6 +339,7 @@ sources = files(
 headers = files(
   'src/barwindow.h',
   'src/configreloader.h',
+  'src/thememanager.h',
   'src/qml/baractions.h',
   'src/qml/widgetreloader.h',
   'src/wm/testwindowrules.h',

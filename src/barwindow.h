@@ -2,24 +2,18 @@
 
 #include "config.h"
 #include "platform/capslockmonitor.h"
-#include "css/csstheme.h"
 #include "wm/windowmanagerbackend.h"
 
-#include <QByteArray>
-#include <QFileSystemWatcher>
 #include <QQuickView>
-#include <QSharedPointer>
 #include <QStringList>
-
-#include <functional>
 
 class BarActions;
 class QBarPopupService;
 class DockWindow;
-class QNetworkAccessManager;
 class QTimer;
 class QUrl;
 class TestWindowRules;
+class ThemeManager;
 class WidgetReloader;
 
 class BarWindow final : public QQuickView {
@@ -64,41 +58,21 @@ private slots:
 private:
     void configureWindow();
     void exposeModels();
-    void loadCssTheme();
-    // Resolve a theme reference from the config: http(s)/file URLs and absolute paths pass
-    // through; a bare relative path resolves against the directory of the active config file.
-    QString resolveThemeReference(const QString &pathOrUrl) const;
-    // (Re)load the notifier's dedicated stylesheet (`notifications.styleSheet`) into
-    // m_notificationCssTheme. No-op unless the daemon was created with its own theme.
-    void loadNotificationCssTheme();
     // Re-derive the bar's edge gap (CSS margin-top/bottom) into the qbarBarMargin* window
     // properties the layer-shell plugin reads. Connected to CssTheme::loadedChanged so it runs
-    // on every (re)load — including the CSS hot-reload path that bypasses loadCssTheme().
+    // on every (re)load — including the CSS hot-reload path that bypasses ThemeManager::load().
     void updateBarMarginsFromCss();
-    // Recursively resolve @import in `css` relative to `base` (http or file), fetching/
-    // reading each, then invoke `done` with the fully-inlined CSS. Async (http).
-    void resolveCssImports(const QString &css, const QUrl &base,
-                           QSharedPointer<QStringList> visited,
-                           std::function<void(const QString &)> done);
     void buildLayout();
     void positionAtTop();
     QRect targetBarGeometry() const;
 
     BarConfig m_config;
-    // The styleSheet the config file specifies — preserved so `reset-css` can revert a
-    // `set-css` preview (which overwrites m_config.styleSheet). Tracks config hot-reloads.
-    QString m_configuredStyleSheet;
     QBarPopupService *m_popupService = nullptr;
     DockWindow *m_dockWindow = nullptr;
     BarActions *m_actions = nullptr;
     WindowManagerBackend *m_wm = nullptr;
     CapsLockMonitor *m_capsLockMonitor = nullptr;
-    CssTheme *m_cssTheme = nullptr;
-    // Only when `notifications.styleSheet` is configured: the notifier's own theme, so
-    // toasts are styled independently of the bar (like the lock's dedicated *-lock.css).
-    // Null otherwise — the daemon then shares m_cssTheme.
-    CssTheme *m_notificationCssTheme = nullptr;
-    QNetworkAccessManager *m_cssNam = nullptr; // lazily created for set-css over http(s)
+    ThemeManager *m_themeManager = nullptr;
     WidgetReloader *m_widgetReloader = nullptr;
     TestWindowRules *m_testWindowRules = nullptr;
     bool m_platformIntegrationApplied = false;
