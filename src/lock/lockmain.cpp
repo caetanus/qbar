@@ -112,6 +112,9 @@ int main(int argc, char *argv[])
                                    QStringLiteral("panel"));
     QCommandLineOption noFingerprintOption(QStringLiteral("no-fingerprint"),
                                            QStringLiteral("Disable fingerprint (fprintd) unlock."));
+    QCommandLineOption noAvatarOption(QStringLiteral("no-avatar"),
+                                      QStringLiteral("Hide the user's avatar photo (a monogram disc "
+                                                     "is shown instead)."));
     QCommandLineOption facePamServiceOption(QStringLiteral("face-pam-service"),
                                             QStringLiteral("PAM service for face unlock (e.g. a pam_howdy stack); "
                                                            "unset disables face unlock."),
@@ -124,6 +127,7 @@ int main(int argc, char *argv[])
     parser.addOption(themeOption);
     parser.addOption(styleOption);
     parser.addOption(noFingerprintOption);
+    parser.addOption(noAvatarOption);
     parser.addOption(facePamServiceOption);
     parser.process(app);
 
@@ -181,6 +185,8 @@ int main(int argc, char *argv[])
         view->rootContext()->setContextProperty(QStringLiteral("lockController"), &controller);
         view->rootContext()->setContextProperty(QStringLiteral("cssTheme"), &cssTheme);
         view->rootContext()->setContextProperty(QStringLiteral("userModel"), &userModel);
+        view->rootContext()->setContextProperty(QStringLiteral("lockHideAvatar"),
+                                                parser.isSet(noAvatarOption));
         view->rootContext()->setContextProperty(QStringLiteral("keyLocks"), &keyLocks);
         view->setSource(lockSource);
         view->setGeometry(screen->geometry());

@@ -7,6 +7,9 @@ namespace {
 // Delay before re-arming a face (howdy) attempt after it fails, so we don't spin the
 // camera flat out. Fingerprint re-arms itself via fprintd's VerifyStatus.
 constexpr int kFaceRetryMs = 1500;
+// How long a rejected fingerprint scan stays in the (red, shaking) error state before
+// reverting to the neutral "touch the reader" hint — the reader has already re-armed.
+constexpr int kFingerprintErrorMs = 2500;
 } // namespace
 
 LockController::LockController(PamAuthenticator *authenticator,
@@ -47,6 +50,24 @@ LockController::LockController(PamAuthenticator *authenticator,
         if (!m_succeeded) {
             setMessage(status);
         }
+    });
+    // A rejected scan is a real failure — route it through the ERROR channel so both
+    // faces react loudly (shake + red border/ring), not just the quiet hint line.
+    // Clear-then-set guarantees an errorChanged per rejection (identical consecutive
+    // messages would otherwise be deduplicated and only shake once). The reader has
+    // already re-armed, so the error state auto-reverts to the hint — unless another
+    // failure (e.g. a wrong password) replaced it meanwhile.
+    connect(&m_fingerprint, &FprintAuthenticator::scanFailed, this, [this](const QString &reason) {
+        if (m_succeeded) {
+            return;
+        }
+        setError({});
+        setError(reason);
+        QTimer::singleShot(kFingerprintErrorMs, this, [this, reason]() {
+            if (m_error == reason) {
+                setError({});
+            }
+        });
     });
 
     if (m_backend != nullptr) {

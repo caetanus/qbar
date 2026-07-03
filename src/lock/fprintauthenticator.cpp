@@ -151,7 +151,7 @@ void FprintAuthenticator::handleVerifyStatus(const QString &result, bool done)
     // listening for another finger, unless we've been told to stop.
     endVerify();
     if (result == QLatin1String("verify-no-match")) {
-        emit statusChanged(QStringLiteral("Fingerprint did not match"));
+        emit scanFailed(QStringLiteral("Fingerprint did not match"));
     } else if (result == QLatin1String("verify-disconnected")) {
         emit unavailable(QStringLiteral("Fingerprint reader disconnected"));
         m_running = false;

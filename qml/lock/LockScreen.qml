@@ -13,7 +13,8 @@ Item {
 
     readonly property string displayName: (typeof userModel !== "undefined" && userModel && userModel.realName.length)
         ? userModel.realName : lockController.user
-    readonly property string avatarSource: (typeof userModel !== "undefined" && userModel && userModel.iconPath)
+    readonly property string avatarSource: (typeof lockHideAvatar !== "undefined" && lockHideAvatar) ? ""
+        : (typeof userModel !== "undefined" && userModel && userModel.iconPath)
         ? userModel.iconPath : ""
 
     function color(style, name, fallback) {
@@ -134,12 +135,37 @@ Item {
             }
 
             Rectangle {
+                id: inputBox
                 width: parent.width
                 height: 42
                 radius: inputStyle["border-radius"] ? cssTheme.parseLength(inputStyle["border-radius"], 8) : 8
                 color: root.color(root.inputStyle, "background-color", "#0c111e")
-                border.color: root.color(root.inputStyle, "border-color", "#556178")
+                // A failed attempt is LOUD: the box shakes (i3lock-style, same cadence as
+                // the ring face) and the border holds the error red until the next try.
+                border.color: lockController.error.length > 0
+                    ? root.color(root.errorStyle, "color", "#ff8585")
+                    : root.color(root.inputStyle, "border-color", "#556178")
                 border.width: inputStyle["border-width"] ? cssTheme.parseLength(inputStyle["border-width"], 1) : 1
+                Behavior on border.color { ColorAnimation { duration: 180 } }
+
+                property real shake: 0
+                transform: Translate { x: inputBox.shake }
+
+                SequentialAnimation {
+                    id: shakeAnim
+                    NumberAnimation { target: inputBox; property: "shake"; to: -14; duration: 50 }
+                    NumberAnimation { target: inputBox; property: "shake"; to: 14; duration: 90 }
+                    NumberAnimation { target: inputBox; property: "shake"; to: -8; duration: 70 }
+                    NumberAnimation { target: inputBox; property: "shake"; to: 0; duration: 60 }
+                }
+
+                Connections {
+                    target: lockController
+                    function onErrorChanged() {
+                        if (lockController.error.length > 0)
+                            shakeAnim.restart()
+                    }
+                }
 
                 MouseArea {
                     anchors.fill: parent
@@ -152,6 +178,9 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 12
                     anchors.rightMargin: 12
+                    // TextInput paints past its bounds by default — without this a long
+                    // password's echo dots spill out of the box.
+                    clip: true
                     color: root.color(root.inputStyle, "color", "#ffffff")
                     selectedTextColor: "#ffffff"
                     selectionColor: "#3f8cff"

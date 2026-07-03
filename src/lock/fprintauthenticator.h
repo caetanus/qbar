@@ -35,6 +35,9 @@ signals:
     void authenticationSucceeded();
     void activeChanged(bool active);
     void statusChanged(const QString &status);
+    // A terminal failed scan (verify-no-match) — a real rejection, distinct from the
+    // transient retry hints on statusChanged, so the UI can react loudly (shake/red).
+    void scanFailed(const QString &reason);
     void unavailable(const QString &reason);
 
 private slots:

@@ -14,7 +14,8 @@ Item {
 
     readonly property string displayName: (typeof userModel !== "undefined" && userModel && userModel.realName.length)
         ? userModel.realName : lockController.user
-    readonly property string avatarSource: (typeof userModel !== "undefined" && userModel && userModel.iconPath)
+    readonly property string avatarSource: (typeof lockHideAvatar !== "undefined" && lockHideAvatar) ? ""
+        : (typeof userModel !== "undefined" && userModel && userModel.iconPath)
         ? userModel.iconPath : ""
 
     function styleColor(style, name, fallback) {
