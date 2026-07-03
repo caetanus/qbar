@@ -23,7 +23,7 @@ a JSON IPC for scripting, and a matching QML/PAM lock screen.
 - **Try a theme before you keep it.** `qbar-ipc set-css <path-or-URL>` hot-swaps the live bar to any stylesheet — even a remote one — so you can preview a community theme straight from a URL, or a file you just downloaded (a relative path resolves from your shell's cwd). `qbar-ipc reset-css` snaps back to your configured theme — no restart, no config edits.
 - **Async by design.** Network (`QNetworkAccessManager`) and JSON parsing run off the GUI thread, and the marquee scrolls on the render thread, so the bar stays smooth.
 - **Native notifications** — **new**: opt-in `org.freedesktop.Notifications` daemon (replaces dunst/mako) rendering toasts with the same CSS engine: frosted-glass blur, an emboss relief shader, `@keyframes` entry **and exit** animations, hover-to-expand, and stack-tag coalescing for volume/brightness OSDs. Actions, urgency states, progress/value gauges included.
-- **qbar-lock** — **new**: an optional QML/PAM lock screen that shares qbar's CSS engine. Wayland `ext-session-lock-v1` (a real session lock) or an X11 grab, with password + fingerprint + face racing in parallel.
+- **qbar-lock** — **new**: an optional QML/PAM lock screen that shares qbar's CSS engine. Wayland `ext-session-lock-v1` (a real session lock) or an X11 grab, with password + **fingerprint (fprintd)** + face (Howdy) racing in parallel — first to succeed unlocks.
 
 ## Screenshots
 
@@ -325,10 +325,12 @@ rounded slab with a soft gradient bevel (tunable via `emboss-highlight`, `emboss
 
 ## Lock screen
 
-`qbar-lock` is an optional QML/PAM lock screen (built when `pam` is present). It picks its
-backend automatically: **Wayland** via `ext-session-lock-v1` (a real, secure session lock on
-sway/Hyprland/wlroots) or **X11** via a keyboard+pointer grab. On X11 also set
-`QT_QPA_PLATFORM=xcb` (the `--backend` flag only selects the lock backend, not the Qt platform).
+`qbar-lock` is an optional QML/PAM lock screen (built when `pam` is present) with native
+**fingerprint unlock via fprintd** — unlike swaylock, the reader works out of the box,
+concurrently with the password prompt. It picks its backend automatically: **Wayland** via
+`ext-session-lock-v1` (a real, secure session lock on sway/Hyprland/wlroots) or **X11** via a
+keyboard+pointer grab. On X11 also set `QT_QPA_PLATFORM=xcb` (the `--backend` flag only
+selects the lock backend, not the Qt platform).
 
 Two faces, chosen with `--lock-style`:
 
