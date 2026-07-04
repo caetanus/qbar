@@ -4,6 +4,9 @@
 
 **A fast, CSS-themable status bar for Wayland and X11, built with Qt 6 / QML.**
 
+[![build](https://github.com/caetanus/qbar/actions/workflows/build.yml/badge.svg)](https://github.com/caetanus/qbar/actions/workflows/build.yml)
+[![tests](https://github.com/caetanus/qbar/actions/workflows/tests.yml/badge.svg)](https://github.com/caetanus/qbar/actions/workflows/tests.yml)
+
 Waybar-style modules, rich interactive popups, hot-reloadable custom QML widgets,
 a JSON IPC for scripting, and a matching QML/PAM lock screen.
 

@@ -1,4 +1,4 @@
-name: CI
+name: build
 
 on:
   push:
@@ -40,10 +40,3 @@ jobs:
 
       - name: Build
         run: ninja -C build
-
-      # Offscreen platform + a private session bus: the QML applet tests need a
-      # QPA platform and some models touch D-Bus.
-      - name: Test
-        run: dbus-run-session -- meson test -C build --print-errorlogs
-        env:
-          QT_QPA_PLATFORM: offscreen
