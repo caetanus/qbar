@@ -12,7 +12,7 @@
 #include "notifications/notificationserver.h"
 #include "caffeine/caffeinemodel.h"
 #include "platform/capslockmonitor.h"
-#include "css/csstheme.h"
+#include "qmlcss/csstheme.h"
 #include "dbus/dbusservice.h"
 #include "platform/platformbarintegration.h"
 #include "wm/wmbackendfactory.h"

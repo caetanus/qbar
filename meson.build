@@ -42,6 +42,12 @@ qt_deps = [
   dependency('libpulse'),
 ]
 
+# The CSS engine — born in src/css/, now vendored (vendor/qml-css-engine, a git
+# submodule; subprojects/qml-css-engine is a symlink meson's subproject() follows).
+qml_css_engine_sub = subproject('qml-css-engine')
+qml_css_dep = qml_css_engine_sub.get_variable('qml_css_engine_dep')
+qt_deps += [qml_css_dep]
+
 # Discover the Qt host tool dir + include root from whichever backend resolved
 # the dependency — qmake (config-tool) reports QT_HOST_BINS/QT_INSTALL_HEADERS,
 # pkg-config reports bindir/includedir. Never assumed (Debian's multiarch prefix
@@ -291,8 +297,6 @@ sources = files(
   'src/ipc/i3ipcclient.cpp',
   'src/platform/keyboardlayoutcode.cpp',
   'src/platform/platformbarintegration.cpp',
-  'src/css/csstheme.cpp',
-  'src/css/valueparser.cpp',
   'src/json/jsonc.cpp',
   'src/dbus/dbusservice.cpp',
   'src/notifications/notificationmodel.cpp',
@@ -346,7 +350,6 @@ headers = files(
   'src/wm/testwindowrules.h',
   'src/ipc/i3ipcclient.h',
   'src/platform/platformbarintegration.h',
-  'src/css/csstheme.h',
   'src/dbus/dbusservice.h',
   'src/notifications/notificationmodel.h',
   'src/notifications/notificationserver.h',
@@ -459,6 +462,7 @@ if lockscreen_dep.found()
     dependency('Qt6Quick'),
     dependency('Qt6DBus'),
     lockscreen_dep,
+    qml_css_dep,
   ]
   if x11_dep.found()
     lockscreen_args += ['-DQBAR_LOCK_HAVE_X11=1']
@@ -483,7 +487,6 @@ if lockscreen_dep.found()
     'src/lock/x11lockbackend.h',
     'src/user/usermodel.h',
     'src/platform/capslockmonitor.h',
-    'src/css/csstheme.h',
   )
   lockscreen_qt_sources = qt6.preprocess(
     moc_headers: lockscreen_headers,
@@ -501,8 +504,6 @@ if lockscreen_dep.found()
       'src/lock/x11lockbackend.cpp',
       'src/user/usermodel.cpp',
       'src/platform/capslockmonitor.cpp',
-      'src/css/csstheme.cpp',
-      'src/css/valueparser.cpp',
     ),
     lockscreen_qt_sources,
     lockscreen_generated,
@@ -581,16 +582,14 @@ css_test_exe = executable(
   'test-css',
   files(
     'tests/test_css.cpp',
-    'src/css/csstheme.cpp',
-    'src/css/valueparser.cpp',
   ),
   css_test_moc,
-  qt6.preprocess(moc_headers: files('src/css/csstheme.h')),
   dependencies: [
     dependency('Qt6Core'),
     dependency('Qt6Gui'),
     dependency('Qt6Qml'),
     qt_test_dep,
+    qml_css_dep,
   ],
 )
 

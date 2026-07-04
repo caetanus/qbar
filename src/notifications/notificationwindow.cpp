@@ -1,7 +1,7 @@
 #include "notificationwindow.h"
 #include "notificationmodel.h"
 #include "notificationserver.h"
-#include "../css/csstheme.h"
+#include "qmlcss/csstheme.h"
 
 #include <QGuiApplication>
 #include <QQmlContext>

@@ -1,6 +1,6 @@
 #include "test_css.h"
 
-#include "src/css/csstheme.h"
+#include "qmlcss/csstheme.h"
 
 #include <QEasingCurve>
 #include <QJSEngine>

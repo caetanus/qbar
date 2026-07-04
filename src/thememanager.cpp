@@ -1,6 +1,6 @@
 #include "thememanager.h"
 
-#include "css/csstheme.h"
+#include "qmlcss/csstheme.h"
 
 #include <QColor>
 #include <QDebug>

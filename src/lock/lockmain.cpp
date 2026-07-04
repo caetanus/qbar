@@ -2,7 +2,7 @@
 #include "pamauthenticator.h"
 #include "waylandlockbackend.h"
 #include "x11lockbackend.h"
-#include "css/csstheme.h"
+#include "qmlcss/csstheme.h"
 #include "platform/capslockmonitor.h"
 #include "user/usermodel.h"
 
