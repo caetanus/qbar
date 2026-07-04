@@ -27,6 +27,8 @@ jobs:
             dbus ttf-dejavu
 
       - uses: actions/checkout@v4
+        with:
+          submodules: true # the CSS engine is vendored at vendor/qml-css-engine
 
       # Every feature explicitly enabled: with 'auto', a missing dependency would
       # silently drop the feature and the build would go green without it.

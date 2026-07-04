@@ -16,7 +16,7 @@ a JSON IPC for scripting, and a matching QML/PAM lock screen.
 ## Highlights
 
 - **Wayland-native** via `wlr-layer-shell` (a custom Qt platform-shell integration), with an X11 dock/strut fallback.
-- **Standard-CSS theming.** Themes are plain `.css` files — selectors like `#cpu`, `#workspaces button:active`, gradients, `box-shadow`, `border-radius`, transitions. 28 themes ship in [`config/themes/`](config/themes). Hot-reloads on save.
+- **Standard-CSS theming.** Themes are plain `.css` files — selectors like `#cpu`, `#workspaces button:active`, gradients, `box-shadow`, `border-radius`, transitions. 28 themes ship in [`config/themes/`](config/themes). Hot-reloads on save. The engine grew up here and now lives as its own project, [qml-css-engine](https://github.com/caetanus/qml-css-engine) (vendored as a submodule) — docs, tests and the full cascade/specificity/`@media`/`@keyframes` story live there.
 - **Rich popups**, not just tooltips: an interactive CPU/Memory dashboard (per-core graphs, top processes), a calendar with events, a Bitcoin candlestick chart, disk, battery, and media.
 - **Custom QML widgets** loaded from disk at runtime (no recompile) — hot-reload on save. Plus **waybar-format custom tools** (external scripts) for drop-in compatibility.
 - **JSON IPC** over a `QLocalSocket` — open/toggle popups from keyboard shortcuts or scripts.
@@ -24,6 +24,7 @@ a JSON IPC for scripting, and a matching QML/PAM lock screen.
 - **Async by design.** Network (`QNetworkAccessManager`) and JSON parsing run off the GUI thread, and the marquee scrolls on the render thread, so the bar stays smooth.
 - **Native notifications** — **new**: opt-in `org.freedesktop.Notifications` daemon (replaces dunst/mako) rendering toasts with the same CSS engine: frosted-glass blur, an emboss relief shader, `@keyframes` entry **and exit** animations, hover-to-expand, and stack-tag coalescing for volume/brightness OSDs. Actions, urgency states, progress/value gauges included.
 - **qbar-lock** — **new**: an optional QML/PAM lock screen that shares qbar's CSS engine. Wayland `ext-session-lock-v1` (a real session lock) or an X11 grab, with password + **fingerprint (fprintd)** + face (Howdy) racing in parallel — first to succeed unlocks.
+- **Speaks your language.** `LANG`/`LC_MESSAGES` is honoured across the bar and the lock screen — translations ship for **pt_BR, pt_PT, français, Deutsch and español**, dates and weekday names follow your locale, and Qt's own component catalogs are loaded too.
 
 ## Screenshots
 
@@ -51,7 +52,14 @@ Preview a theme live before you commit to it — `qbar-ipc set-css` hot-swaps th
 
 qbar uses **Meson** + **Ninja** and targets **Qt 6.5+**.
 
-**Build tools:** Meson, Ninja, a C++20 compiler, and (for the Wayland integration) `wayland-scanner` + `python3`.
+The CSS engine is vendored as a **git submodule** — clone with `--recursive`
+(or run `git submodule update --init` in an existing checkout):
+
+```bash
+git clone --recursive https://github.com/caetanus/qbar.git
+```
+
+**Build tools:** Meson, Ninja, a C++20 compiler, Qt's `lrelease` (translations; `qt6-tools` on Arch), and (for the Wayland integration) `wayland-scanner` + `python3`.
 
 **Build dependencies (required):** Qt 6 (Core, Gui, Widgets, Network, Qml, Quick, DBus, **Svg**, **WebSockets**), `sqlite3`, `xkbregistry`, `libedataserver-1.2` + `libecal-2.0` (calendar), `libpulse`. Optional: `wayland-client` + `wlroots-0.19` (Wayland layer-shell), `xcb` + `xcb-ewmh` (X11), `wireplumber-0.5` (native audio backend), `libpipewire-0.3` (privacy mic/camera indicator), `pam` (lock screen).
 

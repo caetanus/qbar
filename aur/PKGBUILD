@@ -51,8 +51,19 @@ makedepends=(
 )
 provides=('qbar')
 conflicts=('qbar')
-source=("$_pkgname::git+https://github.com/caetanus/qbar.git")
-sha256sums=('SKIP')
+source=("$_pkgname::git+https://github.com/caetanus/qbar.git"
+        "qml-css-engine::git+https://github.com/caetanus/qml-css-engine.git")
+sha256sums=('SKIP'
+            'SKIP')
+
+prepare() {
+  cd "$srcdir/$_pkgname"
+  # makepkg clones submodules separately; point the vendored CSS engine at the
+  # local mirror (standard AUR VCS-submodule pattern).
+  git submodule init
+  git config submodule.vendor/qml-css-engine.url "$srcdir/qml-css-engine"
+  git -c protocol.file.allow=always submodule update
+}
 
 pkgver() {
   cd "$srcdir/$_pkgname"
