@@ -40,6 +40,15 @@ public:
     // qbarBar* window properties), so popups land correctly in multi-bar setups.
     void setBarWindow(QWindow *window) { m_barWindow = window; }
 
+    // Popup shell reuse (BarConfig::popupReuse). When enabled, closing a popup
+    // parks its shell (hidden) instead of destroying it, and the backdrop
+    // overlay window is hidden instead of destroyed. Reopening the same popup
+    // revives the parked shell. This avoids Qt Quick's per-open graphics
+    // pipeline growth: the window-level pipeline cache never evicts pipelines
+    // created for layer render targets, so fresh items in a fresh (or even the
+    // same) window permanently grow the process ~4MB per open/close cycle.
+    void setReuseEnabled(bool on);
+
     Q_INVOKABLE QString openPopup(const QUrl &source,
                                   const QVariantMap &properties,
                                   int x,
@@ -91,7 +100,17 @@ private:
         QPoint position;
     };
 
+    struct ParkedShell {
+        QPointer<QQuickItem> shell;
+        QUrl source;
+    };
+
     QString nextId(const QString &requestedId);
+    // Reuse-mode helpers: park a closing shell / revive it on reopen / drop all
+    // parked shells (flag turned off at runtime, or overlay must really die).
+    void parkShell(const QString &id, QQuickItem *shell);
+    QQuickItem *takeParkedShell(const QString &id, const QUrl &source);
+    void flushParkedShells();
     QWidget *popupParent() const;
     QWindow *popupTransientParent() const;
     void applyPopupContext(QQmlContext *context);
@@ -99,6 +118,7 @@ private:
     void forceClosePopup(const QString &id);
     void forceCloseTooltip(const QString &id);
     void ensureDismissOverlay();
+    void applyOverlayGeometry(QQuickView *view);
     void destroyDismissOverlay();
     void trimQmlCacheWhenIdle();
     void refreshBarGeometry();
@@ -120,6 +140,8 @@ private:
     // (m_dismissOverlay). Tooltips remain ordinary standalone windows.
     QHash<QString, QPointer<QQuickItem>> m_popups;
     QHash<QString, PopupSpec> m_popupSpecs;
+    QHash<QString, ParkedShell> m_parkedShells;
+    bool m_reuseEnabled = false;
     QHash<QString, QPointer<QQuickView>> m_detachedPopups;
     QSet<QString> m_detachingPopups;
     QHash<QString, Popup> m_tooltips;

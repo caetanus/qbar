@@ -16,6 +16,9 @@
 - **Theme knob**: roughly half of the growth comes from `text-shadow` in popup
   content — a theme that omits it pays proportionally less. The rest is
   per-open resource churn independent of theming.
-- Restarting the bar reclaims everything. A popup-reuse mode (keeping shells
-  alive across open/close, which also removes the growth entirely without any
-  visual change) and an upstream Qt report are the tracked fixes.
+- Restarting the bar reclaims everything. An upstream Qt report on
+  pipeline-cache eviction is still tracked.
+- **Workaround**: set `"popupReuse": true` in the config. Closing a popup then
+  parks its shell (hidden) instead of destroying it and the next open revives
+  it, so no new pipelines are created after the first open of each popup. Same
+  visuals and animations; off by default while the mode is being validated.

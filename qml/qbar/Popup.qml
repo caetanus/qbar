@@ -91,9 +91,14 @@ Item {
             }
             pl.keyboardFocus = true
         }
+        // Popups present a STABLE id derived from the content source: close()
+        // clears popupId, and letting the service generate a fresh id per open
+        // would defeat keyed shell parking under popupReuse (the parked shell
+        // would never be revived — it would accumulate instead).
+        var requestId = popupId.length > 0 ? popupId : ("src:" + source)
         popupId = kind === "tooltip"
             ? qbarPopups.openTooltip(source, pl, point.x, point.y, popupWidth, popupHeight, popupId)
-            : qbarPopups.openPopup(source, pl, point.x, point.y, popupWidth, popupHeight, popupId)
+            : qbarPopups.openPopup(source, pl, point.x, point.y, popupWidth, popupHeight, requestId)
         if (popupId.length > 0) {
             popupOpened(popupId)
         }

@@ -52,6 +52,25 @@ Item {
     onShownOpacityChanged: if (!popupClosing) applyVisibility()
     Component.onCompleted: applyVisibility()
 
+    // Push popupData onto the loaded content's properties. Runs on first load AND on
+    // every reopen of a reused shell (the service re-sets the popupData context
+    // property, then invokes this so fresh per-open values land on the same instance).
+    function reapplyPopupData() {
+        if (!loader.item) {
+            return
+        }
+        for (var key in popupData) {
+            if (Object.prototype.hasOwnProperty.call(popupData, key) && key in loader.item) {
+                loader.item[key] = popupData[key]
+            }
+        }
+        Qt.callLater(function() {
+            if (loader.item) {
+                loader.item.forceActiveFocus()
+            }
+        })
+    }
+
     // CSS-configurable popup chrome (#popup): solid color, linear-gradient (any
     // angle) and border via CssFill. Default: a neutral dark, slightly
     // translucent (readable but not fully opaque, and not the bar's blue tint).
@@ -95,21 +114,7 @@ Item {
             // navigation) take activeFocus when the overlay holds the keyboard.
             focus: true
 
-            onLoaded: {
-                if (!item) {
-                    return
-                }
-                for (var key in popupData) {
-                    if (Object.prototype.hasOwnProperty.call(popupData, key) && key in item) {
-                        item[key] = popupData[key]
-                    }
-                }
-                Qt.callLater(function() {
-                    if (loader.item) {
-                        loader.item.forceActiveFocus()
-                    }
-                })
-            }
+            onLoaded: root.reapplyPopupData()
         }
     }
 }

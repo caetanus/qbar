@@ -55,6 +55,11 @@ Bar options
    * - ``popupKeyboardFocus``
      - boolean
      - Let popups grab the keyboard (enables Esc-to-close).
+   * - ``popupReuse``
+     - boolean
+     - Keep popup shells alive (hidden) across open/close and reuse them.
+       Avoids Qt Quick's graphics-pipeline cache growth on every open
+       (see :doc:`known issues <index>`). Default ``false`` while validating.
    * - ``background`` / ``foreground`` / ``accent``
      - string
      - Base colors (``#rrggbb``, ``#aarrggbb``, ``rgb()``, ``rgba()``, or a name). Overridden by the stylesheet.

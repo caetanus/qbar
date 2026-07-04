@@ -18,6 +18,8 @@
 #include <QWidget>
 #include <QTimer>
 
+#include <utility>
+
 namespace {
 // On X11 we want popup/tooltip/overlay windows to be override-redirect — i3 then
 // never manages them: no taskbar entry, no title leaking into the focused-window
@@ -49,7 +51,17 @@ QBarPopupService::QBarPopupService(QQmlEngine *engine,
 
 QBarPopupService::~QBarPopupService()
 {
+    // Real teardown: parking must not keep the overlay window alive past the
+    // service (it has no QObject parent). Parked shells die with the view.
+    m_reuseEnabled = false;
+    m_parkedShells.clear();
     closeAll();
+    if (m_dismissOverlay != nullptr) {
+        auto *view = m_dismissOverlay.data();
+        m_dismissOverlay = nullptr;
+        view->close();
+        view->deleteLater();
+    }
     const auto detached = m_detachedPopups;
     m_detachedPopups.clear();
     for (QQuickView *view : detached) {
@@ -87,38 +99,83 @@ QString QBarPopupService::openPopup(const QUrl &source,
             m_overlayKeyboardFocus || properties.value(QStringLiteral("keyboardFocus")).toBool());
     }
 
-    // One popup at a time: opening a popup dismisses any other open popup. The
-    // destroyed handler removes them from m_popups and emits popupClosed; we
-    // keep the overlay alive since a new popup is taking their place.
+    // One popup at a time: opening a popup dismisses any other open popup. In
+    // reuse mode they are parked via forceClosePopup (synchronous, emits
+    // popupClosed); otherwise the destroyed handler removes them from m_popups
+    // and emits popupClosed. Either way the overlay stays alive since a new
+    // popup is taking their place.
     const auto existingIds = m_popups.keys();
     for (const QString &existingId : existingIds) {
-        if (QQuickItem *old = m_popups.value(existingId)) {
+        if (m_reuseEnabled) {
+            forceClosePopup(existingId);
+        } else if (QQuickItem *old = m_popups.value(existingId)) {
             old->deleteLater();
         }
     }
 
-    // Build the popup content (PopupShell + its loaded applet) as a child item
-    // of the overlay's popup layer, with a dedicated context carrying the
-    // per-popup ids/data on top of the shared theme/model context properties.
-    auto *context = new QQmlContext(m_engine->rootContext());
-    applyPopupContext(context);
-    context->setContextProperty(QStringLiteral("popupId"), id);
-    context->setContextProperty(QStringLiteral("popupData"), properties);
-    context->setContextProperty(QStringLiteral("contentSource"), source);
-    context->setContextProperty(QStringLiteral("detachedWindow"), false);
-
-    QQmlComponent component(m_engine, popupShellSource());
-    auto *shell = qobject_cast<QQuickItem *>(component.create(context));
-    if (shell == nullptr) {
-        qWarning() << "[popup] failed to create shell" << id << component.errorString();
-        delete context;
-        if (m_popups.isEmpty()) {
-            destroyDismissOverlay();
+    // Reuse mode: revive the parked shell for this popup id instead of building
+    // a new one. Same items in the same living window means the renderer reuses
+    // the pipelines it already cached instead of growing the cache every open.
+    QQuickItem *shell = m_reuseEnabled ? takeParkedShell(id, source) : nullptr;
+    if (shell != nullptr) {
+        // The per-popup context was parented to the shell at creation; refresh
+        // the per-open payload on it, then push it onto the loaded content.
+        if (auto *context = shell->findChild<QQmlContext *>(QString(), Qt::FindDirectChildrenOnly)) {
+            context->setContextProperty(QStringLiteral("popupData"), properties);
         }
-        return {};
+        shell->setParentItem(m_overlayPopupLayer);
+        shell->setVisible(true);
+        QMetaObject::invokeMethod(shell, "reapplyPopupData");
+    } else {
+        // Build the popup content (PopupShell + its loaded applet) as a child item
+        // of the overlay's popup layer, with a dedicated context carrying the
+        // per-popup ids/data on top of the shared theme/model context properties.
+        auto *context = new QQmlContext(m_engine->rootContext());
+        applyPopupContext(context);
+        context->setContextProperty(QStringLiteral("popupId"), id);
+        context->setContextProperty(QStringLiteral("popupData"), properties);
+        context->setContextProperty(QStringLiteral("contentSource"), source);
+        context->setContextProperty(QStringLiteral("detachedWindow"), false);
+
+        QQmlComponent component(m_engine, popupShellSource());
+        shell = qobject_cast<QQuickItem *>(component.create(context));
+        if (shell == nullptr) {
+            qWarning() << "[popup] failed to create shell" << id << component.errorString();
+            delete context;
+            if (m_popups.isEmpty()) {
+                destroyDismissOverlay();
+            }
+            return {};
+        }
+        context->setParent(shell);
+        shell->setParentItem(m_overlayPopupLayer);
+
+        connect(shell, &QObject::destroyed, this, [this, id, shell]() {
+            // Died while parked (reuse flag turned off, overlay teardown): just
+            // drop the parking entry — popupClosed was already emitted at park.
+            auto parkedIt = m_parkedShells.find(id);
+            if (parkedIt != m_parkedShells.end()
+                && (parkedIt->shell.isNull() || parkedIt->shell.data() == shell)) {
+                m_parkedShells.erase(parkedIt);
+                return;
+            }
+            if (m_detachingPopups.remove(id)) {
+                // Let the scene graph retire the old popup item before tearing down its
+                // Wayland overlay surface. Closing both in the same event-loop turn can
+                // leave a frame callback pointing at the retired shell surface.
+                QTimer::singleShot(50, this, [this]() {
+                    if (m_popups.isEmpty() && m_openMenu == nullptr)
+                        destroyDismissOverlay();
+                });
+                return;
+            }
+            if (m_popups.value(id) == shell) {
+                m_popups.remove(id);
+                m_popupSpecs.remove(id);
+            }
+            emit popupClosed(id);
+        });
     }
-    context->setParent(shell);
-    shell->setParentItem(m_overlayPopupLayer);
 
     QObject *popupTarget = shell;
     if (QObject *loader = shell->findChild<QObject *>(QStringLiteral("qbarPopupLoader"))) {
@@ -159,27 +216,11 @@ QString QBarPopupService::openPopup(const QUrl &source,
 
     m_popups.insert(id, shell);
     m_popupSpecs.insert(id, PopupSpec{source, properties, QSize(popupWidth, popupHeight), QPoint(x, y)});
-    connect(shell, &QObject::destroyed, this, [this, id, shell]() {
-        if (m_detachingPopups.remove(id)) {
-            // Let the scene graph retire the old popup item before tearing down its
-            // Wayland overlay surface. Closing both in the same event-loop turn can
-            // leave a frame callback pointing at the retired shell surface.
-            QTimer::singleShot(50, this, [this]() {
-                if (m_popups.isEmpty() && m_openMenu == nullptr)
-                    destroyDismissOverlay();
-            });
-            return;
-        }
-        if (m_popups.value(id) == shell) {
-            m_popups.remove(id);
-            m_popupSpecs.remove(id);
-        }
-        emit popupClosed(id);
-    });
 
     shell->setProperty("animateBounds", true);
     shell->setProperty("targetWidth", popupWidth);
     shell->setProperty("targetHeight", popupHeight);
+    shell->setProperty("_qbarClosing", false);
     shell->setProperty("popupClosing", false);
     return id;
 }
@@ -571,10 +612,104 @@ void QBarPopupService::forceClosePopup(const QString &id)
 {
     QQuickItem *shell = m_popups.take(id);
     if (shell != nullptr) {
-        shell->deleteLater();
+        if (m_reuseEnabled) {
+            parkShell(id, shell);
+            m_popupSpecs.remove(id);
+            // The shell stays alive, so its destroyed handler won't fire —
+            // announce the close ourselves.
+            emit popupClosed(id);
+        } else {
+            shell->deleteLater();
+        }
     }
     if (m_popups.isEmpty() && m_openMenu == nullptr) {
         destroyDismissOverlay();
+    }
+}
+
+void QBarPopupService::setReuseEnabled(bool on)
+{
+    if (m_reuseEnabled == on) {
+        return;
+    }
+    m_reuseEnabled = on;
+    if (!on) {
+        flushParkedShells();
+        if (m_popups.isEmpty() && m_openMenu == nullptr) {
+            destroyDismissOverlay();
+        }
+    }
+}
+
+void QBarPopupService::parkShell(const QString &id, QQuickItem *shell)
+{
+    // A parked shell keeps its items — and therefore the graphics pipelines the
+    // renderer cached for them — alive, so the next open creates nothing new.
+    // Hidden items cost no per-frame work. popupClosing puts the shell in its
+    // visually-closed rest state so reviving replays the grow-in animation.
+    shell->setProperty("_qbarClosing", false);
+    shell->setProperty("popupClosing", true);
+    shell->setVisible(false);
+    const ParkedShell previous = m_parkedShells.take(id);
+    if (previous.shell != nullptr && previous.shell.data() != shell) {
+        disconnect(previous.shell.data(), &QObject::destroyed, this, nullptr);
+        previous.shell->deleteLater();
+    }
+    m_parkedShells.insert(id, ParkedShell{shell, m_popupSpecs.value(id).source});
+    // Safety valve: parked shells are live item trees. Ids are stable per
+    // popup source, so this map should stay small — if some caller cycles
+    // through generated ids anyway, evict rather than accumulate.
+    while (m_parkedShells.size() > 8) {
+        auto victim = m_parkedShells.end();
+        for (auto it = m_parkedShells.begin(); it != m_parkedShells.end(); ++it) {
+            if (it->shell.data() != shell) {
+                victim = it;
+                break;
+            }
+        }
+        if (victim == m_parkedShells.end()) {
+            break;
+        }
+        if (victim->shell != nullptr) {
+            disconnect(victim->shell.data(), &QObject::destroyed, this, nullptr);
+            victim->shell->deleteLater();
+        }
+        m_parkedShells.erase(victim);
+    }
+}
+
+QQuickItem *QBarPopupService::takeParkedShell(const QString &id, const QUrl &source)
+{
+    auto it = m_parkedShells.find(id);
+    if (it == m_parkedShells.end()) {
+        return nullptr;
+    }
+    const ParkedShell parked = *it;
+    m_parkedShells.erase(it);
+    if (parked.shell == nullptr) {
+        return nullptr;
+    }
+    if (parked.source != source) {
+        // Same popup id reopened with different content — rebuild from scratch.
+        // Disconnect first: the destroyed handler would otherwise emit a
+        // spurious popupClosed for the replacement popup now holding this id.
+        disconnect(parked.shell.data(), &QObject::destroyed, this, nullptr);
+        parked.shell->deleteLater();
+        return nullptr;
+    }
+    return parked.shell.data();
+}
+
+void QBarPopupService::flushParkedShells()
+{
+    const auto parked = std::exchange(m_parkedShells, {});
+    for (const ParkedShell &entry : parked) {
+        if (entry.shell != nullptr) {
+            // popupClosed was already emitted when the shell was parked;
+            // disconnect so its destruction stays silent.
+            disconnect(entry.shell.data(), &QObject::destroyed, this, nullptr);
+            entry.shell->deleteLater();
+        }
     }
 }
 
@@ -606,8 +741,33 @@ void QBarPopupService::refreshBarGeometry()
 
 void QBarPopupService::ensureDismissOverlay()
 {
-    if (m_dismissOverlay != nullptr || m_engine == nullptr) {
+    if (m_engine == nullptr) {
         return;
+    }
+    if (m_dismissOverlay != nullptr) {
+        if (!m_dismissOverlay->isVisible()) {
+            // Parked overlay (reuse mode): revive it. Re-derive screen/geometry —
+            // both can have changed while it sat hidden.
+            QScreen *screen = m_barWindow != nullptr ? m_barWindow->screen()
+                                                     : QGuiApplication::primaryScreen();
+            if (screen != nullptr && m_dismissOverlay->screen() != screen) {
+                // The bar moved to another output; the parked scene targets the
+                // old one. Drop everything and rebuild below.
+                flushParkedShells();
+                auto *stale = m_dismissOverlay.data();
+                m_dismissOverlay = nullptr;
+                m_overlayPopupLayer = nullptr;
+                stale->close();
+                stale->deleteLater();
+            } else {
+                applyOverlayGeometry(m_dismissOverlay.data());
+                m_dismissOverlay->show();
+                m_dismissOverlay->raise();
+                return;
+            }
+        } else {
+            return;
+        }
     }
 
     auto *view = new QQuickView(m_engine, nullptr);
@@ -627,9 +787,37 @@ void QBarPopupService::ensureDismissOverlay()
     view->setProperty("qbarOverlay", true);
     view->setProperty("qbarOverlayKeyboard", m_overlayKeyboardFocus);
 
-    // Mirror the owning bar's geometry onto the overlay so the layer-shell
-    // integration sizes/anchors the backdrop per-bar (multi-monitor, top+bottom),
-    // falling back to the QBAR_LAYER_* env when there is no bar window.
+    if (m_reuseEnabled) {
+        // Parked shells live inside this window's scene graph; hide/show must
+        // not tear it down or their cached nodes/pipelines would be recreated
+        // (and the pipeline cache regrown) on every reopen.
+        view->setPersistentSceneGraph(true);
+        view->setPersistentGraphics(true);
+    }
+
+    applyOverlayGeometry(view);
+
+    applyPopupContext(view->rootContext());
+    view->setSource(QUrl(QStringLiteral("qrc:/qbar/DismissOverlay.qml")));
+
+    if (auto *root = view->rootObject()) {
+        connect(root, SIGNAL(dismissed()), this, SLOT(closeAll()));
+        m_overlayPopupLayer = root->property("popupLayer").value<QQuickItem *>();
+    }
+
+    // No transient parent: this is a standalone full-output layer surface, not
+    // an xdg_popup anchored to the bar.
+    m_dismissOverlay = view;
+    view->show();
+    view->raise();
+}
+
+// Mirror the owning bar's geometry onto the overlay so the layer-shell
+// integration sizes/anchors the backdrop per-bar (multi-monitor, top+bottom),
+// falling back to the QBAR_LAYER_* env when there is no bar window. Runs at
+// creation and again whenever a parked overlay is revived.
+void QBarPopupService::applyOverlayGeometry(QQuickView *view)
+{
     refreshBarGeometry();
     const QVariant exclusiveProp = m_barWindow != nullptr ? m_barWindow->property("qbarBarExclusive") : QVariant();
     const bool bottomBar = m_barBottom;
@@ -640,9 +828,6 @@ void QBarPopupService::ensureDismissOverlay()
     view->setProperty("qbarBarHeight", barHeight);
     view->setProperty("qbarBarPosition", QString::fromLatin1(bottomBar ? "bottom" : "top"));
     view->setProperty("qbarBarExclusive", exclusive);
-
-    applyPopupContext(view->rootContext());
-    view->setSource(QUrl(QStringLiteral("qrc:/qbar/DismissOverlay.qml")));
 
     // Put the overlay on the same screen as its bar so the layer surface targets
     // the right output; fall back to the primary screen.
@@ -672,23 +857,21 @@ void QBarPopupService::ensureDismissOverlay()
             m_overlayOrigin = QPoint(area.left(), topInset);
         }
     }
-
-    if (auto *root = view->rootObject()) {
-        connect(root, SIGNAL(dismissed()), this, SLOT(closeAll()));
-        m_overlayPopupLayer = root->property("popupLayer").value<QQuickItem *>();
-    }
-
-    // No transient parent: this is a standalone full-output layer surface, not
-    // an xdg_popup anchored to the bar.
-    m_dismissOverlay = view;
-    view->show();
-    view->raise();
 }
 
 void QBarPopupService::destroyDismissOverlay()
 {
     if (m_dismissOverlay == nullptr) {
         trimQmlCacheWhenIdle();
+        return;
+    }
+
+    if (m_reuseEnabled) {
+        // Park the overlay instead of destroying it. Destroying wouldn't return
+        // the pipeline-cache memory anyway (measured — the retention survives
+        // window death), and keeping the window alive is what lets the parked
+        // shells reuse their scene-graph resources on the next open.
+        m_dismissOverlay->hide();
         return;
     }
 

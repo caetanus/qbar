@@ -22,6 +22,7 @@
     "exclusiveZone": { "type": "boolean", "description": "Reserve screen space for the bar." },
     "waylandLayerShell": { "type": "boolean" },
     "popupKeyboardFocus": { "type": "boolean", "description": "Let popups grab the keyboard (enables Esc-to-close)." },
+    "popupReuse": { "type": "boolean", "description": "Reuse popup shells across open/close (parks them hidden) to avoid per-open graphics pipeline cache growth.", "default": false },
     "background": { "type": "string", "description": "Color (#rrggbb, #aarrggbb, rgb(), rgba(), name)." },
     "foreground": { "type": "string" },
     "accent": { "type": "string" },

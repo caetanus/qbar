@@ -20,14 +20,23 @@ Item {
     // the property actually lands, guarded so the refcount stays balanced.
     property bool _detailsHeld: false
     function _holdDetails() {
-        if (cpu && !_detailsHeld) {
+        if (cpu && !_detailsHeld && visible) {
             _detailsHeld = true
             cpu.acquireDetails()
         }
     }
+    function _dropDetails() {
+        if (cpu && _detailsHeld) {
+            _detailsHeld = false
+            cpu.releaseDetails()
+        }
+    }
     onCpuChanged: _holdDetails()
     Component.onCompleted: _holdDetails()
-    Component.onDestruction: if (_detailsHeld && cpu) cpu.releaseDetails()
+    Component.onDestruction: _dropDetails()
+    // Popup reuse parks this item hidden instead of destroying it; the fast
+    // per-process cadence must follow effective visibility, not lifetime.
+    onVisibleChanged: visible ? _holdDetails() : _dropDetails()
     property int coreColumns: 4
     property int coreTileHeight: 84
     property int coreSpacing: 8
