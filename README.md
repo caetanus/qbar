@@ -64,7 +64,7 @@ git clone --recursive https://github.com/caetanus/qbar.git
 
 **Build tools:** Meson, Ninja, a C++20 compiler, Qt's `lrelease` (translations; `qt6-tools` on Arch), and (for the Wayland integration) `wayland-scanner` + `python3`.
 
-**Build dependencies (required):** Qt 6 (Core, Gui, Widgets, Network, Qml, Quick, DBus, **Svg**, **WebSockets**), `sqlite3`, `xkbregistry`, `libedataserver-1.2` + `libecal-2.0` (calendar), `libpulse`. Optional: `wayland-client` + `wlroots-0.19` (Wayland layer-shell), `xcb` + `xcb-ewmh` (X11), `wireplumber-0.5` (native audio backend), `libpipewire-0.3` (privacy mic/camera indicator), `pam` (lock screen).
+**Build dependencies (required):** Qt 6 (Core, Gui, Widgets, Network, Qml, Quick, DBus, **Svg**, **WebSockets**), `sqlite3`, `xkbregistry`, `libedataserver-1.2` + `libecal-2.0` (calendar), `libpulse`. Optional: `wayland-client` + `wayland-protocols` (Wayland layer-shell — no wlroots needed: the protocol code is generated from bundled XML), `xcb` + `xcb-ewmh` (X11), `wireplumber-0.5` (native audio backend), `libpipewire-0.3` (privacy mic/camera indicator), `pam` (lock screen).
 
 > Svg and WebSockets are **mandatory** even though qbar only imports them from QML — `meson.build` requires them so a build can't silently produce a bar that breaks at runtime (SVG icons failing, the Bitcoin widget not loading).
 
@@ -91,7 +91,7 @@ sudo pacman -S --needed \
   qt6-base qt6-declarative qt6-svg qt6-websockets \
   sqlite xkbcommon-x11 libpulse evolution-data-server \
   adwaita-icon-theme ttf-nerd-fonts-symbols ttf-roboto \
-  qt6-wayland wlroots0.19          # Wayland (drop for X11-only)
+  qt6-wayland                      # Wayland (drop for X11-only)
 # optional extras: wireplumber libpipewire pam libxcb xcb-util-wm
 ```
 
@@ -107,7 +107,7 @@ sudo apt install \
   qt6-svg-dev qt6-websockets-dev \
   libsqlite3-dev libpulse-dev libxkbcommon-dev libxkbregistry-dev \
   libedataserver1.2-dev libecal2.0-dev \
-  libxcb1-dev libxcb-ewmh-dev          # X11 (or libwayland-dev libwlroots-0.19-dev for Wayland)
+  libxcb1-dev libxcb-ewmh-dev          # X11 (or libwayland-dev wayland-protocols for Wayland)
 # runtime — the pieces apt won't pull in for you
 sudo apt install \
   qt6-svg-plugins \
@@ -134,7 +134,7 @@ sudo dnf install \
   evolution-data-server-devel pulseaudio-libs-devel \
   libxcb-devel xcb-util-wm-devel \
   adwaita-icon-theme jetbrains-mono-fonts-all google-roboto-fonts fontawesome-fonts \
-  qt6-qtwayland-devel wlroots-devel          # Wayland (drop for X11-only)
+  qt6-qtwayland-devel                        # Wayland (drop for X11-only)
 # optional extras: wireplumber-devel pipewire-devel pam-devel
 ```
 
@@ -151,7 +151,7 @@ Useful options (`-D<name>=<value>`):
 
 | Option | Default | Description |
 |---|---|---|
-| `wayland` | `auto` | wlroots `wlr-layer-shell` integration |
+| `wayland` | `auto` | Wayland `wlr-layer-shell` integration (bundled protocol XML; no wlroots) |
 | `x11` | `auto` | X11 dock/strut integration |
 | `wm_backends` | `i3,hyprland` | window-manager backends: `i3`, `hyprland`, `bspwm`, `qtile`, `ewmh` |
 | `wireplumber` | `auto` | native WirePlumber audio backend (else libpulse) |

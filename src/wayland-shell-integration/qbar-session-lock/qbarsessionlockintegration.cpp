@@ -5,6 +5,7 @@
 #include <QtWaylandClient/private/qwaylandscreen_p.h>
 
 #include <QCoreApplication>
+#include <qpa/qwindowsysteminterface.h>
 #include <QGuiApplication>
 #include <QDebug>
 
@@ -155,10 +156,12 @@ void QBarSessionLockSurface::setWindowGeometry(const QRect &rect)
     Q_UNUSED(rect);
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
 void QBarSessionLockSurface::setWindowSize(const QSize &size)
 {
     Q_UNUSED(size);
 }
+#endif
 
 std::any QBarSessionLockSurface::surfaceRole() const
 {
@@ -185,7 +188,15 @@ void QBarSessionLockSurface::handleConfigure(void *data,
     if (self->window() != nullptr) {
         auto *w = self->window();
         QMetaObject::invokeMethod(
-            w, [w]() { w->updateExposure(); w->requestUpdate(); }, Qt::QueuedConnection);
+            w, [w]() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+                w->updateExposure();
+#else
+                QWindowSystemInterface::handleExposeEvent(
+                    w->window(), QRect(QPoint(), w->geometry().size()));
+#endif
+                w->requestUpdate();
+            }, Qt::QueuedConnection);
     }
 
     // Apply the pending configure so Qt renders + commits the first frame (with a buffer).

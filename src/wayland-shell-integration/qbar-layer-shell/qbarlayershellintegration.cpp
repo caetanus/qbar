@@ -5,6 +5,7 @@
 #include <QtWaylandClient/private/qwaylandwindow_p.h>
 
 #include <QCoreApplication>
+#include <qpa/qwindowsysteminterface.h>
 #include <QDebug>
 #include <QDynamicPropertyChangeEvent>
 #include <QEvent>
@@ -299,11 +300,13 @@ void QBarLayerShellSurface::setWindowGeometry(const QRect &rect)
     applyLayerState();
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
 void QBarLayerShellSurface::setWindowSize(const QSize &size)
 {
     Q_UNUSED(size);
     applyLayerState();
 }
+#endif
 
 std::any QBarLayerShellSurface::surfaceRole() const
 {
@@ -341,7 +344,15 @@ void QBarLayerShellSurface::configure(uint32_t serial, uint32_t width, uint32_t 
     if (window() != nullptr) {
         auto *w = window();
         QMetaObject::invokeMethod(
-            w, [w]() { w->updateExposure(); w->requestUpdate(); }, Qt::QueuedConnection);
+            w, [w]() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+                w->updateExposure();
+#else
+                QWindowSystemInterface::handleExposeEvent(
+                    w->window(), QRect(QPoint(), w->geometry().size()));
+#endif
+                w->requestUpdate();
+            }, Qt::QueuedConnection);
     }
     applyConfigureWhenPossible();
 }
@@ -617,11 +628,13 @@ void QBarXdgToplevelSurface::setWindowGeometry(const QRect &rect)
     xdg_surface_set_window_geometry(m_xdgSurface, 0, 0, rect.width(), rect.height());
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
 void QBarXdgToplevelSurface::setWindowSize(const QSize &size)
 {
     if (size.isValid())
         m_geometry.setSize(size);
 }
+#endif
 
 std::any QBarXdgToplevelSurface::surfaceRole() const
 {
@@ -650,7 +663,12 @@ void QBarXdgToplevelSurface::handleXdgSurfaceConfigure(void *data,
     if (toplevel->window() != nullptr) {
         auto *window = toplevel->window();
         QMetaObject::invokeMethod(window, [window]() {
-            window->updateExposure();
+        #if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    window->updateExposure();
+#else
+    QWindowSystemInterface::handleExposeEvent(
+        window->window(), QRect(QPoint(), window->geometry().size()));
+#endif
             window->requestUpdate();
         }, Qt::QueuedConnection);
     }
@@ -743,6 +761,7 @@ void QBarXdgPopupSurface::setWindowPosition(const QPoint &position)
     reposition();
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
 void QBarXdgPopupSurface::setWindowSize(const QSize &size)
 {
     if (size.isValid()) {
@@ -750,6 +769,7 @@ void QBarXdgPopupSurface::setWindowSize(const QSize &size)
         reposition();
     }
 }
+#endif
 
 std::any QBarXdgPopupSurface::surfaceRole() const
 {
@@ -962,7 +982,15 @@ void QBarXdgPopupSurface::handleXdgSurfaceConfigure(void *data, xdg_surface *sur
         // Defer (don't drive Qt's window machinery synchronously from this wl dispatch).
         auto *w = popup->window();
         QMetaObject::invokeMethod(
-            w, [w]() { w->updateExposure(); w->requestUpdate(); }, Qt::QueuedConnection);
+            w, [w]() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+                w->updateExposure();
+#else
+                QWindowSystemInterface::handleExposeEvent(
+                    w->window(), QRect(QPoint(), w->geometry().size()));
+#endif
+                w->requestUpdate();
+            }, Qt::QueuedConnection);
     }
     popup->applyConfigureWhenPossible();
 }

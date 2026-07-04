@@ -40,7 +40,11 @@ public:
     bool isExposed() const override;
     void applyConfigure() override;
     void setWindowGeometry(const QRect &rect) override;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    // QWaylandShellSurface::setWindowSize(QSize) is a ~6.9 addition; older Qt
+    // (Debian stable ships 6.8) only has the setWindowGeometry(QRect) virtual.
     void setWindowSize(const QSize &size) override;
+#endif
     std::any surfaceRole() const override;
     void attachPopup(QtWaylandClient::QWaylandShellSurface *popup) override;
     void detachPopup(QtWaylandClient::QWaylandShellSurface *popup) override;
@@ -78,7 +82,11 @@ public:
     void applyConfigure() override;
     void setWindowGeometry(const QRect &rect) override;
     void setWindowPosition(const QPoint &position) override;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    // QWaylandShellSurface::setWindowSize(QSize) is a ~6.9 addition; older Qt
+    // (Debian stable ships 6.8) only has the setWindowGeometry(QRect) virtual.
     void setWindowSize(const QSize &size) override;
+#endif
     std::any surfaceRole() const override;
     void attachPopup(QtWaylandClient::QWaylandShellSurface *popup) override;
     void detachPopup(QtWaylandClient::QWaylandShellSurface *popup) override;
@@ -128,7 +136,11 @@ public:
     bool isExposed() const override;
     void applyConfigure() override;
     void setWindowGeometry(const QRect &rect) override;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    // QWaylandShellSurface::setWindowSize(QSize) is a ~6.9 addition; older Qt
+    // (Debian stable ships 6.8) only has the setWindowGeometry(QRect) virtual.
     void setWindowSize(const QSize &size) override;
+#endif
     std::any surfaceRole() const override;
     void attachPopup(QtWaylandClient::QWaylandShellSurface *popup) override;
     void detachPopup(QtWaylandClient::QWaylandShellSurface *popup) override;

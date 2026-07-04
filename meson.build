@@ -135,7 +135,6 @@ if x11_dep.found() and xcb_ewmh_dep.found() and xcb_xkb_dep.found() and xcb_scre
 endif
 
 wayland_dep = dependency('wayland-client', required: get_option('wayland'))
-wlroots_dep = dependency('wlroots-0.19', required: get_option('wayland'))
 wayland_scanner = find_program('wayland-scanner', required: get_option('wayland'))
 wayland_protocols_dep = dependency('wayland-protocols', required: get_option('wayland'))
 # Set once the Wayland shell plugins (layer-shell + session-lock) are built; the
@@ -143,7 +142,7 @@ wayland_protocols_dep = dependency('wayland-protocols', required: get_option('wa
 have_wayland_shell = false
 session_lock_header = []
 session_lock_code = []
-if wayland_dep.found() and wlroots_dep.found() and wayland_scanner.found() and wayland_protocols_dep.found()
+if wayland_dep.found() and wayland_scanner.found() and wayland_protocols_dep.found()
   # Ask wayland-protocols where it installed its XML, rather than assuming /usr/share.
   wl_protocols_dir = wayland_protocols_dep.get_variable(pkgconfig: 'pkgdatadir')
   layer_shell_protocol = files('protocols/wlr-layer-shell-unstable-v1.xml')

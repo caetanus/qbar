@@ -7,24 +7,27 @@ on:
   pull_request:
 
 jobs:
-  arch:
-    name: Arch Linux (Qt 6, full feature set)
+  debian:
+    name: Debian stable (Qt 6, full feature set)
     runs-on: ubuntu-latest
-    container: archlinux:latest
+    container: debian:trixie
     steps:
-      # qbar tracks current Qt on a rolling distro; building against Arch's Qt is
-      # exactly the configuration that catches private-header breakage early.
       - name: Install dependencies
         run: |
-          pacman -Syu --noconfirm --needed \
-            git meson ninja gcc pkgconf python \
-            qt6-base qt6-declarative qt6-wayland qt6-svg qt6-websockets \
-            qt6-tools qt6-shadertools \
-            wayland wayland-protocols wlroots0.19 \
-            libxcb xcb-util-wm libxkbcommon \
-            pam libpulse wireplumber libpipewire \
-            evolution-data-server sqlite \
-            dbus ttf-dejavu
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git ca-certificates meson ninja-build cmake pkg-config g++ python3 \
+            qt6-base-dev qt6-base-private-dev \
+            qt6-declarative-dev qt6-declarative-private-dev \
+            qt6-svg-dev qt6-websockets-dev \
+            qt6-wayland-dev qt6-wayland-private-dev \
+            qt6-tools-dev-tools qt6-l10n-tools \
+            libsqlite3-dev libpulse-dev libxkbcommon-dev libxkbregistry-dev \
+            libedataserver1.2-dev libecal2.0-dev \
+            libwayland-dev wayland-protocols \
+            libxcb1-dev libxcb-ewmh-dev libxcb-xkb-dev libxcb-screensaver0-dev \
+            libwireplumber-0.5-dev libpipewire-0.3-dev libpam0g-dev libaudit-dev \
+            dbus fonts-dejavu-core
 
       - uses: actions/checkout@v4
         with:

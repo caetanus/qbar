@@ -44,12 +44,21 @@ public:
     bool isExposed() const override;
     void applyConfigure() override;
     void setWindowGeometry(const QRect &rect) override;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    // QWaylandShellSurface::setWindowSize(QSize) is a ~6.9 addition; older Qt
+    // (Debian stable ships 6.8) only has the setWindowGeometry(QRect) virtual.
     void setWindowSize(const QSize &size) override;
+#endif
     std::any surfaceRole() const override;
     // Suppress Qt's initial bufferless surface commit: ext-session-lock forbids committing
     // a null buffer, and (unlike xdg) the compositor sends the first configure without one.
     // The first real commit then carries a buffer, satisfying the protocol.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    // The initial-bufferless-commit suppression hook only exists from ~6.9. On
+    // older Qt the initial commit cannot be suppressed — the lock surface may
+    // hit the null_buffer protocol error there (build works; runtime untested).
     bool commitSurfaceRole() const override { return false; }
+#endif
 
     static void handleConfigure(void *data,
                                 ext_session_lock_surface_v1 *surface,

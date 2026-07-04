@@ -22,7 +22,7 @@ depends=(
   'qt6-svg'             # SVG image plugin — themeicon + every .svg applet icon
   'qt6-websockets'      # QtWebSockets QML import — Bitcoin ticker widget
   'qt6-wayland'         # Wayland (wlr-layer-shell) support
-  'wlroots0.19'         # Wayland layer-shell integration plugin (runtime)
+  # NB: no wlroots dependency — the layer-shell protocol code is generated from the bundled XML
   'xcb-util-wm'         # X11 dock/strut (EWMH) integration
   'sqlite'
   'libxkbcommon'        # provides xkbregistry
@@ -43,7 +43,6 @@ makedepends=(
   'git'
   'meson'
   'ninja'
-  'wlroots0.19'         # Wayland integration links against it
   'wayland-protocols'
   'qt6-wayland'
   'libxcb'              # X11 integration
