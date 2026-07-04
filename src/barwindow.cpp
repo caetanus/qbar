@@ -13,6 +13,8 @@
 #include "caffeine/caffeinemodel.h"
 #include "platform/capslockmonitor.h"
 #include "qmlcss/csstheme.h"
+
+using QmlCss::CssTheme;
 #include "dbus/dbusservice.h"
 #include "platform/platformbarintegration.h"
 #include "wm/wmbackendfactory.h"

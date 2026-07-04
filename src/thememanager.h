@@ -9,7 +9,8 @@
 
 #include <functional>
 
-class CssTheme;
+namespace QmlCss { class CssTheme; }
+using QmlCss::CssTheme;
 class QNetworkAccessManager;
 
 // Owns the bar's CSS pipeline: the CssTheme (and the notifier's optional dedicated one),

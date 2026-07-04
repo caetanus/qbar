@@ -3,6 +3,8 @@
 #include "waylandlockbackend.h"
 #include "x11lockbackend.h"
 #include "qmlcss/csstheme.h"
+
+using QmlCss::CssTheme;
 #include "platform/capslockmonitor.h"
 #include "user/usermodel.h"
 

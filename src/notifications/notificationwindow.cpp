@@ -3,6 +3,8 @@
 #include "notificationserver.h"
 #include "qmlcss/csstheme.h"
 
+using QmlCss::CssTheme;
+
 #include <QGuiApplication>
 #include <QQmlContext>
 #include <QQuickItem>

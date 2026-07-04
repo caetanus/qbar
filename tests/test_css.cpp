@@ -2,6 +2,8 @@
 
 #include "qmlcss/csstheme.h"
 
+using QmlCss::CssTheme;
+
 #include <QEasingCurve>
 #include <QJSEngine>
 #include <QJSValue>
