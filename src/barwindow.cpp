@@ -128,7 +128,9 @@ void BarWindow::updateBarMarginsFromCss()
     // integration reads these window properties. CSS-ONLY on purpose: the JSON `margin` has
     // never driven the layer gap, so honouring it now would shift every existing config.
     // Horizontal insets stay with Bar.qml (margin-left/right → content inset).
-    QVariantMap barRule = cssTheme->resolve(QStringLiteral("waybar"));
+    // Type-qualified match: the waybar-compat rule is `window#waybar { }`, and the
+    // vendored engine (correctly) only matches the type selector when told the primitive.
+    QVariantMap barRule = cssTheme->resolve(QStringLiteral("waybar"), {}, {}, QStringLiteral("window"));
     const QVariantMap qbarRule = cssTheme->resolveExact(QStringLiteral("qbar"));
     for (auto it = qbarRule.constBegin(); it != qbarRule.constEnd(); ++it) {
         barRule.insert(it.key(), it.value());

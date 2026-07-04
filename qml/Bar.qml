@@ -10,7 +10,9 @@ Item {
     // #qbar wins: lets users override waybar defaults without touching the waybar rule.
     readonly property var barStyle: {
         if (!cssTheme || !cssTheme.loaded) return ({})
-        var s = cssTheme.resolve("waybar")
+        // The vendored engine matches type-qualified selectors strictly, so the
+        // waybar-compat rule `window#waybar { }` needs the primitive spelled out.
+        var s = cssTheme.resolve("waybar", [], "", "window")
         var q = cssTheme.resolveExact("qbar")
         for (var k in q) s[k] = q[k]
         return s
