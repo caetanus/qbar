@@ -1187,10 +1187,24 @@ Item {
             anchors.left: parent.left
             anchors.top: parent.top
             spacing: 10
+            // Since the crypto icons became real SVGs (not glyphs), render image
+            // paths with an Image — a Text can only ever show the path string.
+            Image {
+                id: pairIcon
+                anchors.verticalCenter: parent.verticalCenter
+                readonly property bool isImage: /\.(svg|png|jpe?g)$/i.test(String(root.activeTick.icon))
+                visible: isImage
+                source: isImage ? Qt.resolvedUrl(String(root.activeTick.icon)) : ""
+                sourceSize.width: 20
+                sourceSize.height: 20
+                width: visible ? 20 : 0
+                height: 20
+            }
             Text {
                 id: pairLabel
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.activeTick.icon + "  " + root.activeBase + "/" + root.activeQuote
+                text: (pairIcon.isImage ? "" : root.activeTick.icon + "  ")
+                      + root.activeBase + "/" + root.activeQuote
                 color: root.fg
                 font.family: theme.fontFamily
                 font.pointSize: theme.fontSize + 1
