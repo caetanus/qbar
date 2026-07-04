@@ -14,6 +14,7 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QList>
+#include <QSet>
 #include <QPointer>
 #include <QRegularExpression>
 #include <QSettings>
@@ -194,6 +195,39 @@ void CalendarModel::startOnlineRefresh(bool showLoading)
             result.available = false;
             result.statusText = QStringLiteral("Calendar backend unavailable");
         } else {
+            // Ask each COLLECTION backend (one per GOA account) to refresh BEFORE
+            // enumerating: a calendar created server-side (e.g. a new Google
+            // secondary calendar) only appears once its collection re-enumerates —
+            // the per-source refresh below never discovers it.
+            {
+                GList *initial = e_source_registry_list_enabled(registry, E_SOURCE_EXTENSION_CALENDAR);
+                QSet<QString> collectionUids;
+                for (GList *link = initial; link != nullptr; link = link->next) {
+                    auto *source = static_cast<ESource *>(link->data);
+                    if (source == nullptr) {
+                        continue;
+                    }
+                    ESource *collection =
+                        e_source_registry_find_extension(registry, source, E_SOURCE_EXTENSION_COLLECTION);
+                    if (collection != nullptr) {
+                        collectionUids.insert(QString::fromUtf8(e_source_get_uid(collection)));
+                        g_object_unref(collection);
+                    }
+                }
+                g_list_free_full(initial, g_object_unref);
+                for (const QString &uid : collectionUids) {
+                    if (!e_source_registry_refresh_backend_sync(registry, uid.toUtf8().constData(),
+                                                                nullptr, &error)) {
+                        qWarning() << "[calendar] collection refresh failed for" << uid
+                                   << (error != nullptr ? error->message : "unknown error");
+                        if (error != nullptr) {
+                            g_error_free(error);
+                            error = nullptr;
+                        }
+                    }
+                }
+            }
+
             GList *sources = e_source_registry_list_enabled(registry, E_SOURCE_EXTENSION_CALENDAR);
             int sourceCount = 0;
 
