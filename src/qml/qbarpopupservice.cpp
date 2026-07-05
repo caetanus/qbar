@@ -85,7 +85,27 @@ QString QBarPopupService::openPopup(const QUrl &source,
     }
 
     const QString id = nextId(requestedId);
+
+    // One popup at a time: opening a popup dismisses any other open popup
+    // (including a previous open under this same id). In reuse mode they are
+    // parked via forceClosePopup (synchronous, emits popupClosed); otherwise
+    // the destroyed handler removes them from m_popups and emits popupClosed.
+    // This runs BEFORE ensureDismissOverlay, and m_switchingPopup keeps the
+    // synchronous park path from hiding the overlay in between: m_popups is
+    // momentarily empty here, and a popup revived into a hidden overlay would
+    // be invisible while the applet believes it is open.
+    m_switchingPopup = true;
     forceClosePopup(id);
+    const auto existingIds = m_popups.keys();
+    for (const QString &existingId : existingIds) {
+        if (m_reuseEnabled) {
+            forceClosePopup(existingId);
+        } else if (QQuickItem *old = m_popups.value(existingId)) {
+            old->deleteLater();
+        }
+    }
+    m_switchingPopup = false;
+
     ensureDismissOverlay();
 
     if (m_overlayPopupLayer == nullptr) {
@@ -97,20 +117,6 @@ QString QBarPopupService::openPopup(const QUrl &source,
         m_dismissOverlay->setProperty(
             "qbarOverlayKeyboard",
             m_overlayKeyboardFocus || properties.value(QStringLiteral("keyboardFocus")).toBool());
-    }
-
-    // One popup at a time: opening a popup dismisses any other open popup. In
-    // reuse mode they are parked via forceClosePopup (synchronous, emits
-    // popupClosed); otherwise the destroyed handler removes them from m_popups
-    // and emits popupClosed. Either way the overlay stays alive since a new
-    // popup is taking their place.
-    const auto existingIds = m_popups.keys();
-    for (const QString &existingId : existingIds) {
-        if (m_reuseEnabled) {
-            forceClosePopup(existingId);
-        } else if (QQuickItem *old = m_popups.value(existingId)) {
-            old->deleteLater();
-        }
     }
 
     // Reuse mode: revive the parked shell for this popup id instead of building
@@ -874,6 +880,12 @@ void QBarPopupService::destroyDismissOverlay()
     }
 
     if (m_reuseEnabled) {
+        // Mid-switch (openPopup parking the previous popup before showing the
+        // next): keep the overlay up — hiding would strand the incoming popup
+        // in an invisible window and churn the layer surface for nothing.
+        if (m_switchingPopup) {
+            return;
+        }
         // Park the overlay instead of destroying it. Destroying wouldn't return
         // the pipeline-cache memory anyway (measured — the retention survives
         // window death), and keeping the window alive is what lets the parked

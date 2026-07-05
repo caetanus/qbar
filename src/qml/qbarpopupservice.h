@@ -142,6 +142,9 @@ private:
     QHash<QString, PopupSpec> m_popupSpecs;
     QHash<QString, ParkedShell> m_parkedShells;
     bool m_reuseEnabled = false;
+    // True while openPopup dismisses the previous popup(s) to make room for the
+    // incoming one; keeps the synchronous park path from hiding the overlay.
+    bool m_switchingPopup = false;
     QHash<QString, QPointer<QQuickView>> m_detachedPopups;
     QSet<QString> m_detachingPopups;
     QHash<QString, Popup> m_tooltips;
