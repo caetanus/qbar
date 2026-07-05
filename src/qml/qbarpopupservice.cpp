@@ -420,6 +420,13 @@ void QBarPopupService::closePopup(const QString &id)
     shell->setProperty("_qbarClosing", true);
     shell->setProperty("popupClosing", true);
     QTimer::singleShot(popupAnimationDuration(), this, [this, id]() {
+        // Popup ids are stable across opens, so this deferred close can fire
+        // AFTER the popup was already reopened (reuse revives it under the
+        // same id). Only finish the close if it is still closing.
+        QQuickItem *current = m_popups.value(id);
+        if (current != nullptr && !current->property("_qbarClosing").toBool()) {
+            return;
+        }
         forceClosePopup(id);
     });
 }
