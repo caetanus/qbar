@@ -24,11 +24,6 @@ struct BarConfig {
     // When true, the popup backdrop overlay grabs the keyboard while open so it
     // can handle Escape-to-close. When false the overlay stays focusless.
     bool popupKeyboardFocus = false;
-    // When true, closing a popup parks its shell (hidden) for reuse on the next
-    // open instead of destroying it. Works around Qt Quick's pipeline cache
-    // never evicting the pipelines each open creates (~4MB lost per open/close
-    // cycle otherwise). Off by default while the mode is being validated.
-    bool popupReuse = false;
     QColor background = QColor(38, 48, 57, 175);
     QColor foreground = QColor(238, 242, 247);
     QColor accent = QColor(99, 179, 237);

@@ -6,19 +6,17 @@
   implementation keeps the layer-shell surface stable and delays the reserved
   width shrink, but the exit path still needs more work.
 
-## Popup memory growth
+## Popup memory growth (fixed by shell reuse)
 
-- Each popup open/close permanently grows the process by a few MB (~4MB with the
-  bundled themes). Root cause: Qt Quick creates new graphics pipelines for the
-  layer render targets that `text-shadow` effects require on every open, and its
-  window-level pipeline cache never evicts them (measured with heaptrack;
-  `QSGBatchRenderer::ensurePipelineState` / `QSGRhiLayer` retention).
-- **Theme knob**: roughly half of the growth comes from `text-shadow` in popup
-  content — a theme that omits it pays proportionally less. The rest is
-  per-open resource churn independent of theming.
-- Restarting the bar reclaims everything. An upstream Qt report on
-  pipeline-cache eviction is still tracked.
-- **Workaround**: set `"popupReuse": true` in the config. Closing a popup then
-  parks its shell (hidden) instead of destroying it and the next open revives
-  it, so no new pipelines are created after the first open of each popup. Same
-  visuals and animations; off by default while the mode is being validated.
+- Each popup open/close used to permanently grow the process by a few MB
+  (~4MB with the bundled themes). Root cause: Qt Quick creates new graphics
+  pipelines for the layer render targets that `text-shadow` effects require on
+  every open, and its window-level pipeline cache never evicts them (measured
+  with heaptrack; `QSGBatchRenderer::ensurePipelineState` / `QSGRhiLayer`
+  retention). Destroying the overlay window doesn't return the memory either.
+- **Fix**: popups now park their shell (hidden) on close and revive it on the
+  next open, and the backdrop overlay is hidden instead of destroyed — same
+  items in the same living window, so after each popup's first open no new
+  pipelines are created (soak-verified flat across hundreds of cycles).
+- An upstream Qt report on pipeline-cache eviction is still tracked; other
+  Qt Quick apps with dynamic layer-effect content hit the same retention.

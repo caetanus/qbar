@@ -93,8 +93,8 @@ Item {
         }
         // Popups present a STABLE id derived from the content source: close()
         // clears popupId, and letting the service generate a fresh id per open
-        // would defeat keyed shell parking under popupReuse (the parked shell
-        // would never be revived — it would accumulate instead).
+        // would defeat keyed shell parking (the parked shell would never be
+        // revived — it would accumulate instead).
         var requestId = popupId.length > 0 ? popupId : ("src:" + source)
         popupId = kind === "tooltip"
             ? qbarPopups.openTooltip(source, pl, point.x, point.y, popupWidth, popupHeight, popupId)

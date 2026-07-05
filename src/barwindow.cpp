@@ -269,7 +269,6 @@ void BarWindow::buildLayout()
     m_popupService = new QBarPopupService(engine(), theme, m_wm->workspaceModel(), m_wm,
                                           m_themeManager->cssTheme(), this);
     m_popupService->setOverlayKeyboardFocus(m_config.popupKeyboardFocus);
-    m_popupService->setReuseEnabled(m_config.popupReuse);
     m_popupService->setBarWindow(this);
     m_actions->setPopupService(m_popupService);
     connect(m_wm, &WindowManagerBackend::workspaceFocusEvent, m_popupService, &QBarPopupService::closeAll);

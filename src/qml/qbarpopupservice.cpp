@@ -640,20 +640,6 @@ void QBarPopupService::forceClosePopup(const QString &id)
     }
 }
 
-void QBarPopupService::setReuseEnabled(bool on)
-{
-    if (m_reuseEnabled == on) {
-        return;
-    }
-    m_reuseEnabled = on;
-    if (!on) {
-        flushParkedShells();
-        if (m_popups.isEmpty() && m_openMenu == nullptr) {
-            destroyDismissOverlay();
-        }
-    }
-}
-
 void QBarPopupService::parkShell(const QString &id, QQuickItem *shell)
 {
     // A parked shell keeps its items — and therefore the graphics pipelines the

@@ -459,9 +459,6 @@ BarConfig parseBarObject(const QJsonObject &root)
     if (root.contains(QStringLiteral("popupKeyboardFocus"))) {
         config.popupKeyboardFocus = root.value(QStringLiteral("popupKeyboardFocus")).toBool(config.popupKeyboardFocus);
     }
-    if (root.contains(QStringLiteral("popupReuse"))) {
-        config.popupReuse = root.value(QStringLiteral("popupReuse")).toBool(config.popupReuse);
-    }
     config.fontFamily = root.value(QStringLiteral("fontFamily")).toString(config.fontFamily);
     config.fontSize = root.value(QStringLiteral("fontSize")).toInt(config.fontSize);
     config.styleSheet = root.value(QStringLiteral("styleSheet")).toString(config.styleSheet);

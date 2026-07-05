@@ -40,15 +40,6 @@ public:
     // qbarBar* window properties), so popups land correctly in multi-bar setups.
     void setBarWindow(QWindow *window) { m_barWindow = window; }
 
-    // Popup shell reuse (BarConfig::popupReuse). When enabled, closing a popup
-    // parks its shell (hidden) instead of destroying it, and the backdrop
-    // overlay window is hidden instead of destroyed. Reopening the same popup
-    // revives the parked shell. This avoids Qt Quick's per-open graphics
-    // pipeline growth: the window-level pipeline cache never evicts pipelines
-    // created for layer render targets, so fresh items in a fresh (or even the
-    // same) window permanently grow the process ~4MB per open/close cycle.
-    void setReuseEnabled(bool on);
-
     Q_INVOKABLE QString openPopup(const QUrl &source,
                                   const QVariantMap &properties,
                                   int x,
@@ -141,7 +132,13 @@ private:
     QHash<QString, QPointer<QQuickItem>> m_popups;
     QHash<QString, PopupSpec> m_popupSpecs;
     QHash<QString, ParkedShell> m_parkedShells;
-    bool m_reuseEnabled = false;
+    // Closing a popup parks its shell (hidden) and reopening revives it, and
+    // the backdrop overlay is hidden rather than destroyed while shells are
+    // parked. This is what stops Qt Quick's per-open graphics pipeline growth:
+    // the window-level pipeline cache never evicts pipelines created for layer
+    // render targets, so destroy-and-rebuild leaked ~4MB per open/close cycle.
+    // Cleared only during teardown, where parking must not outlive the service.
+    bool m_reuseEnabled = true;
     // True while openPopup dismisses the previous popup(s) to make room for the
     // incoming one; keeps the synchronous park path from hiding the overlay.
     bool m_switchingPopup = false;
