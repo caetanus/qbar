@@ -7,6 +7,9 @@ import "qrc:/qbar" as QBar
 //
 // CSS hooks:
 //   #notifications              — width / margin-* (read by NotificationWindow), spacing
+//   #notifications.clear-all    — the "clear all" pill shown ahead of the stack when
+//                                 more than one card is up (background, color, border…,
+//                                 :hover state)
 //   #notification               — the card (NotificationCard.qml), incl. entry `animation`
 //   #notification:exit          — exit `animation: <keyframes> <ms> <easing>` (opacity/
 //                                 transform, like the entry), or `transition` for just
@@ -54,6 +57,52 @@ Item {
             width: list.width
             visibleInStack: index < root.maxVisible
             slideFromLeft: root.leftCorner
+        }
+
+        // "Clear all" pill, shown ahead of the stack (the header sits at the
+        // list's start — nearest the corner for bottom stacks too) once there
+        // is more than one card. Collapsed via height, not `visible`, so the
+        // stackHeight input region follows it.
+        header: Item {
+            readonly property bool active: notificationModel.count > 1
+            width: list.width
+            height: active ? clearPill.height + root.cardSpacing : 0
+            clip: true
+
+            Item {
+                id: clearPill
+                width: clearLabel.implicitWidth + 24
+                height: clearLabel.implicitHeight + 12
+                anchors.right: root.leftCorner ? undefined : parent.right
+                anchors.left: root.leftCorner ? parent.left : undefined
+
+                QBar.CssRect {
+                    anchors.fill: parent
+                    cssId: "notifications"
+                    cssPart: "clear-all"
+                    cssClass: clearMouse.containsMouse ? ["hover"] : []
+                    radius: height / 2
+                    defaultColor: Qt.rgba(1, 1, 1, 0.10)
+                    defaultBorderColor: Qt.rgba(1, 1, 1, 0.14)
+                    defaultBorderWidth: 1
+                }
+                QBar.CssText {
+                    id: clearLabel
+                    anchors.centerIn: parent
+                    cssId: "notifications"
+                    cssPart: "clear-all"
+                    cssClass: clearMouse.containsMouse ? ["hover"] : []
+                    text: "✕  " + qsTr("Clear all") + " (" + notificationModel.count + ")"
+                    defaultColor: theme.foreground
+                }
+                MouseArea {
+                    id: clearMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    enabled: parent.parent.active
+                    onClicked: notificationServer.dismissAll()
+                }
+            }
         }
 
         // Cards animate their own ENTRY (CSS `#notification { animation: ... }`,

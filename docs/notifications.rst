@@ -86,6 +86,9 @@ Everything is standard CSS. Five bundled looks ship in ``config/themes/``:
 Selectors:
 
 * ``#notifications`` — the stack: ``width``, ``margin-*``, ``spacing``.
+* ``#notifications.clear-all`` — the "clear all" pill shown ahead of the stack
+  whenever more than one card is up (dismisses everything with one click):
+  ``background(-color)``, ``color``, ``border-*`` (+ ``:hover``).
 * ``#notification`` — the card: ``background(-color)``, ``border-*``,
   ``border-radius``, ``box-shadow``, ``padding``, ``transition``, and the entry
   ``animation``. States: ``:low`` / ``:normal`` / ``:critical`` / ``:hover``.

@@ -72,6 +72,7 @@ public:
     // QML-side interactions (card click, action button, close button, hover).
     Q_INVOKABLE void invokeAction(uint id, const QString &actionKey);
     Q_INVOKABLE void dismiss(uint id);
+    Q_INVOKABLE void dismissAll();
     Q_INVOKABLE void setHovered(uint id, bool hovered);
 
     // Adaptor entry points.

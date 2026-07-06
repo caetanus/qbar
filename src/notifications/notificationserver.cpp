@@ -212,6 +212,15 @@ void NotificationServer::dismiss(uint id)
     closeNotification(id, Dismissed);
 }
 
+void NotificationServer::dismissAll()
+{
+    // Snapshot: closeNotification mutates the model as it goes.
+    const QList<quint32> ids = m_model.ids();
+    for (quint32 id : ids) {
+        closeNotification(id, Dismissed);
+    }
+}
+
 void NotificationServer::setHovered(uint id, bool hovered)
 {
     QTimer *timer = m_expiry.value(id);

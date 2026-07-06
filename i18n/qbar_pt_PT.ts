@@ -65,22 +65,22 @@
 <context>
     <name>CPUPopup</name>
     <message>
-        <location filename="../qml/popups/CPUPopup.qml" line="236"/>
+        <location filename="../qml/popups/CPUPopup.qml" line="261"/>
         <source>load</source>
         <translation>carga</translation>
     </message>
     <message>
-        <location filename="../qml/popups/CPUPopup.qml" line="523"/>
+        <location filename="../qml/popups/CPUPopup.qml" line="548"/>
         <source>used</source>
         <translation>usada</translation>
     </message>
     <message>
-        <location filename="../qml/popups/CPUPopup.qml" line="531"/>
+        <location filename="../qml/popups/CPUPopup.qml" line="556"/>
         <source>cache</source>
         <translation>cache</translation>
     </message>
     <message>
-        <location filename="../qml/popups/CPUPopup.qml" line="539"/>
+        <location filename="../qml/popups/CPUPopup.qml" line="564"/>
         <source>free</source>
         <translation>livre</translation>
     </message>
@@ -114,6 +114,128 @@
         <location filename="../qml/popups/DiskPopup.qml" line="88"/>
         <source>disk usage</source>
         <translation>utilização do disco</translation>
+    </message>
+</context>
+<context>
+    <name>FprintAuthenticator</name>
+    <message>
+        <location filename="../src/lock/fprintauthenticator.cpp" line="67"/>
+        <source>No fingerprint device</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/fprintauthenticator.cpp" line="82"/>
+        <source>Fingerprint device busy: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/fprintauthenticator.cpp" line="100"/>
+        <source>Touch the fingerprint reader</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/fprintauthenticator.cpp" line="146"/>
+        <source>Fingerprint not recognized, try again</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/fprintauthenticator.cpp" line="154"/>
+        <source>Fingerprint did not match</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/fprintauthenticator.cpp" line="156"/>
+        <source>Fingerprint reader disconnected</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>LockController</name>
+    <message>
+        <location filename="../src/lock/lockcontroller.cpp" line="75"/>
+        <source>Locked with %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/lockcontroller.cpp" line="129"/>
+        <source>Demo mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/lockcontroller.cpp" line="134"/>
+        <source>No lock backend configured</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/lockcontroller.cpp" line="177"/>
+        <source>Unlocked</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/lockcontroller.h" line="86"/>
+        <source>Enter password, or use fingerprint / face</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>LockScreen</name>
+    <message>
+        <location filename="../qml/lock/LockScreen.qml" line="220"/>
+        <source>CAPS LOCK ON</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/lock/LockScreen.qml" line="220"/>
+        <source>Caps Lock</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/lock/LockScreen.qml" line="226"/>
+        <source>Num Lock On</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/lock/LockScreen.qml" line="226"/>
+        <source>Num Lock Off</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>LockScreenRing</name>
+    <message>
+        <location filename="../qml/lock/LockScreenRing.qml" line="233"/>
+        <source>empty</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/lock/LockScreenRing.qml" line="235"/>
+        <source>Touch the fingerprint reader</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/lock/LockScreenRing.qml" line="236"/>
+        <source>Look at the camera</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/lock/LockScreenRing.qml" line="245"/>
+        <source>CAPS LOCK ON</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/lock/LockScreenRing.qml" line="245"/>
+        <source>Caps Lock</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/lock/LockScreenRing.qml" line="251"/>
+        <source>Num Lock On</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qml/lock/LockScreenRing.qml" line="251"/>
+        <source>Num Lock Off</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -156,6 +278,37 @@
     </message>
 </context>
 <context>
+    <name>NotificationSurface</name>
+    <message>
+        <location filename="../qml/qbar/NotificationSurface.qml" line="95"/>
+        <source>Clear all</source>
+        <translation>Limpar tudo</translation>
+    </message>
+</context>
+<context>
+    <name>PamAuthenticator</name>
+    <message>
+        <location filename="../src/lock/pamauthenticator.cpp" line="119"/>
+        <source>Authenticating</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/pamauthenticator.cpp" line="143"/>
+        <source>PAM failed to start</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/pamauthenticator.cpp" line="152"/>
+        <source>Unlocked</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/pamauthenticator.cpp" line="155"/>
+        <source>Try again</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>Taskbar</name>
     <message>
         <location filename="../qml/applets/Taskbar.qml" line="227"/>
@@ -174,6 +327,43 @@
         <location filename="../qml/popups/UserPopup.qml" line="134"/>
         <source>Sessions</source>
         <translation>Sessões</translation>
+    </message>
+</context>
+<context>
+    <name>WaylandLockBackend</name>
+    <message>
+        <location filename="../src/lock/waylandlockbackend.cpp" line="89"/>
+        <location filename="../src/lock/waylandlockbackend.cpp" line="138"/>
+        <source>Wayland display is not available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/waylandlockbackend.cpp" line="91"/>
+        <source>Compositor does not support ext-session-lock-v1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/waylandlockbackend.cpp" line="140"/>
+        <source>qbar-lock was built without Wayland (ext-session-lock-v1) support</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>X11LockBackend</name>
+    <message>
+        <location filename="../src/lock/x11lockbackend.cpp" line="69"/>
+        <source>X11 display is not available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/x11lockbackend.cpp" line="71"/>
+        <source>qbar-lock was built without X11/xlock support</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/lock/x11lockbackend.cpp" line="87"/>
+        <source>Failed to grab X11 keyboard and pointer</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>
