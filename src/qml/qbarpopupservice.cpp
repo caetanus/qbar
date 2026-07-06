@@ -123,6 +123,7 @@ QString QBarPopupService::openPopup(const QUrl &source,
     // a new one. Same items in the same living window means the renderer reuses
     // the pipelines it already cached instead of growing the cache every open.
     QQuickItem *shell = m_reuseEnabled ? takeParkedShell(id, source) : nullptr;
+    qInfo() << "[popup] open" << id << (shell != nullptr ? "(revived)" : "(created)");
     if (shell != nullptr) {
         // The per-popup context was parented to the shell at creation; refresh
         // the per-open payload on it, then push it onto the loaded content.
@@ -420,9 +421,11 @@ void QBarPopupService::closePopup(const QString &id)
     }
 
     if (shell->property("_qbarClosing").toBool()) {
+        qInfo() << "[popup] close" << id << "ignored (already closing)";
         return;
     }
 
+    qInfo() << "[popup] close (animated)" << id;
     shell->setProperty("_qbarClosing", true);
     shell->setProperty("popupClosing", true);
     QTimer::singleShot(popupAnimationDuration(), this, [this, id]() {
@@ -431,6 +434,7 @@ void QBarPopupService::closePopup(const QString &id)
         // same id). Only finish the close if it is still closing.
         QQuickItem *current = m_popups.value(id);
         if (current != nullptr && !current->property("_qbarClosing").toBool()) {
+            qInfo() << "[popup] deferred close" << id << "skipped (reopened)";
             return;
         }
         forceClosePopup(id);
@@ -625,6 +629,7 @@ void QBarPopupService::forceClosePopup(const QString &id)
 {
     QQuickItem *shell = m_popups.take(id);
     if (shell != nullptr) {
+        qInfo() << "[popup] force close" << id << (m_reuseEnabled ? "(parked)" : "(destroyed)");
         if (m_reuseEnabled) {
             parkShell(id, shell);
             m_popupSpecs.remove(id);
@@ -759,6 +764,7 @@ void QBarPopupService::ensureDismissOverlay()
                 stale->close();
                 stale->deleteLater();
             } else {
+                qInfo() << "[popup] overlay re-shown";
                 applyOverlayGeometry(m_dismissOverlay.data());
                 m_dismissOverlay->show();
                 m_dismissOverlay->raise();
@@ -876,6 +882,7 @@ void QBarPopupService::destroyDismissOverlay()
         // the pipeline-cache memory anyway (measured — the retention survives
         // window death), and keeping the window alive is what lets the parked
         // shells reuse their scene-graph resources on the next open.
+        qInfo() << "[popup] overlay hidden";
         m_dismissOverlay->hide();
         return;
     }
