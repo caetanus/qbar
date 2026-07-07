@@ -384,12 +384,13 @@ void HyprlandBackend::refreshWindows()
 {
     const QByteArray clients = request(QByteArrayLiteral("j/clients"));
     const QByteArray monitors = request(QByteArrayLiteral("j/monitors"));
-    m_windows.replace(parseClients(clients, monitors, m_focusedContainerId));
+    m_windows.replace(parseClients(clients, monitors, m_focusedContainerId, m_urgentWindows));
 }
 
 QList<WindowModel::Window> HyprlandBackend::parseClients(const QByteArray &clientsJson,
                                                         const QByteArray &monitorsJson,
-                                                        qint64 focusedAddress)
+                                                        qint64 focusedAddress,
+                                                        const QSet<qint64> &urgentWindows)
 {
     // Hyprland reports a client's monitor as a numeric id; map it to the monitor
     // name so the taskbar can filter by output.
@@ -421,6 +422,10 @@ QList<WindowModel::Window> HyprlandBackend::parseClients(const QByteArray &clien
                                    .value(QStringLiteral("name")).toString();
         window.monitor = monitorNames.value(client.value(QStringLiteral("monitor")).toInt(-1));
         window.focused = (id == focusedAddress);
+        // Hyprland only announces urgency through the `urgent` event (never in
+        // j/clients); m_urgentWindows carries those addresses so the dock/taskbar
+        // window entries light up, not just the workspace tile.
+        window.urgent = urgentWindows.contains(id);
         windows.append(window);
     }
     return windows;
@@ -480,6 +485,7 @@ void HyprlandBackend::handleEventLine(const QByteArray &line)
         if (ok && !m_urgentWindows.contains(id)) {
             m_urgentWindows.insert(id);
             refreshWorkspaces();
+            refreshWindows(); // the dock bounce keys off the WINDOW's urgent flag
         }
         return;
     }

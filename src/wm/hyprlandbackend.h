@@ -32,7 +32,8 @@ public:
     static QString normalizeSubmapName(const QString &submap);
     static QList<WindowModel::Window> parseClients(const QByteArray &clientsJson,
                                                    const QByteArray &monitorsJson,
-                                                   qint64 focusedAddress);
+                                                   qint64 focusedAddress,
+                                                   const QSet<qint64> &urgentWindows);
     static qint64 parseWindowAddress(const QString &address);
 
 public slots:

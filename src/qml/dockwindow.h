@@ -48,9 +48,14 @@ public:
     // and re-forward them to the running surface so changes take effect without a restart.
     void setDockConfig(const QVariantMap &dock);
 
+private slots:
+    // Push slot rect → window placement (layer-shell props / X11 geometry).
+    // Slot: re-invoked when the surface's hover state flips (the input band
+    // expands with the fisheye and shrinks back at rest).
+    void applyGeometry();
+
 private:
     void ensureView();
-    void applyGeometry();   // push slot rect → window placement (layer-shell props / X11 geometry)
 
     QQmlEngine *m_engine = nullptr;
     QVariantMap m_theme;

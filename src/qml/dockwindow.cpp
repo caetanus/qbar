@@ -150,6 +150,12 @@ void DockWindow::ensureView()
 
     view->setSource(QUrl(QStringLiteral("qrc:/qbar/DockSurface.qml")));
     m_view = view;
+
+    // The input band tracks the fisheye's hover state (rest = slot only,
+    // hovered = magnified bounds) — recompute it on every flip.
+    if (QQuickItem *root = view->rootObject()) {
+        connect(root, SIGNAL(hoveredChanged()), this, SLOT(applyGeometry()));
+    }
 }
 
 void DockWindow::applyGeometry()
@@ -185,14 +191,22 @@ void DockWindow::applyGeometry()
         root->setProperty("slotWidth", m_slot.width());
     }
 
-    // The interactive band hugs the slot at the bar edge (bottom of the surface): a
-    // strip wide enough for the icons + the fisheye edge padding, and tall enough for
-    // the hover-grow. The transparent headroom above it must NOT catch the mouse, or
-    // hovering over empty space triggers the dock. Wayland enforces this via the
-    // layer-shell input region; X11 via the window's input mask (QWindow::setMask).
+    // The interactive band hugs the slot at the bar edge (bottom of the surface) and
+    // FOLLOWS the hover state, mirroring the QML hover MouseArea: at rest it is the
+    // resting dock only (slot width × bar height) so the empty headroom and the
+    // fisheye margins pass clicks through to the windows beneath; while hovered it
+    // expands to cover the magnified peak + edge padding so the cursor stays "in"
+    // as the icons grow. Wayland enforces this via the layer-shell input region;
+    // X11 via the window's input mask (QWindow::setMask).
+    const bool hovered = m_view->rootObject() != nullptr
+        && m_view->rootObject()->property("hovered").toBool();
     const int edgePadding = std::max(barH * 2, headroom);
-    const int inputW = std::max(1, std::min(dockW, m_slot.width() + (2 * edgePadding)));
-    const int inputH = std::min(surfaceH, std::max(barH, static_cast<int>(std::round(barH * 2.8))));
+    const int inputW = hovered
+        ? std::max(1, std::min(dockW, m_slot.width() + (2 * edgePadding)))
+        : std::max(1, std::min(dockW, m_slot.width()));
+    const int inputH = hovered
+        ? std::min(surfaceH, std::max(barH, static_cast<int>(std::round(barH * 2.8))))
+        : std::min(surfaceH, barH);
     const int inputX = static_cast<int>(std::round(slotCenterX - inputW / 2.0));
     const int inputY = surfaceH - inputH;
 
