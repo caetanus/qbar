@@ -9,7 +9,7 @@ import "qrc:/qbar" as QBar
 //                                  (:low/:normal/:critical urgency states, :hover)
 //   #notification.app            — app-name/timestamp row (color, font-size)
 //   #notification.summary        — title (color, font-size, font-weight)
-//   #notification.body           — body (color, font-size)
+//   #notification.body           — body (color, font-size, link-color for <a href>)
 //   #notification.icon           — icon box (width = icon size, border-radius)
 //   #notification.close          — close ✕ (color; :hover state)
 //   #notification.action         — action buttons (background-color, color, border…, :hover)

@@ -88,14 +88,18 @@ Selectors:
 * ``#notifications`` — the stack: ``width``, ``margin-*``, ``spacing``.
 * ``#notifications.clear-all`` — the "clear all" pill shown ahead of the stack
   whenever more than one card is up (dismisses everything with one click):
-  ``background(-color)``, ``color``, ``border-*`` (+ ``:hover``).
+  ``background(-color)``, ``color``, ``border-*`` (+ ``:hover``). Without this
+  rule the pill wears the card's chrome and ``.body`` text style, so it follows
+  the theme by default.
 * ``#notification`` — the card: ``background(-color)``, ``border-*``,
   ``border-radius``, ``box-shadow``, ``padding``, ``transition``, and the entry
   ``animation``. States: ``:low`` / ``:normal`` / ``:critical`` / ``:hover``.
 * ``#notification:exit`` — the exit ``animation`` (or a ``transition`` to tune the
   default fade/slide).
 * Parts: ``.app``, ``.summary``, ``.body``, ``.icon``, ``.close``, ``.action``
-  (+ ``:hover``), ``.progress`` (countdown bar), ``.value`` (gauge).
+  (+ ``:hover``), ``.progress`` (countdown bar), ``.value`` (gauge). ``.body``
+  also takes ``link-color`` for ``<a href>`` markup (defaults to the theme's
+  accent — never the palette blue).
 
 Entry **and exit** animations are real ``@keyframes`` interpolating ``opacity``
 and ``transform`` (``translateX/Y``, ``scale``):

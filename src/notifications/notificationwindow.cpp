@@ -84,8 +84,16 @@ void NotificationWindow::onCountChanged()
         notificationArrived();
         return;
     }
-    // Grace period: the last card's exit animation plays inside the (input-free)
-    // surface before it hides.
+    // On Wayland, keep the emptied surface MAPPED: it is already inert — the
+    // input region follows stackHeight (empty at 0 cards), keyboard is NONE and
+    // the content is fully transparent. Unmapping instead would run the
+    // compositor's layer unmap/map animations and blur re-layout on every
+    // empty/refill — the same visible flicker the popup dismiss overlay had.
+    if (!onX11()) {
+        return;
+    }
+    // X11: grace period — the last card's exit animation plays inside the
+    // (input-free) surface before it hides.
     QTimer::singleShot(700, this, [this]() {
         if (m_model->count() == 0 && m_view != nullptr && m_view->isVisible()) {
             m_view->hide();

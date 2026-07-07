@@ -22,6 +22,10 @@ Text {
     property string defaultFontFamily: theme.fontFamily
 
     color: (style && style["color"]) ? cssTheme.parseColor(style["color"]) : root.defaultColor
+    // `<a href>` in StyledText/RichText labels. Qt's palette default is a saturated
+    // blue that is unreadable on dark themed surfaces; follow the theme's accent
+    // unless the rule sets `link-color`.
+    linkColor: (style && style["link-color"]) ? cssTheme.parseColor(style["link-color"]) : theme.accent
     font.family: (style && style["font-family"]) ? style["font-family"] : root.defaultFontFamily
     // The engine resolves CSS font-size → points (px→pt, em/rem, pt/bare); no unit math here.
     font.pointSize: (style && style["font-size"])

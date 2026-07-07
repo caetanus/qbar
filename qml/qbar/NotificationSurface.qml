@@ -99,8 +99,13 @@ Item {
                 QBar.CssText {
                     id: clearLabel
                     anchors.centerIn: parent
-                    cssId: "notifications"
-                    cssPart: "clear-all"
+                    // Unthemed fallback mirrors the CssRect above: wear the CARD's
+                    // body text style (font-size/color) so the pill reads like the
+                    // notifications it clears — the bare "notifications"/"clear-all"
+                    // resolution is empty then, and the label fell back to the BAR's
+                    // font, visibly bigger than any card text.
+                    cssId: parent.parent.clearThemed ? "notifications" : "notification"
+                    cssPart: parent.parent.clearThemed ? "clear-all" : "body"
                     cssClass: clearMouse.containsMouse ? ["hover"] : []
                     text: "✕  " + qsTr("Clear all") + " (" + notificationModel.count + ")"
                     defaultColor: theme.foreground
