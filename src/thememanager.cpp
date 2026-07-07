@@ -69,6 +69,7 @@ QString notificationCssPrelude()
         "#notification.body { font-size: 11px; }\n"
         "#notification.action { background-color: rgba(255, 255, 255, 0.10); border-radius: 6px; }\n"
         "#notification.action:hover { background-color: rgba(255, 255, 255, 0.20); }\n"
+        "#notification.reply { background-color: rgba(255, 255, 255, 0.10); border-color: rgba(255, 255, 255, 0.22); border-width: 1px; border-radius: 6px; }\n"
         "#notification.progress { background-color: rgba(255, 255, 255, 0.10); height: 3px; }\n"
         "#notification.value { background-color: rgba(255, 255, 255, 0.12); }\n");
 }

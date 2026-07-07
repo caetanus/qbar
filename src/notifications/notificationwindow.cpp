@@ -38,6 +38,14 @@ NotificationWindow::NotificationWindow(QQmlEngine *engine,
     , m_cssTheme(cssTheme)
 {
     connect(m_model, &NotificationModel::countChanged, this, &NotificationWindow::onCountChanged);
+    // Inline reply: the layer surface asks for on-demand keyboard focus while a
+    // reply-capable card is up OR a reply field is open. It must be granted BEFORE
+    // the click that opens the field — keyboard interactivity is double-buffered,
+    // so flipping it on open would only apply after the fact and the user would
+    // need a second click to type ("demorou pra capturar o teclado"). The plugin
+    // reads qbarNotifKeyboard; the property change routes through its filter.
+    connect(m_server, &NotificationServer::replyActiveChanged, this,
+            [this](bool) { updateKeyboard(); });
     // Content updates (replaces_id / stack-tag coalescing) repaint a live card; they
     // need the same anti-freeze nudge as inserts/removes (see onCountChanged).
     connect(m_model, &QAbstractItemModel::dataChanged, this, [this]() {
@@ -83,6 +91,24 @@ void NotificationWindow::notificationArrived()
         applyGeometry();
         m_view->show();
     }
+    // After ensureView: on the FIRST notification the onCountChanged-time call
+    // ran with no view yet and the keyboard pre-arm was silently skipped.
+    updateKeyboard();
+}
+
+void NotificationWindow::updateKeyboard()
+{
+    if (m_view == nullptr || onX11()) {
+        return;
+    }
+    // 0 = none, 1 = on-demand (a reply-capable card is up, so a click can take
+    // focus), 2 = exclusive (a reply field is OPEN — modal grab while typing;
+    // Hyprland's on-demand focus proved unreliable mid-session: measured enter
+    // ~3s after the click, revoked 38ms later).
+    const int wanted = m_server->replyActive() ? 2 : (m_model->hasReplyCards() ? 1 : 0);
+    if (m_view->property("qbarNotifKeyboard").toInt() != wanted) {
+        m_view->setProperty("qbarNotifKeyboard", wanted);
+    }
 }
 
 void NotificationWindow::onCountChanged()
@@ -97,6 +123,7 @@ void NotificationWindow::onCountChanged()
     if (m_view != nullptr && !onX11()) {
         m_view->setProperty("qbarNotifKick", m_view->property("qbarNotifKick").toInt() + 1);
     }
+    updateKeyboard();
     if (m_model->count() > 0) {
         notificationArrived();
         return;

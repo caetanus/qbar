@@ -22,6 +22,12 @@ struct Notification {
     int urgency = 1;    // 0 low, 1 normal, 2 critical
     QVariantList actions;
     bool hasDefaultAction = false;
+    // KDE inline-reply extension: an action keyed "inline-reply" becomes a reply
+    // field in the card (never a plain button); submitting emits the
+    // NotificationReplied(id, text) D-Bus signal (Telegram Desktop speaks this).
+    bool hasReplyAction = false;
+    QString replyLabel;
+    QString replyPlaceholder; // x-kde-reply-placeholder-text hint
     QString imageSource; // image://notifimage/<id>/<serial> when the hints carry an image
     int value = -1;      // "value" hint (0..100 volume/brightness OSD), -1 = none
     // Stack tag (dunst's x-dunst-stack-tag / notify-osd's synchronous hints): two live
@@ -53,6 +59,9 @@ public:
         CategoryRole,
         ExpireMsRole,
         TimestampRole,
+        HasReplyRole,
+        ReplyLabelRole,
+        ReplyPlaceholderRole,
     };
 
     explicit NotificationModel(QObject *parent = nullptr);
@@ -76,6 +85,10 @@ public:
     // Id of the live notification carrying the same app + stack tag (0 when none) —
     // the coalescing target for a tagged notification without a replaces_id.
     quint32 idByStackTag(const QString &appName, const QString &tag) const;
+    // Any live card carrying the inline-reply action — the surface keeps ON_DEMAND
+    // keyboard while one is up, so the click that opens the reply field is already
+    // able to take focus (flipping on open would need a SECOND click).
+    bool hasReplyCards() const;
 
 signals:
     void countChanged();

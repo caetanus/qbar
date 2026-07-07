@@ -13,6 +13,8 @@ import "qrc:/qbar" as QBar
 //   #notification.icon           — icon box (width = icon size, border-radius)
 //   #notification.close          — close ✕ (color; :hover state)
 //   #notification.action         — action buttons (background-color, color, border…, :hover)
+//   #notification.reply          — inline-reply field + send arrow (KDE extension;
+//                                  background, border…, color/font of text+placeholder)
 //   #notification.progress       — timeout countdown bar (background-color track, color fill, height)
 //   #notification.value          — the `value` hint gauge (same properties as .progress)
 //
@@ -40,6 +42,10 @@ Item {
     readonly property real nValue: value !== undefined ? value : -1
     readonly property int nExpireMs: expireMs !== undefined ? expireMs : 0
     readonly property var nTimestamp: timestamp
+    readonly property bool nHasReply: hasReply !== undefined ? hasReply : false
+    readonly property string nReplyLabel: replyLabel !== undefined && replyLabel.length > 0
+        ? replyLabel : qsTr("Reply")
+    readonly property string nReplyPlaceholder: replyPlaceholder !== undefined ? replyPlaceholder : ""
 
     readonly property string urgencyClass: nUrgency === 2 ? "critical" : (nUrgency === 0 ? "low" : "normal")
     // Card-level hover MUST be a HoverHandler, not the MouseArea's containsMouse: the
@@ -50,6 +56,43 @@ Item {
     readonly property bool hovered: cardHover.hovered
     readonly property var stateClasses: card.hovered
         ? [card.urgencyClass, "hover"] : [card.urgencyClass]
+
+    // Inline reply state. Opening pauses the expiry server-side and asks the layer
+    // for keyboard focus; closing re-asserts the real hover state.
+    property bool replyOpen: false
+    function openReply() {
+        replyOpen = true
+        notificationServer.setReplying(card.nId, true)
+        replyFocusTimer.start()
+    }
+    function closeReply() {
+        replyOpen = false
+        notificationServer.setReplying(card.nId, false)
+        notificationServer.setHovered(card.nId, card.hovered)
+    }
+    function sendReply() {
+        if (replyInput.text.length > 0)
+            notificationServer.reply(card.nId, replyInput.text)
+    }
+    // Focus the field once the compositor's keyboard grab round-trips (the surface
+    // flips to EXCLUSIVE via the plugin; wl_keyboard.enter lands a few frames later).
+    Timer {
+        id: replyFocusTimer
+        interval: 60
+        repeat: true
+        property int tries: 0
+        onRunningChanged: if (running) tries = 0
+        onTriggered: {
+            replyInput.forceActiveFocus()
+            if (replyInput.activeFocus || ++tries > 15)
+                stop()
+        }
+    }
+    Component.onDestruction: {
+        console.info("[notif] card destroyed id=" + nId + " exitProgress=" + exitProgress.toFixed(2))
+        if (replyOpen)
+            notificationServer.setReplying(card.nId, false)
+    }
 
     readonly property real pad: bg.style["padding"] ? cssTheme.parseLength(bg.style["padding"], 12) : 12
     readonly property real iconSize: iconStyle["width"] ? cssTheme.parseLength(iconStyle["width"], 42) : 42
@@ -208,9 +251,6 @@ Item {
         applyPose(entryValuesAt(0))
         entryAnimation.start()
     }
-    Component.onDestruction: console.info("[notif] card destroyed id=" + nId
-        + " exitProgress=" + exitProgress.toFixed(2))
-
     // ---- Card chrome ----
     // `#notification { emboss: <0..1> }` swaps the flat CssRect fill for the
     // PopupEmboss shader — a rounded slab with a soft gradient bevel (the same
@@ -370,11 +410,11 @@ Item {
                 }
             }
 
-            // Action buttons.
+            // Action buttons (+ the inline-reply opener, drawn with the same chrome).
             Flow {
                 width: parent.width
                 spacing: 6
-                visible: card.nActions.length > 0
+                visible: card.nActions.length > 0 || (card.nHasReply && !card.replyOpen)
 
                 Repeater {
                     model: card.nActions
@@ -404,6 +444,99 @@ Item {
                             hoverEnabled: true
                             onClicked: notificationServer.invokeAction(card.nId, modelData.key)
                         }
+                    }
+                }
+
+                Item {
+                    visible: card.nHasReply && !card.replyOpen
+                    width: replyOpenLabel.implicitWidth + 20
+                    height: replyOpenLabel.implicitHeight + 10
+                    QBar.CssRect {
+                        anchors.fill: parent
+                        cssId: "notification"
+                        cssPart: "action"
+                        cssClass: replyOpenMouse.containsMouse
+                            ? [card.urgencyClass, "hover"] : [card.urgencyClass]
+                        radius: 6
+                        defaultColor: Qt.rgba(1, 1, 1, 0.10)
+                    }
+                    QBar.CssText {
+                        id: replyOpenLabel
+                        anchors.centerIn: parent
+                        cssId: "notification"
+                        cssPart: "action"
+                        cssClass: [card.urgencyClass]
+                        text: "↩  " + card.nReplyLabel
+                    }
+                    MouseArea {
+                        id: replyOpenMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: card.openReply()
+                    }
+                }
+            }
+
+            // Inline reply field (KDE extension). Enter sends (NotificationReplied
+            // on the bus), Escape closes. While open, the expiry pauses and the
+            // surface requests on-demand keyboard focus.
+            Item {
+                width: parent.width
+                height: card.replyOpen ? replyInput.implicitHeight + 14 : 0
+                visible: card.replyOpen
+
+                QBar.CssRect {
+                    anchors.fill: parent
+                    cssId: "notification"
+                    cssPart: "reply"
+                    cssClass: [card.urgencyClass]
+                    radius: 6
+                    defaultColor: Qt.rgba(1, 1, 1, 0.10)
+                    defaultBorderColor: Qt.rgba(1, 1, 1, 0.20)
+                    defaultBorderWidth: 1
+                }
+                TextInput {
+                    id: replyInput
+                    anchors.left: parent.left
+                    anchors.right: replySend.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 10
+                    color: replyStyle.color
+                    font.family: replyStyle.font.family
+                    font.pointSize: replyStyle.font.pointSize
+                    clip: true
+                    onAccepted: card.sendReply()
+                    Keys.onEscapePressed: card.closeReply()
+                    // Placeholder (TextInput has none built in).
+                    QBar.CssText {
+                        id: replyStyle
+                        anchors.fill: parent
+                        cssId: "notification"
+                        cssPart: "reply"
+                        cssClass: [card.urgencyClass]
+                        text: card.nReplyPlaceholder.length > 0
+                            ? card.nReplyPlaceholder : qsTr("Type a reply…")
+                        opacity: replyInput.text.length === 0 ? 0.45 : 0
+                        defaultColor: theme.foreground
+                    }
+                }
+                QBar.CssText {
+                    id: replySend
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.rightMargin: 10
+                    cssId: "notification"
+                    cssPart: "reply"
+                    cssClass: replySendMouse.containsMouse
+                        ? [card.urgencyClass, "hover"] : [card.urgencyClass]
+                    text: "➤"
+                    opacity: replyInput.text.length > 0 ? 1.0 : 0.4
+                    MouseArea {
+                        id: replySendMouse
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
+                        onClicked: card.sendReply()
                     }
                 }
             }

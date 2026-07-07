@@ -544,8 +544,17 @@ void QBarLayerShellSurface::applyLayerState()
                                              notifWin->property("qbarNotifMarginRight").toInt(),
                                              notifWin->property("qbarNotifMarginBottom").toInt(),
                                              notifWin->property("qbarNotifMarginLeft").toInt());
+            // Keyboard tri-state (qbarNotifKeyboard): 1 = ON_DEMAND while a
+            // reply-capable card is up (a click may take focus), 2 = EXCLUSIVE
+            // while a reply field is OPEN — a modal grab is the right UX for
+            // typing, and Hyprland's on-demand focus proved unreliable (granted
+            // seconds late, revoked instantly). 0/absent = focusless.
+            const int notifKb = notifWin->property("qbarNotifKeyboard").toInt();
             zwlr_layer_surface_v1_set_keyboard_interactivity(
-                m_layerSurface, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+                m_layerSurface,
+                notifKb == 2 ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
+                : notifKb == 1 ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND
+                               : ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
             if (window() != nullptr && window()->display() != nullptr
                 && window()->display()->compositor() != nullptr) {
                 wl_region *region = window()->display()->compositor()->create_region();

@@ -41,6 +41,7 @@ public:
 private slots:
     void onCountChanged();
     void updateInputRegion();
+    void updateKeyboard();
 
 private:
     void ensureView();

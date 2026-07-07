@@ -85,6 +85,8 @@ NotificationsAdaptor::NotificationsAdaptor(NotificationServer *server)
             this, &NotificationsAdaptor::NotificationClosed);
     connect(server, &NotificationServer::actionInvoked,
             this, &NotificationsAdaptor::ActionInvoked);
+    connect(server, &NotificationServer::notificationReplied,
+            this, &NotificationsAdaptor::NotificationReplied);
 }
 
 uint NotificationsAdaptor::Notify(const QString &app_name, uint replaces_id, const QString &app_icon,
@@ -108,6 +110,10 @@ QStringList NotificationsAdaptor::GetCapabilities()
         QStringLiteral("actions"),
         QStringLiteral("icon-static"),
         QStringLiteral("persistence"),
+        // KDE inline-reply extension: clients that probe for this (Telegram
+        // Desktop, KDE apps) send an "inline-reply" action and listen for the
+        // NotificationReplied(id, text) signal.
+        QStringLiteral("inline-reply"),
         // Stack-tag coalescing (volume/brightness OSDs) — both spellings, so scripts
         // probing for either dunst's or notify-osd's capability find it.
         QStringLiteral("x-dunst-stack-tag"),
@@ -220,6 +226,7 @@ void NotificationServer::dismissAll()
     const QList<quint32> ids = m_model.removeAll();
     for (quint32 id : ids) {
         disarmExpiry(id);
+        setReplying(id, false);
         m_imageProvider->remove(id);
         emit notificationClosed(id, Dismissed);
     }
@@ -227,6 +234,10 @@ void NotificationServer::dismissAll()
 
 void NotificationServer::setHovered(uint id, bool hovered)
 {
+    // An open reply field keeps the expiry paused whatever the pointer does.
+    if (!hovered && m_replying.contains(id)) {
+        return;
+    }
     QTimer *timer = m_expiry.value(id);
     if (timer == nullptr) {
         return;
@@ -237,6 +248,30 @@ void NotificationServer::setHovered(uint id, bool hovered)
     } else if (!hovered && !timer->isActive()) {
         const int remaining = timer->property("remainingMs").toInt();
         timer->start(qMax(500, remaining));
+    }
+}
+
+void NotificationServer::reply(uint id, const QString &text)
+{
+    if (text.isEmpty() || m_model.byId(id) == nullptr) {
+        return;
+    }
+    emit notificationReplied(id, text);
+    closeNotification(id, Dismissed);
+}
+
+void NotificationServer::setReplying(uint id, bool replying)
+{
+    const bool wasActive = replyActive();
+    if (replying) {
+        m_replying.insert(id);
+        setHovered(id, true); // pause the expiry while the field is open
+    } else {
+        m_replying.remove(id);
+        // The card re-asserts its real hover state right after closing the field.
+    }
+    if (replyActive() != wasActive) {
+        emit replyActiveChanged(replyActive());
     }
 }
 
@@ -284,16 +319,25 @@ uint NotificationServer::notify(const QString &appName, uint replacesId, const Q
     n.value = value.isValid() ? qBound(0, value.toInt(), 100) : -1;
 
     // Wire actions are a flat [key, label, key, label, …] list. "default" is the
-    // body-click action, not a button.
+    // body-click action, not a button; "inline-reply" (KDE extension) becomes the
+    // reply field, answered via NotificationReplied instead of ActionInvoked.
     for (int i = 0; i + 1 < actions.size(); i += 2) {
         if (actions.at(i) == QLatin1String("default")) {
             n.hasDefaultAction = true;
+            continue;
+        }
+        if (actions.at(i) == QLatin1String("inline-reply")) {
+            n.hasReplyAction = true;
+            n.replyLabel = actions.at(i + 1);
             continue;
         }
         n.actions.append(QVariantMap{
             {QStringLiteral("key"), actions.at(i)},
             {QStringLiteral("label"), actions.at(i + 1)},
         });
+    }
+    if (n.hasReplyAction) {
+        n.replyPlaceholder = hintValue(hints, "x-kde-reply-placeholder-text").toString();
     }
 
     n.appIcon = resolveAppIcon(appIcon, hints, id);
@@ -336,6 +380,7 @@ void NotificationServer::closeNotification(uint id, CloseReason reason)
     if (!m_model.removeById(id)) {
         return;
     }
+    setReplying(id, false); // a dying card must not hold the keyboard
     m_imageProvider->remove(id);
     emit notificationClosed(id, reason);
 }

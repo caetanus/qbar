@@ -33,6 +33,9 @@ QVariant NotificationModel::data(const QModelIndex &index, int role) const
     case CategoryRole: return n.category;
     case ExpireMsRole: return n.expireMs;
     case TimestampRole: return n.timestamp;
+    case HasReplyRole: return n.hasReplyAction;
+    case ReplyLabelRole: return n.replyLabel;
+    case ReplyPlaceholderRole: return n.replyPlaceholder;
     }
     return {};
 }
@@ -53,6 +56,9 @@ QHash<int, QByteArray> NotificationModel::roleNames() const
         {CategoryRole, "category"},
         {ExpireMsRole, "expireMs"},
         {TimestampRole, "timestamp"},
+        {HasReplyRole, "hasReply"},
+        {ReplyLabelRole, "replyLabel"},
+        {ReplyPlaceholderRole, "replyPlaceholder"},
     };
 }
 
@@ -125,6 +131,16 @@ quint32 NotificationModel::idByStackTag(const QString &appName, const QString &t
         }
     }
     return 0;
+}
+
+bool NotificationModel::hasReplyCards() const
+{
+    for (const Notification &n : m_items) {
+        if (n.hasReplyAction) {
+            return true;
+        }
+    }
+    return false;
 }
 
 int NotificationModel::rowOf(quint32 id) const

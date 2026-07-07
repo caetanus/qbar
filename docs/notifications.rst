@@ -97,9 +97,24 @@ Selectors:
 * ``#notification:exit`` — the exit ``animation`` (or a ``transition`` to tune the
   default fade/slide).
 * Parts: ``.app``, ``.summary``, ``.body``, ``.icon``, ``.close``, ``.action``
-  (+ ``:hover``), ``.progress`` (countdown bar), ``.value`` (gauge). ``.body``
-  also takes ``link-color`` for ``<a href>`` markup (defaults to the theme's
-  accent — never the palette blue).
+  (+ ``:hover``), ``.progress`` (countdown bar), ``.value`` (gauge), ``.reply``
+  (the inline-reply field and its send arrow). ``.body`` also takes
+  ``link-color`` for ``<a href>`` markup (defaults to the theme's accent —
+  never the palette blue).
+
+Inline reply
+------------
+
+The daemon implements KDE's inline-reply extension: ``GetCapabilities``
+advertises ``inline-reply``; a notification carrying an action keyed
+``inline-reply`` grows a reply button (same chrome as ``.action``) that opens
+a text field styled via ``#notification.reply``. Enter (or the arrow) emits
+``NotificationReplied(id, text)`` on ``org.freedesktop.Notifications`` and
+dismisses the card; Escape closes the field. While the field is open the
+expiry timeout is paused and the surface requests on-demand keyboard focus.
+The ``x-kde-reply-placeholder-text`` hint sets the placeholder. Telegram
+Desktop and KDE apps use this protocol out of the box (clients cache
+capabilities — restart them after switching daemons).
 
 Entry **and exit** animations are real ``@keyframes`` interpolating ``opacity``
 and ``transform`` (``translateX/Y``, ``scale``):

@@ -6,6 +6,7 @@
 #include <QDBusMessage>
 #include <QHash>
 #include <QObject>
+#include <QSet>
 #include <QStringList>
 #include <QVariantMap>
 
@@ -35,6 +36,9 @@ public slots:
 signals:
     void NotificationClosed(uint id, uint reason);
     void ActionInvoked(uint id, const QString &action_key);
+    // KDE inline-reply extension (capability "inline-reply"): the client gets the
+    // typed text back through this signal instead of a plain ActionInvoked.
+    void NotificationReplied(uint id, const QString &text);
 
 private:
     NotificationServer *m_server;
@@ -74,6 +78,12 @@ public:
     Q_INVOKABLE void dismiss(uint id);
     Q_INVOKABLE void dismissAll();
     Q_INVOKABLE void setHovered(uint id, bool hovered);
+    // Inline reply: emits NotificationReplied and dismisses the card.
+    Q_INVOKABLE void reply(uint id, const QString &text);
+    // An open reply field pauses the expiry (like hover, but hover-independent)
+    // and asks the layer surface for on-demand keyboard focus while any is open.
+    Q_INVOKABLE void setReplying(uint id, bool replying);
+    bool replyActive() const { return !m_replying.isEmpty(); }
 
     // Adaptor entry points.
     uint notify(const QString &appName, uint replacesId, const QString &appIcon,
@@ -86,6 +96,8 @@ signals:
     // Relayed onto the adaptor's D-Bus signals (signal→signal connect).
     void notificationClosed(uint id, uint reason);
     void actionInvoked(uint id, const QString &actionKey);
+    void notificationReplied(uint id, const QString &text);
+    void replyActiveChanged(bool active);
 
 private:
     void armExpiry(quint32 id, int ms);
@@ -101,6 +113,7 @@ private:
     NotificationImageProvider *m_imageProvider = nullptr; // owned by the QML engine
     QVariantMap m_config;
     QHash<quint32, QTimer *> m_expiry;
+    QSet<quint32> m_replying;
     quint32 m_nextId = 1;
     quint32 m_imageSerial = 0;
     bool m_doNotDisturb = false;
