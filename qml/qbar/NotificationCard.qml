@@ -89,7 +89,14 @@ Item {
 
     readonly property var exitStyle: cssTheme && cssTheme.loaded
         ? cssTheme.resolve("notification", [card.urgencyClass, "exit"]) : ({})
-    readonly property var exitSpec: exitStyle["animation"]
+    // Only honor `animation` when an actual :exit rule set it. The resolver merges
+    // the BASE #notification rule into the :exit style (correct CSS), so without
+    // this check the base ENTRY animation (e.g. the prelude's qbar-notif-in) leaks
+    // in and the dismiss REPLAYS THE ENTRY: the card snaps to transparent, slides
+    // back to its normal pose and then dies — the historical dismiss flicker.
+    readonly property bool exitAnimIsOwn: exitStyle["animation"] !== undefined
+        && exitStyle["animation"] !== bg.style["animation"]
+    readonly property var exitSpec: exitAnimIsOwn
         ? cssTheme.parseAnimation(exitStyle["animation"]) : ({})
     readonly property var exitFrames: exitSpec.name ? cssTheme.keyframes(exitSpec.name) : []
 

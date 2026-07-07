@@ -35,7 +35,15 @@ Item {
     // (The keyframes themselves are interpolated per-card — see NotificationCard.)
     readonly property var exitStyle: cssTheme && cssTheme.loaded
         ? cssTheme.resolve("notification", ["exit"]) : ({})
-    readonly property var exitAnim: exitStyle["animation"]
+    // The resolver merges the BASE #notification rule into :exit (CSS semantics),
+    // so the base ENTRY `animation` leaks in here. Only take the exit timing from
+    // `animation` when an actual :exit rule set one — otherwise the remove
+    // transition would run with the entry's duration (and NotificationCard would
+    // replay the entry keyframes on dismiss — the historical dismiss flicker).
+    readonly property var exitBaseStyle: cssTheme && cssTheme.loaded
+        ? cssTheme.resolve("notification") : ({})
+    readonly property var exitAnim: (exitStyle["animation"] !== undefined
+            && exitStyle["animation"] !== exitBaseStyle["animation"])
         ? cssTheme.parseAnimation(exitStyle["animation"]) : ({})
     readonly property var exitTransition: exitStyle["transition"]
         ? cssTheme.parseTransition(exitStyle["transition"]) : ({})
