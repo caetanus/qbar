@@ -214,10 +214,14 @@ void NotificationServer::dismiss(uint id)
 
 void NotificationServer::dismissAll()
 {
-    // Snapshot: closeNotification mutates the model as it goes.
-    const QList<quint32> ids = m_model.ids();
+    // One batched model removal (not closeNotification per id): serial removals
+    // cancel each other's remove transition in the view, so the cards jump-cut
+    // out instead of animating. The batch starts every exit together.
+    const QList<quint32> ids = m_model.removeAll();
     for (quint32 id : ids) {
-        closeNotification(id, Dismissed);
+        disarmExpiry(id);
+        m_imageProvider->remove(id);
+        emit notificationClosed(id, Dismissed);
     }
 }
 

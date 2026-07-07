@@ -87,6 +87,20 @@ bool NotificationModel::removeById(quint32 id)
     return true;
 }
 
+QList<quint32> NotificationModel::removeAll()
+{
+    if (m_items.isEmpty()) {
+        return {};
+    }
+    QList<quint32> removed = ids();
+    qInfo() << "[notif] model remove all (" << m_items.size() << "rows)";
+    beginRemoveRows(QModelIndex(), 0, static_cast<int>(m_items.size()) - 1);
+    m_items.clear();
+    endRemoveRows();
+    emit countChanged();
+    return removed;
+}
+
 const Notification *NotificationModel::byId(quint32 id) const
 {
     const int row = rowOf(id);

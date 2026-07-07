@@ -172,8 +172,17 @@ Item {
 
     onEntryProgressChanged: applyPose(entryValuesAt(entryProgress))
     onExitProgressChanged: {
-        if (exitProgress > 0)
+        if (exitProgress > 0) {
+            // The exit owns the pose from its first tick. The entry animation can
+            // still be mid-flight here — render-driven animations advance in FRAME
+            // time, so on a callback-starved window a 280ms entry may sit unfinished
+            // for minutes. Left running, the two animations alternate writes on the
+            // shared pose each tick and the card visibly snaps back toward its
+            // normal (entry) pose mid-dismiss.
+            if (entryAnimation.running)
+                entryAnimation.stop()
             applyPose(exitValuesAt(exitProgress))
+        }
     }
 
     NumberAnimation {

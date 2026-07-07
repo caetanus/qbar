@@ -67,6 +67,10 @@ public:
     // place (the spec's replaces_id path — no re-entry animation).
     void upsert(const Notification &notification);
     bool removeById(quint32 id);
+    // Single-batch clear: one row removal spanning every card, so the view starts
+    // all exit transitions together — serial removeById calls cancel each other's
+    // mid-flight remove animation and "clear all" becomes a jump-cut.
+    QList<quint32> removeAll();
     const Notification *byId(quint32 id) const;
     QList<quint32> ids() const;
     // Id of the live notification carrying the same app + stack tag (0 when none) —

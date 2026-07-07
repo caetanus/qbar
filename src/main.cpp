@@ -144,6 +144,14 @@ void configureWaylandLayerShellEnvironment(int argc, char *argv[])
 
     const QByteArray binaryDir = QByteArray(std::filesystem::absolute(argv[0]).parent_path().string().c_str());
     qputenv("QT_WAYLAND_SHELL_INTEGRATION", "qbar-layer-shell");
+    // NOTE on QT_WAYLAND_FRAME_CALLBACK_TIMEOUT: leave it at the default (100ms).
+    // Raising it sounds like a fix for compositors that starve idle surfaces of
+    // frame callbacks (Hyprland vfr) — the timeout is what flips the window to
+    // UNEXPOSED and freezes the render loop. But the same timer is ALSO the only
+    // recovery pump for a frame callback sitting undispatched in the render
+    // thread's event queue; with a huge timeout the freeze becomes PERMANENT
+    // (measured live 2026-07-07). The layer-shell plugin's 1px-damage commit plus
+    // the property-change kick handle the wake-up instead.
     qputenv("QT_PLUGIN_PATH", binaryDir);
     qputenv("QBAR_LAYER_POSITION", argValue(argc, argv, "--position", "top"));
     qputenv("QBAR_LAYER_HEIGHT", argValue(argc, argv, "--height", "28"));
