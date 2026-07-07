@@ -187,10 +187,13 @@ Item {
     }
 
     Component.onCompleted: {
+        console.info("[notif] card created id=" + nId + " summary=" + nSummary)
         entryProgress = 0.0
         applyPose(entryValuesAt(0))
         entryAnimation.start()
     }
+    Component.onDestruction: console.info("[notif] card destroyed id=" + nId
+        + " exitProgress=" + exitProgress.toFixed(2))
 
     // ---- Card chrome ----
     // `#notification { emboss: <0..1> }` swaps the flat CssRect fill for the

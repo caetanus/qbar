@@ -266,11 +266,30 @@ bool QBarLayerShellSurface::eventFilter(QObject *watched, QEvent *event)
             // can publish a half-built frame (a visible flicker on every toast entry/exit,
             // each of which bumps the input region). The layer state set above is double-
             // buffered; scheduling a render pass makes its commit carry it atomically.
+            //
+            // requestUpdate() alone is NOT enough: on compositors that stop sending frame
+            // callbacks to an idle surface (Hyprland with vfr), QWaylandWindow times out
+            // waiting and marks the window UNEXPOSED — from then on update requests are
+            // swallowed, the item views' polish never runs, and the scene is frozen. The
+            // flag only clears when a frame callback arrives, which needs a commit, which
+            // needs a render, which the unexposed state blocks — a deadlock (the synthetic
+            // expose below is vetoed by QWaylandWindow::isExposed() too). Break it at the
+            // protocol: while frozen the render thread is guaranteed idle, so a bare
+            // GUI-thread commit with 1px of damage is race-free; the compositor presents,
+            // the pending frame callback fires, the timeout flag clears, and the queued
+            // expose + update below then run a real frame.
+            if (m_filteredWindow != nullptr && window() != nullptr && !m_filteredWindow->isExposed()
+                && wlSurface() != nullptr) {
+                wl_surface_damage_buffer(wlSurface(), 0, 0, 1, 1);
+                wl_surface_commit(wlSurface());
+            }
             if (m_filteredWindow != nullptr) {
                 QMetaObject::invokeMethod(
                     m_filteredWindow,
                     [w = QPointer<QWindow>(m_filteredWindow)]() {
                         if (w) {
+                            QWindowSystemInterface::handleExposeEvent(
+                                w, QRect(QPoint(), w->geometry().size()));
                             w->requestUpdate();
                         }
                     },

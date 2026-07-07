@@ -38,6 +38,13 @@ NotificationWindow::NotificationWindow(QQmlEngine *engine,
     , m_cssTheme(cssTheme)
 {
     connect(m_model, &NotificationModel::countChanged, this, &NotificationWindow::onCountChanged);
+    // Content updates (replaces_id / stack-tag coalescing) repaint a live card; they
+    // need the same anti-freeze nudge as inserts/removes (see onCountChanged).
+    connect(m_model, &QAbstractItemModel::dataChanged, this, [this]() {
+        if (m_view != nullptr && !onX11()) {
+            m_view->setProperty("qbarNotifKick", m_view->property("qbarNotifKick").toInt() + 1);
+        }
+    });
     // CSS hot-reload: width/margins live in the theme, so re-derive them on every load.
     if (auto *css = qobject_cast<CssTheme *>(m_cssTheme)) {
         connect(css, &CssTheme::loadedChanged, this, [this]() { applyGeometry(); });
@@ -80,6 +87,16 @@ void NotificationWindow::notificationArrived()
 
 void NotificationWindow::onCountChanged()
 {
+    // Any model change must NUDGE the (possibly callback-starved) window: delegate
+    // creation, the remove transition and stackHeight all run in the ListView's
+    // polish, which only happens when the render loop produces a frame. The property
+    // bump goes through the layer-shell plugin's DynamicPropertyChange filter, which
+    // re-asserts exposure + schedules a frame (see qbarlayershellintegration.cpp).
+    // Waiting for stackHeight to change instead would be circular — it only changes
+    // AFTER that very polish has run.
+    if (m_view != nullptr && !onX11()) {
+        m_view->setProperty("qbarNotifKick", m_view->property("qbarNotifKick").toInt() + 1);
+    }
     if (m_model->count() > 0) {
         notificationArrived();
         return;
