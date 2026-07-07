@@ -882,8 +882,25 @@ void QBarPopupService::destroyDismissOverlay()
         // the pipeline-cache memory anyway (measured — the retention survives
         // window death), and keeping the window alive is what lets the parked
         // shells reuse their scene-graph resources on the next open.
-        qInfo() << "[popup] overlay hidden";
-        m_dismissOverlay->hide();
+        //
+        // Don't hide RIGHT NOW: the popup shell was just made invisible, and the
+        // last buffer the compositor holds still shows it (the exit animation's
+        // final frame lands together with this call). Compositors that animate
+        // layer unmaps (Hyprland) would replay that stale buffer — the popup
+        // visibly "reopens" during its own dismissal. Let the scene graph
+        // present a frame with the shell already gone, then unmap.
+        QPointer<QQuickView> view = m_dismissOverlay;
+        QTimer::singleShot(50, this, [this, view]() {
+            if (view == nullptr || view != m_dismissOverlay) {
+                return;
+            }
+            if (!m_popups.isEmpty() || m_openMenu != nullptr || m_switchingPopup) {
+                return; // something reopened meanwhile — overlay stays up
+            }
+            qInfo() << "[popup] overlay hidden";
+            view->hide();
+        });
+        m_dismissOverlay->requestUpdate();
         return;
     }
 

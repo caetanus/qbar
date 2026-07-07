@@ -51,3 +51,12 @@
 #notification.action:hover { background-color: #434c5e; }
 #notification.progress { background-color: rgba(216, 222, 233, 0.10); color: #88c0d0; height: 3px; }
 #notification.value    { background-color: rgba(216, 222, 233, 0.12); color: #81a1c1; }
+
+/* "Clear all" pill (shown ahead of the stack with 2+ toasts). */
+#notifications.clear-all {
+    background-color: #3b4252;
+    color: #eceff4;
+    border-color: rgba(236, 239, 244, 0.16);
+    border-width: 1px;
+}
+#notifications.clear-all:hover { background-color: #434c5e; color: #eceff4; }

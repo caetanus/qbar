@@ -69,6 +69,16 @@ Item {
             height: active ? clearPill.height + root.cardSpacing : 0
             clip: true
 
+            // Themes style the pill via #notifications.clear-all; without such a
+            // rule it wears the CARD's chrome (#notification + the same solid
+            // default) so it stays readable over any wallpaper — a floating pill
+            // with a translucent default was invisible on themes that never
+            // mention it.
+            readonly property var clearStyle: cssTheme && cssTheme.loaded
+                ? cssTheme.resolvePart("notifications", "clear-all") : ({})
+            readonly property bool clearThemed: clearStyle["background-color"] !== undefined
+                || clearStyle["background"] !== undefined
+
             Item {
                 id: clearPill
                 width: clearLabel.implicitWidth + 24
@@ -78,11 +88,11 @@ Item {
 
                 QBar.CssRect {
                     anchors.fill: parent
-                    cssId: "notifications"
-                    cssPart: "clear-all"
+                    cssId: parent.parent.clearThemed ? "notifications" : "notification"
+                    cssPart: parent.parent.clearThemed ? "clear-all" : ""
                     cssClass: clearMouse.containsMouse ? ["hover"] : []
                     radius: height / 2
-                    defaultColor: Qt.rgba(1, 1, 1, 0.10)
+                    defaultColor: "#2b3140"
                     defaultBorderColor: Qt.rgba(1, 1, 1, 0.14)
                     defaultBorderWidth: 1
                 }
