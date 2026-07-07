@@ -749,28 +749,31 @@ void QBarPopupService::ensureDismissOverlay()
         return;
     }
     if (m_dismissOverlay != nullptr) {
-        if (!m_dismissOverlay->isVisible()) {
-            // Parked overlay (reuse mode): revive it. Re-derive screen/geometry —
-            // both can have changed while it sat hidden.
-            QScreen *screen = m_barWindow != nullptr ? m_barWindow->screen()
-                                                     : QGuiApplication::primaryScreen();
-            if (screen != nullptr && m_dismissOverlay->screen() != screen) {
-                // The bar moved to another output; the parked scene targets the
-                // old one. Drop everything and rebuild below.
-                flushParkedShells();
-                auto *stale = m_dismissOverlay.data();
-                m_dismissOverlay = nullptr;
-                m_overlayPopupLayer = nullptr;
-                stale->close();
-                stale->deleteLater();
-            } else {
-                qInfo() << "[popup] overlay re-shown";
-                applyOverlayGeometry(m_dismissOverlay.data());
-                m_dismissOverlay->show();
-                m_dismissOverlay->raise();
-                return;
-            }
+        // Parked overlay (reuse mode): revive it. On Wayland it sat mapped but
+        // inert (input passthrough); on X11 it was hidden. Re-derive screen and
+        // geometry — both can have changed while it was parked.
+        QScreen *screen = m_barWindow != nullptr ? m_barWindow->screen()
+                                                 : QGuiApplication::primaryScreen();
+        if (screen != nullptr && m_dismissOverlay->screen() != screen) {
+            // The bar moved to another output; the parked scene targets the
+            // old one. Drop everything and rebuild below.
+            flushParkedShells();
+            auto *stale = m_dismissOverlay.data();
+            m_dismissOverlay = nullptr;
+            m_overlayPopupLayer = nullptr;
+            stale->close();
+            stale->deleteLater();
         } else {
+            if (m_dismissOverlay->property("qbarOverlayInputPassthrough").toBool()) {
+                qInfo() << "[popup] overlay re-armed";
+                m_dismissOverlay->setProperty("qbarOverlayInputPassthrough", false);
+            }
+            applyOverlayGeometry(m_dismissOverlay.data());
+            if (!m_dismissOverlay->isVisible()) {
+                qInfo() << "[popup] overlay re-shown";
+                m_dismissOverlay->show();
+            }
+            m_dismissOverlay->raise();
             return;
         }
     }
@@ -791,6 +794,7 @@ void QBarPopupService::ensureDismissOverlay()
     // as child items inside it — no separate per-popup window.
     view->setProperty("qbarOverlay", true);
     view->setProperty("qbarOverlayKeyboard", m_overlayKeyboardFocus);
+    view->setProperty("qbarOverlayInputPassthrough", false);
 
     if (m_reuseEnabled) {
         // Parked shells live inside this window's scene graph; hide/show must
@@ -883,12 +887,19 @@ void QBarPopupService::destroyDismissOverlay()
         // window death), and keeping the window alive is what lets the parked
         // shells reuse their scene-graph resources on the next open.
         //
-        // Don't hide RIGHT NOW: the popup shell was just made invisible, and the
-        // last buffer the compositor holds still shows it (the exit animation's
-        // final frame lands together with this call). Compositors that animate
-        // layer unmaps (Hyprland) would replay that stale buffer — the popup
-        // visibly "reopens" during its own dismissal. Let the scene graph
-        // present a frame with the shell already gone, then unmap.
+        // On Wayland, park it MAPPED but inert: empty input region (clicks pass
+        // through) + no keyboard, content fully transparent. Unmapping — hide()
+        // or window teardown alike — runs the compositor's layer unmap/map
+        // animations and blur re-layout on every open/close, a visible flicker
+        // on Hyprland (this was the historical "chunky dismiss").
+        if (!onX11()) {
+            qInfo() << "[popup] overlay parked (passthrough)";
+            m_dismissOverlay->setProperty("qbarOverlayKeyboard", false);
+            m_dismissOverlay->setProperty("qbarOverlayInputPassthrough", true);
+            return;
+        }
+        // X11: no layer animations to dodge — plain hide, once the final faded
+        // frame has been presented.
         QPointer<QQuickView> view = m_dismissOverlay;
         QTimer::singleShot(50, this, [this, view]() {
             if (view == nullptr || view != m_dismissOverlay) {

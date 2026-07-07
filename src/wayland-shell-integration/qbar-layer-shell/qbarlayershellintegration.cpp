@@ -255,7 +255,7 @@ bool QBarLayerShellSurface::eventFilter(QObject *watched, QEvent *event)
     if (event->type() == QEvent::DynamicPropertyChange && m_layerSurface != nullptr) {
         const QByteArray name = static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName();
         if (name == "qbarBarMarginTop" || name == "qbarBarMarginBottom"
-            || name == "qbarOverlayKeyboard"
+            || name == "qbarOverlayKeyboard" || name == "qbarOverlayInputPassthrough"
             || name == "qbarDockX" || name == "qbarDockWidth" || name == "qbarDockHeight"
             || name == "qbarDockInputX" || name == "qbarDockInputY"
             || name == "qbarDockInputWidth" || name == "qbarDockInputHeight"
@@ -428,7 +428,25 @@ void QBarLayerShellSurface::applyLayerState()
         // — the bar appears frozen. ON_DEMAND still lets the popup hold the keyboard,
         // but a click on the bar transfers focus normally and the bar stays responsive
         // (this is how sway already behaved with EXCLUSIVE).
-        const bool grabKeyboard = window()->window()->property("qbarOverlayKeyboard").toBool();
+        // Parked overlay (popup reuse): the surface stays MAPPED but inert —
+        // fully transparent content, an EMPTY input region so clicks and hover
+        // pass through to the windows beneath, and no keyboard. Unmapping
+        // instead would run the compositor's layer map/unmap animations and
+        // blur re-layout on every popup open/close (a visible flicker on
+        // Hyprland). The service flips qbarOverlayInputPassthrough on park
+        // and off on the next open.
+        const bool passthrough = overlayWin->property("qbarOverlayInputPassthrough").toBool();
+        if (window()->display() != nullptr && window()->display()->compositor() != nullptr) {
+            if (passthrough) {
+                wl_region *region = window()->display()->compositor()->create_region();
+                wl_surface_set_input_region(wlSurface(), region); // empty region
+                wl_region_destroy(region);
+            } else {
+                wl_surface_set_input_region(wlSurface(), nullptr); // whole surface
+            }
+        }
+        const bool grabKeyboard = !passthrough
+            && window()->window()->property("qbarOverlayKeyboard").toBool();
         zwlr_layer_surface_v1_set_keyboard_interactivity(
             m_layerSurface,
             grabKeyboard
