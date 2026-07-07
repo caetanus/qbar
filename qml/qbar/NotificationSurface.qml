@@ -89,10 +89,10 @@ Item {
 
             Item {
                 id: clearPill
-                width: clearLabel.implicitWidth + 24
+                // Full card width: the pill reads as one more card in the stack,
+                // not a floating chip beside it.
+                width: parent.width
                 height: clearLabel.implicitHeight + 12
-                anchors.right: root.leftCorner ? undefined : parent.right
-                anchors.left: root.leftCorner ? parent.left : undefined
 
                 QBar.CssRect {
                     anchors.fill: parent
