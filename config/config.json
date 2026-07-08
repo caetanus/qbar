@@ -113,7 +113,17 @@
         "styleSheet": "themes/nord-notify.css",
         "corner": "top-right",  // "top-left" | "top-right" | "bottom-left" | "bottom-right"
         "maxVisible": 5
-        // "timeout": 6000,         // default expiry (ms); critical never expires
+        // "timeout": 6000,         // normal-urgency expiry (ms), 0 = never
+        // "timeoutLow": 4000,      // low-urgency expiry (ms)
+        // "timeoutCritical": 0,    // critical expiry (ms); 0 = stays until dismissed
+        // "width": 380,            // card width fallback, px (CSS `#notifications { width }` wins)
+        // "margin": 12,            // gap to the screen edges, px (CSS `margin-*` wins)
+        //
+        // ── Simple mode ── flip the rich-card features off for plain text toasts.
+        // Disabled features are not advertised on the bus, so apps that probe the
+        // capabilities (Telegram, KDE apps) fall back gracefully on their own.
+        // "actionButtons": true,   // false = never show action buttons on cards
+        // "inlineReply": true      // false = no inline reply field (Telegram-style)
     },
 
     // ── Custom tools ──────────────────────────────────────────────────────────

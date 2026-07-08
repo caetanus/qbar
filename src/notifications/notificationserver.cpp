@@ -103,22 +103,29 @@ void NotificationsAdaptor::CloseNotification(uint id)
 
 QStringList NotificationsAdaptor::GetCapabilities()
 {
-    return {
+    QStringList caps{
         QStringLiteral("body"),
         QStringLiteral("body-markup"),
         QStringLiteral("body-hyperlinks"),
-        QStringLiteral("actions"),
         QStringLiteral("icon-static"),
         QStringLiteral("persistence"),
-        // KDE inline-reply extension: clients that probe for this (Telegram
-        // Desktop, KDE apps) send an "inline-reply" action and listen for the
-        // NotificationReplied(id, text) signal.
-        QStringLiteral("inline-reply"),
         // Stack-tag coalescing (volume/brightness OSDs) — both spellings, so scripts
         // probing for either dunst's or notify-osd's capability find it.
         QStringLiteral("x-dunst-stack-tag"),
         QStringLiteral("x-canonical-private-synchronous"),
     };
+    // Rich-card features are config switches (notifications.actionButtons /
+    // .inlineReply); unadvertised, well-behaved clients don't send them.
+    if (m_server->actionButtonsEnabled()) {
+        caps.append(QStringLiteral("actions"));
+    }
+    if (m_server->inlineReplyEnabled()) {
+        // KDE inline-reply extension: clients that probe for this (Telegram
+        // Desktop, KDE apps) send an "inline-reply" action and listen for the
+        // NotificationReplied(id, text) signal.
+        caps.append(QStringLiteral("inline-reply"));
+    }
+    return caps;
 }
 
 QString NotificationsAdaptor::GetServerInformation(QString &vendor, QString &version, QString &spec_version)
@@ -327,9 +334,14 @@ uint NotificationServer::notify(const QString &appName, uint replacesId, const Q
             continue;
         }
         if (actions.at(i) == QLatin1String("inline-reply")) {
-            n.hasReplyAction = true;
-            n.replyLabel = actions.at(i + 1);
+            if (inlineReplyEnabled()) {
+                n.hasReplyAction = true;
+                n.replyLabel = actions.at(i + 1);
+            }
             continue;
+        }
+        if (!actionButtonsEnabled()) {
+            continue; // simple mode: sent anyway by a client that didn't probe — drop
         }
         n.actions.append(QVariantMap{
             {QStringLiteral("key"), actions.at(i)},

@@ -116,6 +116,10 @@ The ``x-kde-reply-placeholder-text`` hint sets the placeholder. Telegram
 Desktop and KDE apps use this protocol out of the box (clients cache
 capabilities — restart them after switching daemons).
 
+Prefer plain toasts? ``"notifications": { "actionButtons": false,
+"inlineReply": false }`` turns the rich-card features off; the matching
+capabilities are then not advertised, so probing apps fall back gracefully.
+
 Entry **and exit** animations are real ``@keyframes`` interpolating ``opacity``
 and ``transform`` (``translateX/Y``, ``scale``):
 

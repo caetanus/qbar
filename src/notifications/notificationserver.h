@@ -73,6 +73,17 @@ public:
     bool doNotDisturb() const { return m_doNotDisturb; }
     void setDoNotDisturb(bool on);
 
+    // Rich-card config switches (notifications.actionButtons / .inlineReply) —
+    // both off makes plain text toasts; the capability list follows them live.
+    bool actionButtonsEnabled() const
+    {
+        return m_config.value(QStringLiteral("actionButtons"), true).toBool();
+    }
+    bool inlineReplyEnabled() const
+    {
+        return m_config.value(QStringLiteral("inlineReply"), true).toBool();
+    }
+
     // QML-side interactions (card click, action button, close button, hover).
     Q_INVOKABLE void invokeAction(uint id, const QString &actionKey);
     Q_INVOKABLE void dismiss(uint id);

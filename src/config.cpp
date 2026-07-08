@@ -431,6 +431,10 @@ QVariantMap parseNotifications(const QJsonObject &root)
         {QStringLiteral("timeoutCritical"), 0},
         {QStringLiteral("width"), 380},
         {QStringLiteral("margin"), 12},
+        // Rich-card features; both false = plain text toasts. Off, the matching
+        // capability is not advertised, so well-behaved apps don't even send them.
+        {QStringLiteral("actionButtons"), true},
+        {QStringLiteral("inlineReply"), true},
     };
     if (root.contains(QStringLiteral("notifications")) && root.value(QStringLiteral("notifications")).isObject()) {
         const QVariantMap overrides = root.value(QStringLiteral("notifications")).toObject().toVariantMap();

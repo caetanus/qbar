@@ -81,7 +81,9 @@
         "timeoutLow": { "type": "integer", "description": "Expiry for low urgency, ms (default 4000)." },
         "timeoutCritical": { "type": "integer", "description": "Expiry for critical urgency, ms (default 0 = never; dismissed via the ✕)." },
         "width": { "type": "integer", "description": "Toast width fallback, px — the CSS `#notifications { width }` wins (default 380)." },
-        "margin": { "type": "integer", "description": "Gap to the screen edges fallback, px — CSS `#notifications { margin }` wins (default 12)." }
+        "margin": { "type": "integer", "description": "Gap to the screen edges fallback, px — CSS `#notifications { margin }` wins (default 12)." },
+        "actionButtons": { "type": "boolean", "description": "Show action buttons on cards; false drops the 'actions' capability too, so probing apps fall back (default true)." },
+        "inlineReply": { "type": "boolean", "description": "Inline reply field (KDE extension, Telegram-style); false drops the 'inline-reply' capability (default true)." }
       }
     },
     "cpu": { "$ref": "#/$defs/display" },
