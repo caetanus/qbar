@@ -25,7 +25,7 @@ a JSON IPC for scripting, and a matching QML/PAM lock screen.
 - **JSON IPC** over a `QLocalSocket` — open/toggle popups from keyboard shortcuts or scripts.
 - **Try a theme before you keep it.** `qbar-ipc set-css <path-or-URL>` hot-swaps the live bar to any stylesheet — even a remote one — so you can preview a community theme straight from a URL, or a file you just downloaded (a relative path resolves from your shell's cwd). `qbar-ipc reset-css` snaps back to your configured theme — no restart, no config edits.
 - **Async by design.** Network (`QNetworkAccessManager`) and JSON parsing run off the GUI thread, and the marquee scrolls on the render thread, so the bar stays smooth.
-- **Native notifications** — **new**: opt-in `org.freedesktop.Notifications` daemon (replaces dunst/mako) rendering toasts with the same CSS engine: frosted-glass blur, an emboss relief shader, `@keyframes` entry **and exit** animations, hover-to-expand, and stack-tag coalescing for volume/brightness OSDs. Actions, urgency states, progress/value gauges included.
+- **Native notifications** — **new**: opt-in `org.freedesktop.Notifications` daemon (replaces dunst/mako) rendering toasts with the same CSS engine: frosted-glass blur, an emboss relief shader, `@keyframes` entry **and exit** animations, hover-to-expand, and stack-tag coalescing for volume/brightness OSDs. Actions, urgency states, progress/value gauges, and **inline reply** — answer a Telegram message straight from the toast (KDE `inline-reply` extension).
 - **qbar-lock** — **new**: an optional QML/PAM lock screen that shares qbar's CSS engine. Wayland `ext-session-lock-v1` (a real session lock) or an X11 grab, with password + **fingerprint (fprintd)** + face (Howdy) racing in parallel — first to succeed unlocks.
 - **Speaks your language.** `LANG`/`LC_MESSAGES` is honoured across the bar and the lock screen — translations ship for **pt_BR, pt_PT, français, Deutsch and español**, dates and weekday names follow your locale, and Qt's own component catalogs are loaded too.
 
@@ -178,10 +178,12 @@ qbar reads `$XDG_CONFIG_HOME/qbar/config.json` (default `~/.config/qbar/config.j
 }
 ```
 
-Built-in modules include: `Workspaces`, `Title`, `CPU`, `Memory`, `Load`, `Network`,
-`NetworkManager`, `Disk`, `Temperature`, `Sound`, `Battery`, `Brightness`, `Bluetooth`,
-`PowerProfiles`, `Caffeine`, `XInput`, `KeyboardState`, `Media` (MPRIS), `Mpd`,
-`FailedUnits` (systemd), `Clock`, `Tray`, `Dock`, and `CustomTool:<id>`.
+Built-in modules include: `Workspaces`, `Title`, `Taskbar`, `Scratchpad`, `I3Mode`, `CPU`,
+`Memory`, `Load`, `Temperature`, `Network`, `NetworkManager`, `Disk`, `Sound`, `Media` (MPRIS),
+`Mpd`, `Battery`, `UPower` (peripheral batteries), `Brightness`, `Bluetooth`, `PowerProfiles`,
+`Caffeine`, `Privacy` (mic/camera in use), `XInput` (keyboard layout), `KeyboardState`
+(caps/num/scroll lock), `FailedUnits` (systemd), `User`, `Clock`, `Tray`, `Dock`, and
+`CustomTool:<id>`.
 `Dock` is a simple macOS-style dock applet for the active window list; add `"Dock"` to
 any `modules-*` region as an alternative to the regular taskbar.
 
@@ -293,11 +295,22 @@ and add:
   "styleSheet": "themes/nord-notify.css",  // the toasts' OWN theme (optional)
   "corner": "top-right",                   // top/bottom × left/right
   "maxVisible": 5,
-  "timeout": 6000                          // ms; critical notifications never expire
+  "timeout": 6000,                         // ms; critical notifications never expire
+  "actionButtons": true,                   // false = plain toasts, no buttons
+  "inlineReply": true                      // false = no reply field
 }
 ```
 
 If another daemon still holds the bus name, qbar waits and grabs it the moment it frees.
+
+**Inline reply.** qbar speaks KDE's `inline-reply` extension: apps that probe for it
+(Telegram Desktop, KDE apps) grow a reply button on their toasts — type, hit Enter, and
+the answer is delivered through the `NotificationReplied` D-Bus signal without ever
+touching the app's window. The field pauses the toast's timeout and grabs the keyboard
+only while open; style it via the `#notification.reply` CSS part. Prefer plain
+notifications? Flip `actionButtons`/`inlineReply` off — the matching capabilities are
+then not advertised, so apps fall back gracefully on their own. (Clients cache
+capabilities at startup — restart Telegram after switching daemons.)
 
 **Volume/brightness OSDs work out of the box** — notifications with a *stack tag*
 (`x-dunst-stack-tag`, or the `synchronous` family notify-osd used) coalesce into a single
@@ -314,9 +327,10 @@ ship in [`config/themes/`](config/themes): `macchiato-notify`, `aqua-glass-notif
 inherit the bar theme's `#notification` rules (with presentable built-in defaults).
 
 **Theming.** Everything is standard CSS on `#notification` (with `.app`, `.summary`, `.body`,
-`.icon`, `.close`, `.action`, `.progress`, `.value` parts and `:low`/`:normal`/`:critical`/
-`:hover` states). Entry **and exit** animations are real CSS `@keyframes` over `opacity` and
-`transform` (translate/scale):
+`.icon`, `.close`, `.action`, `.reply`, `.progress`, `.value` parts and `:low`/`:normal`/
+`:critical`/`:hover` states). `<a href>` links in the body follow the theme's accent (or a
+`link-color` on `.body`) instead of the unreadable palette blue. Entry **and exit** animations
+are real CSS `@keyframes` over `opacity` and `transform` (translate/scale):
 
 ```css
 @keyframes notif-in  { 0% { opacity: 0; transform: translateX(340px) scale(0.96); }
@@ -329,9 +343,16 @@ inherit the bar theme's `#notification` rules (with presentable built-in default
 ```
 
 **Frosted glass & emboss.** Backgrounds in the bundled looks are translucent on purpose: add a
-compositor blur rule on the `qbar-notifications` layer namespace (Hyprland:
-`layerrule = blur, qbar-notifications` + `layerrule = ignorezero, qbar-notifications`) and the
-cards become gaussian-blurred glass. `emboss: <0..1>` swaps the flat fill for a shader-drawn
+compositor blur rule on the `qbar-notifications` layer namespace and the cards become
+gaussian-blurred glass. Hyprland ≥ 0.51:
+
+```ini
+layerrule = blur on, match:namespace qbar-notifications
+layerrule = ignore_alpha 0, match:namespace qbar-notifications
+```
+
+(older Hyprland: `layerrule = blur, qbar-notifications` + `layerrule = ignorezero,
+qbar-notifications`.) `emboss: <0..1>` swaps the flat fill for a shader-drawn
 rounded slab with a soft gradient bevel (tunable via `emboss-highlight`, `emboss-shadow`,
 `emboss-edge`) — combined with the blur it reads as frosted glass with relief.
 
