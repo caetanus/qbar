@@ -56,6 +56,14 @@ QObject *ModelCapsules::acquire(const QString &key, QWindow *window)
         model = m_user.get();
     } else if (key == QLatin1String("privacy")) {
         model = m_privacy.get();
+    } else if (key == QLatin1String("load")) {
+        model = m_load.get();
+    } else if (key == QLatin1String("keyboardState")) {
+        model = m_keyboardState.get();
+    } else if (key == QLatin1String("failedUnits")) {
+        model = m_failedUnits.get();
+    } else if (key == QLatin1String("mpd")) {
+        model = m_mpd.get();
     } else {
         qWarning("ModelCapsules: unknown model '%s'", qPrintable(key));
         return nullptr;

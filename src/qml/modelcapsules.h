@@ -10,6 +10,10 @@
 #include "../caffeine/caffeinemodel.h"
 #include "../cpu/cpumodel.h"
 #include "../disk/diskmodel.h"
+#include "../mpd/mpdmodel.h"
+#include "../system/failedunitsmodel.h"
+#include "../system/keyboardstatemodel.h"
+#include "../system/loadmodel.h"
 #include "../mpris/mprismodel.h"
 #include "../network/networkmodel.h"
 #include "../network/networkprocessmodel.h"
@@ -48,7 +52,7 @@ public:
     // Return the model for `key`, constructing it on first request via its Capsule. Unknown
     // key → nullptr (logged). Keys: cpu, temperature, network, networkProcess, networkManager,
     // brightness, mpris, calendar, battery, tray, sound, caffeine, disk, bluetooth,
-    // powerProfiles, upower, user, privacy.
+    // powerProfiles, upower, user, privacy, load, keyboardState, failedUnits, mpd.
     QObject *acquire(const QString &key, QWindow *window = nullptr);
 
 private:
@@ -76,5 +80,9 @@ private:
     Capsule<UpowerModel> m_upower{"UpowerModel", [this] { return new UpowerModel(this); }};
     Capsule<UserModel> m_user{"UserModel", [this] { return new UserModel(this); }};
     Capsule<PrivacyModel> m_privacy{"PrivacyModel", [this] { return new PrivacyModel(this); }};
+    Capsule<LoadModel> m_load{"LoadModel", [this] { return new LoadModel(this); }};
+    Capsule<KeyboardStateModel> m_keyboardState{"KeyboardStateModel", [this] { return new KeyboardStateModel(this); }};
+    Capsule<FailedUnitsModel> m_failedUnits{"FailedUnitsModel", [this] { return new FailedUnitsModel(this); }};
+    Capsule<MpdModel> m_mpd{"MpdModel", [this] { return new MpdModel(this); }};
     QWindow *m_caffeineWindow = nullptr;
 };

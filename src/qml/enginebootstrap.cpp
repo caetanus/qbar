@@ -258,5 +258,9 @@ void exposeConfiguredModels(QQmlContext *context, const BarConfig &config, QWind
     expose("UPower", "upowerModel", "upower");
     expose("User", "userModel", "user");
     expose("Privacy", "privacyModel", "privacy");
+    expose("Load", "loadModel", "load");
+    expose("KeyboardState", "keyboardStateModel", "keyboardState");
+    expose("FailedUnits", "failedUnitsModel", "failedUnits");
+    expose("Mpd", "mpdModel", "mpd");
     expose("Clock", "calendarModel", "calendar"); // the calendar popup Clock opens
 }

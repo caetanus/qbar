@@ -5,6 +5,10 @@
     <file>applets/Bluetooth.qml</file>
     <file>applets/Caffeine.qml</file>
     <file>applets/Disk.qml</file>
+        <file>applets/Load.qml</file>
+        <file>applets/KeyboardState.qml</file>
+        <file>applets/FailedUnits.qml</file>
+        <file>applets/Mpd.qml</file>
     <file>applets/PowerProfiles.qml</file>
     <file>applets/UPower.qml</file>
     <file>applets/User.qml</file>
@@ -60,6 +64,7 @@
     <file>popups/CalendarPopup.qml</file>
     <file>popups/CPUPopup.qml</file>
     <file>popups/DiskPopup.qml</file>
+        <file>popups/SystemdPopup.qml</file>
     <file>popups/MediaPopup.qml</file>
     <file>popups/CPUTooltip.qml</file>
     <file>popups/TooltipPopup.qml</file>

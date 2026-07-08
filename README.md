@@ -178,9 +178,10 @@ qbar reads `$XDG_CONFIG_HOME/qbar/config.json` (default `~/.config/qbar/config.j
 }
 ```
 
-Built-in modules include: `Workspaces`, `Title`, `CPU`, `Memory`, `Network`, `NetworkManager`,
-`Disk`, `Temperature`, `Sound`, `Battery`, `Brightness`, `Bluetooth`, `PowerProfiles`,
-`Caffeine`, `XInput`, `Media` (MPRIS), `Clock`, `Tray`, `Dock`, and `CustomTool:<id>`.
+Built-in modules include: `Workspaces`, `Title`, `CPU`, `Memory`, `Load`, `Network`,
+`NetworkManager`, `Disk`, `Temperature`, `Sound`, `Battery`, `Brightness`, `Bluetooth`,
+`PowerProfiles`, `Caffeine`, `XInput`, `KeyboardState`, `Media` (MPRIS), `Mpd`,
+`FailedUnits` (systemd), `Clock`, `Tray`, `Dock`, and `CustomTool:<id>`.
 `Dock` is a simple macOS-style dock applet for the active window list; add `"Dock"` to
 any `modules-*` region as an alternative to the regular taskbar.
 
