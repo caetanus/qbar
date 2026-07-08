@@ -68,6 +68,7 @@ signals:
     void attentionRowsChanged();
 
 private slots:
+    void handleItemServiceUnregistered(const QString &service);
     void syncFromWatcher();
     void handleWatcherOwnerChanged(const QString &service, const QString &oldOwner, const QString &newOwner);
     void handleExternalItemRegistered(const QString &service);
@@ -113,6 +114,10 @@ private:
 
     QList<Item> m_items;
     QDBusServiceWatcher m_watcher;
+    // Prunes DEAD items: every registered item's bus name is watched for unregistration —
+    // without this, an item whose process dies (or crashes) stays in the tray forever
+    // (the reported ghost icons: each app run/hot-reload left one behind).
+    QDBusServiceWatcher m_itemWatcher;
     QPointer<QMenu> m_openMenu;
     StatusNotifierWatcherAdaptor *m_watcherAdaptor = nullptr;
     bool m_ownsWatcher = false;

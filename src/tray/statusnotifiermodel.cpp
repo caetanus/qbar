@@ -368,6 +368,14 @@ StatusNotifierModel::StatusNotifierModel(QObject *parent)
             this,
             SLOT(handleWatcherOwnerChanged(QString,QString,QString)));
 
+    // Item liveness: drop every item whose bus connection disappears. The SNI protocol has no
+    // unregister call — hosts are expected to watch the owner; without this, dead processes
+    // leave ghost icons forever.
+    m_itemWatcher.setConnection(QDBusConnection::sessionBus());
+    m_itemWatcher.setWatchMode(QDBusServiceWatcher::WatchForUnregistration);
+    connect(&m_itemWatcher, &QDBusServiceWatcher::serviceUnregistered,
+            this, &StatusNotifierModel::handleItemServiceUnregistered);
+
     // attentionRows derives from item statuses + the row set, so re-emit its change on any
     // model mutation (status edits arrive as dataChanged, add/remove as rows in/out/reset).
     connect(this, &QAbstractItemModel::dataChanged, this, &StatusNotifierModel::attentionRowsChanged);
@@ -766,6 +774,9 @@ void StatusNotifierModel::addItemAddress(const QString &address)
     m_items.append(item);
     endInsertRows();
 
+    if (!m_itemWatcher.watchedServices().contains(item.service))
+        m_itemWatcher.addWatchedService(item.service);
+
     QDBusConnection::sessionBus().connect(item.service,
                                           item.path,
                                           QString::fromLatin1(propertiesInterface),
@@ -839,12 +850,28 @@ void StatusNotifierModel::removeItemAddress(const QString &address)
             beginRemoveRows(QModelIndex(), row, row);
             m_items.removeAt(row);
             endRemoveRows();
+            bool serviceStillUsed = false;
+            for (const Item &left : m_items)
+                if (left.service == service) { serviceStillUsed = true; break; }
+            if (!serviceStillUsed)
+                m_itemWatcher.removeWatchedService(service);
             emit registeredStatusNotifierItemsChanged();
             emit StatusNotifierItemUnregistered(address);
             emit countChanged();
             return;
         }
     }
+}
+
+void StatusNotifierModel::handleItemServiceUnregistered(const QString &service)
+{
+    // Collect first: removeItemAddress mutates m_items (and emits per item).
+    QStringList doomed;
+    for (const Item &item : m_items)
+        if (item.service == service)
+            doomed << itemAddress(item);
+    for (const QString &address : doomed)
+        removeItemAddress(address);
 }
 
 void StatusNotifierModel::handleItemPropertiesChanged(const QString &interface,
