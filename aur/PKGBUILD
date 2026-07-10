@@ -77,16 +77,37 @@ pkgver() {
   fi
 }
 
+# --- Build options -----------------------------------------------------------
+# Feature toggles passed straight to Meson. Edit them here, or override per build
+# from the environment, e.g.:  _lockscreen=disabled _wireplumber=disabled makepkg -si
+# Values: 'enabled' | 'disabled' | 'auto'  (auto = compiled only if its deps exist).
+: "${_wayland:=enabled}"     # wlr-layer-shell (Wayland) integration
+: "${_x11:=enabled}"         # X11 dock/strut (EWMH) integration
+: "${_wireplumber:=auto}"    # native WirePlumber audio backend (else libpulse)
+: "${_privacy:=auto}"        # mic/camera in-use indicator (needs libpipewire)
+: "${_lockscreen:=auto}"     # qbar-lock lock screen (needs pam)
+
 build() {
-  # Build both display backends and every supported WM backend so one package
-  # serves any Arch setup (sway/hyprland on Wayland, i3/bspwm/anything-EWMH on X11).
-  meson setup build "$_pkgname" \
-    --prefix=/usr \
-    --buildtype=release \
-    -Dwayland=enabled \
-    -Dx11=enabled \
-    -Dwm_backends=i3,hyprland,bspwm,ewmh
-  meson compile -C build
+  # One package serves any Arch setup: every WM backend (i3/sway, Hyprland, bspwm,
+  # EWMH) is compiled in and chosen at runtime; both display backends default to on.
+  # -Dtests=false: a package build ships binaries, not the unit-test executables.
+  local _opts=(
+    --prefix=/usr
+    --buildtype=release
+    -Dtests=false
+    -Dwayland="$_wayland"
+    -Dx11="$_x11"
+    -Dwireplumber="$_wireplumber"
+    -Dprivacy="$_privacy"
+    -Dlockscreen="$_lockscreen"
+  )
+  meson setup build "$_pkgname" "${_opts[@]}"
+
+  # meson compile drives Ninja, which compiles in parallel across all cores.
+  # Honour a job limit if makepkg was configured with one (MAKEFLAGS="-j4").
+  local _jobs=
+  [[ ${MAKEFLAGS:-} =~ -j[[:space:]]*([0-9]+) ]] && _jobs=${BASH_REMATCH[1]}
+  meson compile -C build ${_jobs:+-j"$_jobs"}
 }
 
 package() {

@@ -542,6 +542,8 @@ install_data(
   install_dir: get_option('datadir') / 'applications',
 )
 
+if get_option('tests')
+
 qt_test_dep = dependency('Qt6Test')
 qt_quick_test_dep = dependency('Qt6QuickTest')
 
@@ -725,3 +727,5 @@ test(
   args: ['-input', meson.project_source_root() / 'tests/qml'],
   env: ['QT_QPA_PLATFORM=offscreen'],
 )
+
+endif # tests

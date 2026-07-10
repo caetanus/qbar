@@ -1,7 +1,7 @@
 option('x11', type: 'feature', value: 'auto', description: 'Build X11 dock/strut integration')
 option('wayland', type: 'feature', value: 'auto', description: 'Build wlroots wlr-layer-shell integration')
-option('wm_backends', type: 'array', value: ['i3', 'hyprland'], choices: ['i3', 'hyprland', 'bspwm', 'qtile', 'ewmh'], description: 'Window manager backends to build')
 option('wireplumber', type: 'feature', value: 'auto', description: 'Build the native WirePlumber audio backend (used instead of libpulse when present)')
 option('privacy', type: 'feature', value: 'auto', description: 'Build the privacy module (mic/camera in-use indicator via libpipewire)')
 option('lockscreen', type: 'feature', value: 'auto', description: 'Build qbar-lock, the QML/PAM lockscreen')
 option('qml_debug', type: 'boolean', value: false, description: 'Enable the QML debug/profiler connector (-qmljsdebugger); for profiling only, never ship enabled')
+option('tests', type: 'boolean', value: true, description: 'Build the unit-test executables (test-wm, test-css, …); off for packaging')

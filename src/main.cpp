@@ -132,13 +132,40 @@ void configureWaylandLayerShellEnvironment(int argc, char *argv[])
         return;
     }
 
-    const char *platformValue = std::getenv("QT_QPA_PLATFORM");
-    const char *sessionValue = std::getenv("XDG_SESSION_TYPE");
-    const char *waylandDisplayValue = std::getenv("WAYLAND_DISPLAY");
-    const QByteArray platform = platformValue != nullptr ? QByteArray(platformValue) : QByteArray();
-    const QByteArray session = sessionValue != nullptr ? QByteArray(sessionValue) : QByteArray();
-    const bool hasWaylandDisplay = waylandDisplayValue != nullptr && *waylandDisplayValue != '\0';
-    if (!platform.contains("wayland") && session != QByteArray("wayland") && !hasWaylandDisplay) {
+    const QByteArray platform = qgetenv("QT_QPA_PLATFORM");
+    const QByteArray session = qgetenv("XDG_SESSION_TYPE");
+    const bool hasDisplay = !qgetenv("DISPLAY").isEmpty();
+    const bool hasWaylandDisplay = !qgetenv("WAYLAND_DISPLAY").isEmpty();
+
+    // Decide whether qbar will ACTUALLY run under Wayland. Precedence, strongest first:
+    //   1. QT_QPA_PLATFORM — an explicit request wins outright. "xcb"/"x11" means X even when
+    //      a stray WAYLAND_DISPLAY is exported (the routine case when qbar is launched from a
+    //      parent/nested Wayland session to TEST the X path: WAYLAND_DISPLAY and
+    //      XDG_SESSION_TYPE=wayland are inherited by the child). "wayland" means Wayland.
+    //   2. XDG_SESSION_TYPE — authoritative when set: "x11" → X, "wayland" → Wayland.
+    //   3. WAYLAND_DISPLAY presence — only a fallback when neither of the above decided.
+    // The previous test OR-ed these together, so a leaked WAYLAND_DISPLAY (or a
+    // session=wayland) forced the Wayland layer-shell on even under an explicit
+    // QT_QPA_PLATFORM=xcb, and Qt's own auto-detection then bound to the Wayland compositor
+    // instead of the X display — "on X it tries to run Wayland and breaks".
+    bool wayland;
+    if (!platform.isEmpty()) {
+        wayland = platform.contains("wayland");
+    } else if (session == QByteArray("x11")) {
+        wayland = false;
+    } else if (session == QByteArray("wayland")) {
+        wayland = true;
+    } else {
+        wayland = hasWaylandDisplay;
+    }
+
+    if (!wayland) {
+        // Running on X. Pin Qt to xcb when no platform was named explicitly: a WAYLAND_DISPLAY
+        // inherited from a parent Wayland session would otherwise let Qt's auto-detection pick
+        // the Wayland plugin and ignore DISPLAY. Only when there's an X display to bind to.
+        if (platform.isEmpty() && hasDisplay) {
+            qputenv("QT_QPA_PLATFORM", "xcb");
+        }
         return;
     }
 
