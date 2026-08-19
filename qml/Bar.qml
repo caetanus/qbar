@@ -101,6 +101,22 @@ Item {
         return "qrc:/applets/" + root.appletBaseName(name) + ".qml"
     }
 
+    // What the slot's Loader should load: "" when the applet's hardware is absent
+    // (no battery, no backlight, no temperature sensor), so the slot collapses
+    // instead of rendering a dead "--" capsule. Each branch guards its own model:
+    // an applet missing from the config never had its context property exposed,
+    // so a blind lookup would throw a ReferenceError.
+    function appletSource(name) {
+        var base = appletBaseName(name)
+        if (base === "Temperature" && typeof temperatureModel !== "undefined" && temperatureModel && !temperatureModel.available)
+            return ""
+        if (base === "Battery" && typeof batteryModel !== "undefined" && batteryModel && !batteryModel.available)
+            return ""
+        if (base === "Brightness" && typeof brightnessModel !== "undefined" && brightnessModel && !brightnessModel.available)
+            return ""
+        return appletUrl(name)
+    }
+
     // The base applet name without a "/variant" suffix ("Sound/out" -> "Sound").
     function appletBaseName(name) {
         var slash = name.indexOf("/")
@@ -301,7 +317,7 @@ Item {
                     Loader {
                         id: loader
                         anchors.fill: parent
-                        source: appletName === "Temperature" && temperatureModel && !temperatureModel.available ? "" : root.appletUrl(appletName)
+                        source: root.appletSource(appletName)
                         asynchronous: false
 
                         // Hot-reload: BarWindow watches runtime widget files, and on a change
@@ -411,7 +427,7 @@ Item {
                     Loader {
                         id: loader
                         anchors.fill: parent
-                        source: appletName === "Temperature" && temperatureModel && !temperatureModel.available ? "" : root.appletUrl(appletName)
+                        source: root.appletSource(appletName)
                         asynchronous: false
 
                         // Hot-reload: BarWindow watches runtime widget files, and on a change
@@ -549,7 +565,7 @@ Item {
                         anchors.fill: parent
                         anchors.leftMargin: slot.marginLeft
                         anchors.rightMargin: slot.marginRight
-                        source: appletName === "Temperature" && temperatureModel && !temperatureModel.available ? "" : root.appletUrl(appletName)
+                        source: root.appletSource(appletName)
                         asynchronous: false
 
                         // Hot-reload: BarWindow watches runtime widget files, and on a change
