@@ -76,6 +76,15 @@ BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
     }
     buildLayout();
     positionAtTop();
+    // BarManager assigns the target monitor via setScreen() only after
+    // construction, and monitors can move/resize at runtime — re-anchor then.
+    connect(this, &QWindow::screenChanged, this, [this](QScreen *screen) {
+        positionAtTop();
+        if (screen != nullptr) {
+            connect(screen, &QScreen::geometryChanged,
+                    this, &BarWindow::positionAtTop, Qt::UniqueConnection);
+        }
+    });
     m_wm->start();
 }
 
@@ -351,7 +360,11 @@ void BarWindow::positionAtTop()
 
 QRect BarWindow::targetBarGeometry() const
 {
-    const auto *screen = QGuiApplication::primaryScreen();
+    // The screen BarManager assigned to this bar — never the primary: on X11 the
+    // bar is placed by setGeometry() in global coordinates, so using the primary
+    // here would stack every monitor's bar onto the primary output.
+    const auto *screen = this->screen() != nullptr ? this->screen()
+                                                   : QGuiApplication::primaryScreen();
     if (screen == nullptr) {
         return QRect(0, 0, 900, m_config.height);
     }
