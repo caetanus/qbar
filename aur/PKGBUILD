@@ -6,7 +6,7 @@
 # or via an AUR helper pointed at the local dir, e.g.  yay -B ./aur
 pkgname=qbar-git
 _pkgname=qbar
-pkgver=0.1.0
+pkgver=0.1.0.r43.g1c07b33
 pkgrel=1
 pkgdesc='Qt6/QML status bar for Wayland (wlr-layer-shell) and X11, with live CSS theming'
 arch=('x86_64')
