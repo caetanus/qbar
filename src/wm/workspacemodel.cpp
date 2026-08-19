@@ -2,6 +2,8 @@
 
 #include <QJsonObject>
 
+#include <algorithm>
+
 WorkspaceModel::WorkspaceModel(QObject *parent)
     : QAbstractListModel(parent)
 {
@@ -137,6 +139,19 @@ void WorkspaceModel::replaceFromI3Json(const QJsonArray &workspaces)
         workspace.visible = object.value(QStringLiteral("visible")).toBool(false);
         next.append(workspace);
     }
+
+    // i3 hands workspaces back grouped by output, not by number, so a bar
+    // showing every output would render 1,5,2,6 side by side. Numbered
+    // workspaces sort ascending; named ones (num == -1) keep i3's order after
+    // them — the same convention i3bar uses.
+    std::stable_sort(next.begin(), next.end(), [](const Workspace &a, const Workspace &b) {
+        const bool aNumbered = a.number >= 0;
+        const bool bNumbered = b.number >= 0;
+        if (aNumbered != bNumbered) {
+            return aNumbered;
+        }
+        return aNumbered && a.number < b.number;
+    });
 
     replace(std::move(next));
 }
