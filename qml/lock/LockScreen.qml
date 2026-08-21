@@ -233,7 +233,14 @@ Item {
 
     Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) {
-            lockController.cancel()
+            // Escape wipes the typed password; on an already-empty buffer it falls
+            // through to cancel() (quits the --demo harness).
+            if (passwordInput.text.length > 0) {
+                passwordInput.text = ""
+                lockController.clearError()
+            } else {
+                lockController.cancel()
+            }
             event.accepted = true
         }
     }

@@ -86,6 +86,34 @@ Item {
             antialiasing: true
             property var segments: []   // each: { start, sweep, alpha, color }
 
+            // Escape wipe: one arc that grows from the top until it fills the whole
+            // ring, then fades — "everything you typed was swept away".
+            property real wipeSweep: 0
+            property real wipeAlpha: 0
+            property color wipeColor: "transparent"
+            onWipeSweepChanged: requestPaint()
+            onWipeAlphaChanged: requestPaint()
+
+            function startWipe(color) {
+                wipeColor = color
+                wipeAnim.restart()
+            }
+
+            SequentialAnimation {
+                id: wipeAnim
+                ScriptAction { script: arcCanvas.wipeAlpha = 1 }
+                NumberAnimation {
+                    target: arcCanvas; property: "wipeSweep"
+                    from: 0; to: 2 * Math.PI
+                    duration: 320; easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    target: arcCanvas; property: "wipeAlpha"
+                    from: 1; to: 0; duration: 260
+                }
+                ScriptAction { script: arcCanvas.wipeSweep = 0 }
+            }
+
             function addSegment(color) {
                 var start = Math.random() * 2 * Math.PI
                 var sweep = (35 + Math.random() * 20) * Math.PI / 180
@@ -115,6 +143,14 @@ Item {
                     ctx.strokeStyle = s.color
                     ctx.beginPath()
                     ctx.arc(cx, cy, r, s.start, s.start + s.sweep, false)
+                    ctx.stroke()
+                }
+                if (wipeAlpha > 0 && wipeSweep > 0) {
+                    ctx.globalAlpha = wipeAlpha
+                    ctx.strokeStyle = wipeColor
+                    ctx.beginPath()
+                    // From 12 o'clock, clockwise.
+                    ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + wipeSweep, false)
                     ctx.stroke()
                 }
             }
@@ -267,21 +303,41 @@ Item {
         // buffer doesn't change the text (so onTextChanged never fires) — but i3lock still
         // flashes it. Keys.onPressed sees every physical key.
         Keys.onPressed: function (event) {
-            switch (event.key) {
-            // Standalone modifiers aren't "input" — ignore them.
-            case Qt.Key_Shift: case Qt.Key_Control: case Qt.Key_Alt: case Qt.Key_AltGr:
-            case Qt.Key_Meta: case Qt.Key_Super_L: case Qt.Key_Super_R:
-            case Qt.Key_CapsLock: case Qt.Key_NumLock:
-                return
-            case Qt.Key_Escape:
-                lockController.cancel()
+            if (event.key === Qt.Key_Escape) {
+                // i3lock: Escape wipes everything typed so far. On an already-empty
+                // buffer it falls through to cancel() (quits the --demo harness).
+                if (passwordInput.text.length > 0) {
+                    passwordInput.text = ""
+                    lockController.clearError()
+                    ring.scale = 1.09
+                    pulseReset.restart()
+                    arcCanvas.startWipe(root.keypressClearColor)
+                    root.flashEmpty()
+                } else {
+                    lockController.cancel()
+                }
                 event.accepted = true
                 return
             }
 
+            // Only keys that actually edit the buffer get feedback: a delete, or a key
+            // producing printable text (event.text is empty for arrows/F-keys/modifiers
+            // and a control char for Return/Tab/Ctrl-chords — none of those are input).
             var isDelete = event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete
-            // At key-press time the edit hasn't happened yet: ≤1 char left + delete → empty.
-            var goesEmpty = isDelete && passwordInput.text.length <= 1
+            var isText = !isDelete && event.text.length > 0
+                && event.text.charCodeAt(0) >= 0x20 && event.text !== "\x7f"
+            if (!isText && !isDelete)
+                return
+            // Backspace on an already-empty buffer edits nothing — stay quiet.
+            if (isDelete && passwordInput.text.length === 0)
+                return
+
+            // Editing again after a failed attempt starts a fresh one — drop the stale red.
+            if (root.hasError)
+                lockController.clearError()
+
+            // At key-press time the edit hasn't happened yet: 1 char left + delete → empty.
+            var goesEmpty = isDelete && passwordInput.text.length === 1
 
             ring.scale = 1.09
             pulseReset.restart()

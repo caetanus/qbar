@@ -49,6 +49,9 @@ public slots:
     void start();
     void submitPassword(const QString &password);
     void cancel();
+    // Lets the lock face drop a stale failure the moment the user edits again
+    // (i3lock clears its wrong-red state on the next keystroke).
+    void clearError() { setError({}); }
 
 signals:
     void promptChanged();
