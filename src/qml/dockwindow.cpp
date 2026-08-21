@@ -215,7 +215,14 @@ void DockWindow::applyGeometry()
         // (so base icons sit IN the bar, vertically centred like any applet) and
         // extends away from the bar by `headroom` so the hover-grow can overflow ON
         // TOP of the bar without clipping.
-        const int top = bottom ? (m_slot.bottom() + 1 - surfaceH) : m_slot.top();
+        int top = bottom ? (m_slot.bottom() + 1 - surfaceH) : m_slot.top();
+        // Never let the surface leave the screen: a slot reported mid-layout
+        // (the bar still settling on its monitor) would otherwise anchor the
+        // dock past the edge and clip the resting icons.
+        if (screen != nullptr) {
+            top = std::clamp(top, screenGeometry.y(),
+                             screenGeometry.y() + screenGeometry.height() - surfaceH);
+        }
         const QRect geometry(dockX, top, dockW, surfaceH);
         if (m_view->geometry() != geometry) {
             m_view->setGeometry(geometry);
