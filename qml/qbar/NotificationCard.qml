@@ -278,7 +278,7 @@ Item {
     Item {
         anchors.fill: parent
         visible: card.useEmboss
-        layer.enabled: card.useEmboss && bg.hasOutsetShadow
+        layer.enabled: card.useEmboss && bg.hasOutsetShadow && GraphicsInfo.api !== GraphicsInfo.Software
         layer.effect: QBar.CssDropShadow { shadow: bg.outsetShadow }
 
         ShaderEffect {

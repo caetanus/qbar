@@ -170,7 +170,7 @@ Item {
         // QML `clip` is rectangular and ignores `radius`, so the square-cornered
         // tiles spill past the rounded #workspaces corners. Render the tile row to a
         // layer and mask it to a rounded rectangle matching the container radius.
-        layer.enabled: root.containerRadius > 0
+        layer.enabled: root.containerRadius > 0 && GraphicsInfo.api !== GraphicsInfo.Software
         layer.effect: MultiEffect {
             maskEnabled: true
             maskSource: tileMask

@@ -30,7 +30,7 @@ Item {
         color: root.popupForeground
         font.family: theme.fontFamily
         font.pointSize: theme.fontSize
-        layer.enabled: root.popupTextShadow.color !== undefined
+        layer.enabled: root.popupTextShadow.color !== undefined && GraphicsInfo.api !== GraphicsInfo.Software
         layer.effect: QBar.CssDropShadow { shadow: root.popupTextShadow }
     }
 

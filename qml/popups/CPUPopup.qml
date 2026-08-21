@@ -80,7 +80,7 @@ Item {
     readonly property var labelTextShadow: hasCssLabelTextShadow ? cssLabelTextShadow : automaticLabelTextShadow
 
     component PopupText: Text {
-        layer.enabled: root.labelTextShadow.color !== undefined
+        layer.enabled: root.labelTextShadow.color !== undefined && GraphicsInfo.api !== GraphicsInfo.Software
         layer.effect: Chrome.CssDropShadow { shadow: root.labelTextShadow }
     }
 

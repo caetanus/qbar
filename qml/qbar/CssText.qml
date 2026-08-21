@@ -35,7 +35,9 @@ Text {
     // CSS `text-shadow` → drop-shadow layer.
     readonly property var _dropShadow: (cssTheme && cssTheme.loaded && style && style["text-shadow"])
         ? cssTheme.parseBoxShadow(style["text-shadow"]) : ({})
-    layer.enabled: root._dropShadow.color !== undefined
+    // The software rasterizer runs no shaders: an enabled layer whose effect can't
+    // render erases the whole subtree (invisible text). Skip the shadow there.
+    layer.enabled: root._dropShadow.color !== undefined && GraphicsInfo.api !== GraphicsInfo.Software
     layer.effect: QBar.CssDropShadow { shadow: root._dropShadow }
 
     Component.onCompleted: {

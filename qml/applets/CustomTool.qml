@@ -59,7 +59,7 @@ Chrome.CssRect {
 
             readonly property var dropShadow: cssTheme && cssTheme.loaded
                 ? cssTheme.parseBoxShadow(root.cssStyle["text-shadow"] || "") : ({})
-            layer.enabled: dropShadow.color !== undefined
+            layer.enabled: dropShadow.color !== undefined && GraphicsInfo.api !== GraphicsInfo.Software
             layer.effect: Chrome.CssDropShadow { shadow: outputText.dropShadow }
 
             color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground

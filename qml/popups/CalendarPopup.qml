@@ -178,7 +178,7 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
-                        layer.enabled: root.popupTextShadow.color !== undefined
+                        layer.enabled: root.popupTextShadow.color !== undefined && GraphicsInfo.api !== GraphicsInfo.Software
                         layer.effect: QBar.CssDropShadow { shadow: root.popupTextShadow }
                     }
 
@@ -355,7 +355,7 @@ Item {
                     font.pointSize: theme.fontSize + 1
                     font.bold: true
                     elide: Text.ElideRight
-                    layer.enabled: root.popupTextShadow.color !== undefined
+                    layer.enabled: root.popupTextShadow.color !== undefined && GraphicsInfo.api !== GraphicsInfo.Software
                     layer.effect: QBar.CssDropShadow { shadow: root.popupTextShadow }
                 }
 

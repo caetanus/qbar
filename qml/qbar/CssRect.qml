@@ -173,7 +173,7 @@ Item {
             }
         }
 
-        layer.enabled: root.hasOutsetShadow
+        layer.enabled: root.hasOutsetShadow && GraphicsInfo.api !== GraphicsInfo.Software
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: root.hasOutsetShadow ? root.outsetShadow.color : "transparent"

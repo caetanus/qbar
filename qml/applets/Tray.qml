@@ -161,6 +161,11 @@ QBar.CssRect {
                     }
                 }
 
+                // The software rasterizer runs no shaders, so a MultiEffect draws
+                // nothing there — show the raw (uncolorized) Image instead of a
+                // blank slot when qbar runs with QT_QUICK_BACKEND=software.
+                readonly property bool effectsUnavailable: GraphicsInfo.api === GraphicsInfo.Software
+
                 readonly property bool hasIcon: iconSource && iconSource.length > 0
                 readonly property bool hasOverlay: hasIcon && overlayIconName && overlayIconName.length > 0
                 readonly property bool hasSymbolicIcon: symbolicIconSource && symbolicIconSource.length > 0
@@ -229,7 +234,7 @@ QBar.CssRect {
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                     mipmap: true
-                    visible: false
+                    visible: trayItem.effectsUnavailable && trayItem.iconResolved && !trayItem.iconBroken
                     source: trayItem.activeIconSource
                     // On a fetch/decode failure, advance to the next candidate source.
                     onStatusChanged: if (status === Image.Error
@@ -241,7 +246,7 @@ QBar.CssRect {
                 MultiEffect {
                     anchors.fill: trayIcon
                     source: trayIcon
-                    visible: trayItem.iconResolved && !trayItem.iconBroken
+                    visible: !trayItem.effectsUnavailable && trayItem.iconResolved && !trayItem.iconBroken
                     colorization: trayItem.colorizeIcon ? 1.0 : 0.0
                     colorizationColor: trayItem.iconColor
                 }
@@ -264,7 +269,7 @@ QBar.CssRect {
                     sourceSize.width: width
                     sourceSize.height: height
                     fillMode: Image.PreserveAspectFit
-                    visible: false
+                    visible: trayItem.effectsUnavailable && trayItem.hasOverlay
                     source: (root.iconMode !== "normal" && trayItem.hasOverlaySymbolicIcon)
                         ? overlaySymbolicIconSource : (trayItem.hasOverlay ? "image://themeicon/" + overlayIconName : "")
                 }
@@ -272,7 +277,7 @@ QBar.CssRect {
                 MultiEffect {
                     anchors.fill: overlayIcon
                     source: overlayIcon
-                    visible: trayItem.hasOverlay
+                    visible: !trayItem.effectsUnavailable && trayItem.hasOverlay
                     colorization: trayItem.colorizeOverlay ? 1.0 : 0.0
                     colorizationColor: trayItem.iconColor
                 }

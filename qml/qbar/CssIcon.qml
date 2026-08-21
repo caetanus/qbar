@@ -50,6 +50,10 @@ Item {
         return s
     }
 
+    // The software rasterizer runs no shaders, so the MultiEffect draws nothing
+    // there — show the raw (uncolorized) Image instead of an empty box.
+    readonly property bool effectsUnavailable: GraphicsInfo.api === GraphicsInfo.Software
+
     Image {
         id: iconImage
         anchors.centerIn: parent
@@ -61,13 +65,13 @@ Item {
         fillMode: Image.PreserveAspectFit
         smooth: true
         mipmap: true
-        visible: false
+        visible: root.effectsUnavailable && status === Image.Ready
     }
 
     MultiEffect {
         anchors.fill: iconImage
         source: iconImage
-        visible: iconImage.status === Image.Ready
+        visible: !root.effectsUnavailable && iconImage.status === Image.Ready
         colorization: root.colorize ? 1.0 : 0.0
         colorizationColor: root.color
     }
