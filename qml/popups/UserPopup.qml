@@ -13,7 +13,7 @@ Item {
     readonly property color fg: popupStyle["color"] ? cssTheme.parseColor(popupStyle["color"]) : theme.foreground
     readonly property color fgSoft: Qt.rgba(fg.r, fg.g, fg.b, 0.6)
     readonly property color accent: (theme.accent !== undefined) ? cssTheme.parseColor(theme.accent) : "#63b3ed"
-    readonly property bool hasFace: bigFace.status === Image.Ready
+    readonly property bool hasFace: bigFace.ready
 
     implicitWidth: 340
     width: implicitWidth
@@ -38,35 +38,19 @@ Item {
             spacing: 12
 
             Item {
+                id: bigAvatar
                 width: 52
                 height: 52
                 anchors.verticalCenter: parent.verticalCenter
 
-                Image {
+                // Round on every backend: shader mask under GL, Canvas clip under
+                // the software rasterizer.
+                QBar.RoundImage {
                     id: bigFace
                     anchors.fill: parent
                     source: root.user ? root.user.iconPath : ""
-                    fillMode: Image.PreserveAspectCrop
-                    cache: true
-                    visible: false
                     sourceSize.width: 104
                     sourceSize.height: 104
-                }
-                Rectangle {
-                    id: bigMask
-                    anchors.fill: parent
-                    radius: width / 2
-                    color: "black"
-                    visible: false
-                    layer.enabled: true
-                }
-                MultiEffect {
-                    anchors.fill: parent
-                    source: bigFace
-                    maskEnabled: true
-                    maskSource: bigMask
-                    maskThresholdMin: 0.5
-                    visible: root.hasFace
                 }
                 Rectangle {
                     anchors.fill: parent

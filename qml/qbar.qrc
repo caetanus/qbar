@@ -45,6 +45,7 @@
     <file>qbar/CssFill.qml</file>
     <file>qbar/CssIcon.qml</file>
     <file>qbar/CssDropShadow.qml</file>
+    <file>qbar/RoundImage.qml</file>
     <file>qbar/MarqueeText.qml</file>
     <file>qbar/NotificationSurface.qml</file>
     <file>qbar/NotificationCard.qml</file>

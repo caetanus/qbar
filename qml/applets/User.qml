@@ -17,7 +17,7 @@ QBar.CssRect {
     readonly property color fg: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : theme.foreground
     readonly property color accent: (theme.accent !== undefined) ? cssTheme.parseColor(theme.accent) : "#63b3ed"
     readonly property int avatarSize: Math.max(14, Math.round(theme.height * 0.62))
-    readonly property bool hasFace: faceImage.status === Image.Ready
+    readonly property bool hasFace: faceImage.ready
     property bool tooltipHovered: false
 
     // 0 = avatar only, 1 = avatar + name, 2 = avatar + uptime. Scroll cycles; persisted.
@@ -66,32 +66,14 @@ QBar.CssRect {
             height: root.avatarSize
             anchors.verticalCenter: parent.verticalCenter
 
-            Image {
+            // Round on every backend: shader mask under GL, Canvas clip under
+            // the software rasterizer.
+            QBar.RoundImage {
                 id: faceImage
                 anchors.fill: parent
                 source: userModel ? userModel.iconPath : ""
-                fillMode: Image.PreserveAspectCrop
-                cache: true
-                visible: false
                 sourceSize.width: root.avatarSize * 2
                 sourceSize.height: root.avatarSize * 2
-            }
-            // Circular mask for the avatar photo.
-            Rectangle {
-                id: faceMask
-                anchors.fill: parent
-                radius: width / 2
-                color: "black"
-                visible: false
-                layer.enabled: true
-            }
-            MultiEffect {
-                anchors.fill: parent
-                source: faceImage
-                maskEnabled: true
-                maskSource: faceMask
-                maskThresholdMin: 0.5
-                visible: root.hasFace
             }
             // Fallback: an accent disc with the user's initial.
             Rectangle {
