@@ -57,6 +57,22 @@
         "rightClickMenu": { "type": "boolean", "description": "Right-click opens a focus/close menu." }
       }
     },
+    "workspaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Workspaces applet options.",
+      "properties": {
+        "all-outputs": { "type": "boolean", "description": "true = every bar lists all workspaces; false (default, waybar-compatible) = each bar lists only its own monitor's workspaces." }
+      }
+    },
+    "workspaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Workspaces applet options.",
+      "properties": {
+        "all-outputs": { "type": "boolean", "description": "true = every bar lists every monitor's workspaces; false (default, waybar-compatible) = each bar lists only the workspaces of the monitor it sits on. Backends that don't report outputs are unaffected." }
+      }
+    },
     "dock": {
       "type": "object",
       "additionalProperties": false,

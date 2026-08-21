@@ -18,6 +18,7 @@ using QmlCss::CssTheme;
 #include "dbus/dbusservice.h"
 #include "platform/platformbarintegration.h"
 #include "wm/wmbackendfactory.h"
+#include "wm/workspacemodel.h"
 #include "ipc/i3ipcclient.h"
 
 #include <QApplication>
@@ -80,11 +81,13 @@ BarWindow::BarWindow(const BarConfig &config, QWindow *parent)
     // construction, and monitors can move/resize at runtime — re-anchor then.
     connect(this, &QWindow::screenChanged, this, [this](QScreen *screen) {
         positionAtTop();
+        applyWorkspaceOutputFilter();
         if (screen != nullptr) {
             connect(screen, &QScreen::geometryChanged,
                     this, &BarWindow::positionAtTop, Qt::UniqueConnection);
         }
     });
+    applyWorkspaceOutputFilter();
     m_wm->start();
 }
 
@@ -348,6 +351,21 @@ void BarWindow::buildLayout()
 
     setResizeMode(QQuickView::SizeRootObjectToView);
     setSource(QUrl(QStringLiteral("qrc:/Bar.qml")));
+}
+
+// waybar-compatible workspaces.all-outputs: unless it is true, each bar lists
+// only the workspaces of the monitor it sits on. Follows the bar across
+// monitors via the screenChanged hook in the constructor.
+void BarWindow::applyWorkspaceOutputFilter()
+{
+    auto *model = m_wm != nullptr ? m_wm->workspaceModel() : nullptr;
+    if (model == nullptr) {
+        return;
+    }
+    const bool allOutputs =
+        m_config.workspaces.value(QStringLiteral("all-outputs")).toBool();
+    model->setOutputFilter(!allOutputs && screen() != nullptr ? screen()->name()
+                                                              : QString());
 }
 
 void BarWindow::positionAtTop()

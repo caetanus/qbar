@@ -40,6 +40,9 @@ struct BarConfig {
     // Taskbar applet options: scope ("workspace"|"all"|"monitor"),
     // middleClickClose (bool), rightClickMenu (bool). Defaults set in config.cpp.
     QVariantMap taskbar;
+    // Workspaces applet options: all-outputs (bool, waybar-compatible; false =
+    // each bar lists only its own monitor's workspaces). Defaults in config.cpp.
+    QVariantMap workspaces;
     // Dock applet options: magnify ("fisheye"|"parabolic"|"scale"|"none") hover
     // effect, indicator ("underline"|"dot"|"pill"|"none") for the focused window,
     // and optional hoverHeight/peakHeight overrides (px). Defaults set in config.cpp.

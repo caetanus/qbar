@@ -40,9 +40,19 @@ public:
     void replace(QList<Workspace> workspaces);
     void replaceFromI3Json(const QJsonArray &workspaces);
 
+    // Restrict the model to one monitor's workspaces (waybar's all-outputs:false).
+    // Empty = no filter. Workspaces whose backend reports no output always pass,
+    // so backends without output info (bspwm/ewmh) are unaffected.
+    void setOutputFilter(const QString &output);
+
 signals:
     void emptyChanged();
 
 private:
-    QList<Workspace> m_workspaces;
+    void applyReplace(QList<Workspace> workspaces);
+    QList<Workspace> filtered(QList<Workspace> workspaces) const;
+
+    QList<Workspace> m_workspaces;     // what the view sees (post-filter)
+    QList<Workspace> m_allWorkspaces;  // last full set, to re-filter on demand
+    QString m_outputFilter;
 };

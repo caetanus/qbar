@@ -402,6 +402,21 @@ QVariantMap parseTaskbar(const QJsonObject &root)
     return taskbar;
 }
 
+QVariantMap parseWorkspaces(const QJsonObject &root)
+{
+    QVariantMap workspaces{
+        // waybar's default: a bar lists only the workspaces of its own monitor.
+        {QStringLiteral("all-outputs"), false},
+    };
+    if (root.contains(QStringLiteral("workspaces")) && root.value(QStringLiteral("workspaces")).isObject()) {
+        const QVariantMap overrides = root.value(QStringLiteral("workspaces")).toObject().toVariantMap();
+        for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
+            workspaces.insert(it.key(), it.value());
+        }
+    }
+    return workspaces;
+}
+
 QVariantMap parseDock(const QJsonObject &root)
 {
     QVariantMap dock{
@@ -499,6 +514,7 @@ BarConfig parseBarObject(const QJsonObject &root)
     }
     config.customTools = parseCustomTools(root);
     config.taskbar = parseTaskbar(root);
+    config.workspaces = parseWorkspaces(root);
     config.dock = parseDock(root);
     config.notifications = parseNotifications(root);
     // The graph is always rendered; these defaults list only the value part shown

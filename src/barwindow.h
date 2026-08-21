@@ -64,6 +64,7 @@ private:
     void updateBarMarginsFromCss();
     void buildLayout();
     void positionAtTop();
+    void applyWorkspaceOutputFilter();
     QRect targetBarGeometry() const;
 
     BarConfig m_config;

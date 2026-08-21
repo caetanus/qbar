@@ -95,6 +95,10 @@
     "cpu":     { "format": ["cycle", "graph"], "text": "cpu" },
     "memory":  { "format": ["cycle", "graph"], "text": "mem" },
     "network": { "format": ["cycle", "graph"], "text": "net" },
+    // "workspaces": { "all-outputs": true },  // every bar lists all monitors' workspaces (default: own monitor only, like waybar)
+    // "workspaces": { "all-outputs": false },
+    //   all-outputs: false (default, waybar-style) shows on each bar only the
+    //   workspaces of its own monitor; true lists every monitor's workspaces.
     // "taskbar": { "scope": "all", "middleClickClose": true, "rightClickMenu": true },
     // "dock": { "magnify": "fisheye", "indicator": "underline" },
     //   magnify:   "fisheye" | "parabolic" | "scale" | "none"

@@ -184,6 +184,11 @@ Built-in modules include: `Workspaces`, `Title`, `Taskbar`, `Scratchpad`, `I3Mod
 `Caffeine`, `Privacy` (mic/camera in use), `XInput` (keyboard layout), `KeyboardState`
 (caps/num/scroll lock), `FailedUnits` (systemd), `User`, `Clock`, `Tray`, `Dock`, and
 `CustomTool:<id>`.
+
+On multi-monitor setups each bar lists only the workspaces of the monitor it
+sits on (waybar's default); set `"workspaces": { "all-outputs": true }` to show
+every workspace on every bar.
+
 `Dock` is a simple macOS-style dock applet for the active window list; add `"Dock"` to
 any `modules-*` region as an alternative to the regular taskbar.
 

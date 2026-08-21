@@ -63,6 +63,37 @@ QList<WorkspaceModel::Workspace> WorkspaceModel::workspaces() const
 
 void WorkspaceModel::replace(QList<Workspace> workspaces)
 {
+    m_allWorkspaces = workspaces;
+    applyReplace(filtered(std::move(workspaces)));
+}
+
+void WorkspaceModel::setOutputFilter(const QString &output)
+{
+    if (m_outputFilter == output) {
+        return;
+    }
+    m_outputFilter = output;
+    applyReplace(filtered(m_allWorkspaces));
+}
+
+QList<WorkspaceModel::Workspace> WorkspaceModel::filtered(QList<Workspace> workspaces) const
+{
+    if (m_outputFilter.isEmpty()) {
+        return workspaces;
+    }
+    QList<Workspace> result;
+    result.reserve(workspaces.size());
+    for (auto &workspace : workspaces) {
+        if (workspace.output.isEmpty()
+            || workspace.output.compare(m_outputFilter, Qt::CaseInsensitive) == 0) {
+            result.append(std::move(workspace));
+        }
+    }
+    return result;
+}
+
+void WorkspaceModel::applyReplace(QList<Workspace> workspaces)
+{
     const bool wasEmpty = m_workspaces.isEmpty();
 
     const bool sameShape = m_workspaces.size() == workspaces.size();
