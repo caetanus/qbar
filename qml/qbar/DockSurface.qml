@@ -32,6 +32,12 @@ Item {
         ? dockConfig.magnify : "fisheye"
     readonly property string indicatorMode: (typeof dockConfig !== "undefined" && dockConfig && dockConfig.indicator)
         ? dockConfig.indicator : "underline"
+    // Resting opacity of non-focused icons. Fully opaque by default — the dim only
+    // applies WHILE the dock is hovered, where it makes the focused icon read as the
+    // highlight. `"opacity"` in the dock config block (0..1) restores a dimmed rest.
+    readonly property real restOpacity: (typeof dockConfig !== "undefined" && dockConfig
+            && dockConfig.opacity !== undefined && dockConfig.opacity >= 0 && dockConfig.opacity <= 1)
+        ? dockConfig.opacity : 1.0
     // Whole dock grows on hover for everything except "none".
     readonly property bool magnifies: root.magnifyMode !== "none"
     // Per-icon peak under the cursor (fisheye/parabolic); "scale" grows uniformly.
@@ -136,7 +142,9 @@ Item {
             transformOrigin: Item.Bottom         // grow-in/out animation uses the bar edge
             readonly property real centerX: x + width / 2   // content-local, stable (uniform slots)
             readonly property real sz: root.iconSize(centerX)
-            opacity: cell.focused || cell.urgent ? 1.0 : 0.72
+            opacity: cell.focused || cell.urgent ? 1.0
+                   : root.hovered ? 0.72 : root.restOpacity
+            Behavior on opacity { NumberAnimation { duration: 130 } }
 
             // Urgent windows bounce for attention (macOS dock idiom): the icon hops
             // up out of the bar and settles, repeating while the window stays urgent.
