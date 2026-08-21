@@ -6,7 +6,7 @@ QBar.CssRect {
     cssId: "backlight"
     defaultColor: "#4b5563"
     height: theme.height
-    width: 58
+    width: Math.max(1, preferredWidth)
 
     readonly property var cssStyle: root.style
 
@@ -16,71 +16,82 @@ QBar.CssRect {
     readonly property color cutColor: cssStyle["background-color"]
         ? cssTheme.parseColor(cssStyle["background-color"])
         : "#4b5563"
+    // Grows with the label so "100%" doesn't run into the moon.
+    property int preferredWidth: Math.ceil(contentRow.implicitWidth + 14)
+
+    signal preferredWidthUpdated(int width)
+
+    onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
+    Component.onCompleted: preferredWidthUpdated(preferredWidth)
 
     // Background painted by the CssRect base (defaultColor fallback); the moon's cut uses
     // the same cutColor so it blends with that background.
 
-    Canvas {
-        id: moonCanvas
-        width: 16
-        height: 16
+    Row {
+        id: contentRow
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
         anchors.leftMargin: 7
-        renderTarget: Canvas.Image
+        spacing: 6
 
-        onPaint: {
-            const ctx = getContext("2d")
-            const cx = width / 2
-            const cy = height / 2
-            const radius = Math.min(width, height) / 2 - 1
-            const phase = Math.max(0, Math.min(1, root.illumination))
-            const cutX = cx + (radius * 2 * phase)
-            const cutRadius = radius * 0.98
+        Canvas {
+            id: moonCanvas
+            width: 16
+            height: 16
+            anchors.verticalCenter: parent.verticalCenter
+            renderTarget: Canvas.Image
 
-            ctx.clearRect(0, 0, width, height)
-            ctx.fillStyle = cssStyle["color"] || "#ffffff"
-            ctx.beginPath()
-            ctx.arc(cx, cy, radius, 0, Math.PI * 2)
-            ctx.fill()
+            onPaint: {
+                const ctx = getContext("2d")
+                const cx = width / 2
+                const cy = height / 2
+                const radius = Math.min(width, height) / 2 - 1
+                const phase = Math.max(0, Math.min(1, root.illumination))
+                const cutX = cx + (radius * 2 * phase)
+                const cutRadius = radius * 0.98
 
-            ctx.beginPath()
-            ctx.arc(cutX, cy, cutRadius, 0, Math.PI * 2)
-            if (root.cutColor.a <= 0.01) {
-                ctx.globalCompositeOperation = "destination-out"
-                ctx.fillStyle = "#000000"
+                ctx.clearRect(0, 0, width, height)
+                ctx.fillStyle = cssStyle["color"] || "#ffffff"
+                ctx.beginPath()
+                ctx.arc(cx, cy, radius, 0, Math.PI * 2)
                 ctx.fill()
-                ctx.globalCompositeOperation = "source-over"
-            } else {
-                ctx.fillStyle = root.cutColor
-                ctx.fill()
+
+                ctx.beginPath()
+                ctx.arc(cutX, cy, cutRadius, 0, Math.PI * 2)
+                if (root.cutColor.a <= 0.01) {
+                    ctx.globalCompositeOperation = "destination-out"
+                    ctx.fillStyle = "#000000"
+                    ctx.fill()
+                    ctx.globalCompositeOperation = "source-over"
+                } else {
+                    ctx.fillStyle = root.cutColor
+                    ctx.fill()
+                }
+            }
+
+            onVisibleChanged: if (visible) requestPaint()
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+            Component.onCompleted: requestPaint()
+            Connections {
+                target: brightnessModel
+                function onBrightnessChanged() { moonCanvas.requestPaint() }
+                function onAvailabilityChanged() { moonCanvas.requestPaint() }
+            }
+            Connections {
+                target: root
+                function onCssStyleChanged() { moonCanvas.requestPaint() }
             }
         }
 
-        onVisibleChanged: if (visible) requestPaint()
-        onWidthChanged: requestPaint()
-        onHeightChanged: requestPaint()
-        Component.onCompleted: requestPaint()
-        Connections {
-            target: brightnessModel
-            function onBrightnessChanged() { moonCanvas.requestPaint() }
-            function onAvailabilityChanged() { moonCanvas.requestPaint() }
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : "#ffffff"
+            font.family: cssStyle["font-family"] || theme.fontFamily
+            font.pointSize: theme.fontSize
+            font.bold: true
+            text: root.available ? root.brightnessValue + "%" : "--"
         }
-        Connections {
-            target: root
-            function onCssStyleChanged() { moonCanvas.requestPaint() }
-        }
-    }
-
-    Text {
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.right: parent.right
-        anchors.rightMargin: 7
-        color: cssStyle["color"] ? cssTheme.parseColor(cssStyle["color"]) : "#ffffff"
-        font.family: cssStyle["font-family"] || theme.fontFamily
-        font.pointSize: theme.fontSize
-        font.bold: true
-        text: root.available ? root.brightnessValue + "%" : "--"
     }
 
     MouseArea {
