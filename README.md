@@ -241,7 +241,9 @@ Edit the file and the bar restyles live — no restart. Browse [`config/themes/`
 
 Two ways to extend the bar:
 
-- **Custom QML widgets** — a `.qml` file loaded from disk at runtime (not compiled in), hot-reloaded on save. It can `import "qrc:/qbar"` (themed `CssRect`/`CssText`), read the `theme`/`cssTheme` and the data models, do async HTTP (`Fetch.js`) and async JSON (`Json.js`), and open its own popup. The bundled [`config/widgets/`](config/widgets) has live **Bitcoin** and **Weather** widgets.
+- **Custom QML widgets** — a `.qml` file loaded from disk at runtime (not compiled in), hot-reloaded on save. It can `import "qrc:/qbar"` (themed `CssRect`/`CssText`), read the `theme`/`cssTheme` and the data models, do async HTTP (`Fetch.js`) and async JSON (`Json.js`), and open its own popup. The bundled [`config/widgets/`](config/widgets) has live **Bitcoin**, **Weather**, **SpeedTest** and **AiUsage** widgets.
+
+  `AiUsage` shows how much of your AI-assistant subscription quota is used — Claude Code's 5-hour/weekly windows and Codex CLI's ChatGPT rate-limit windows — read with the OAuth tokens those CLIs already keep in `~/.claude` and `~/.codex` (nothing is stored). Click for a menu listing every window with its reset time and pick the one to keep on the bar; wheel cycles, middle-click refreshes. `"custom/ai-usage": { "source": "widgets/AiUsage.qml", "interval": 300, "show": "claude:five_hour" }`.
 
   ```jsonc
   "modules-right": ["CustomTool:custom/btc"],
@@ -425,3 +427,6 @@ custom-tools QML API. Build with `sphinx-build -b html docs docs/_build/html`.
 ## License
 
 See the repository for license details.
+
+The Claude and OpenAI glyphs used by the `AiUsage` widget (`config/widgets/ai-icons/`) come from
+[VS Code codicons](https://github.com/microsoft/vscode-codicons) (Microsoft, CC-BY-4.0).

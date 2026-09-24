@@ -16,8 +16,10 @@ into qbar, and it **hot-reloads** when you save it (the widget and its sibling `
    "customTools": { "custom/btc": { "source": "widgets/Bitcoin.qml" } }
 
 ``source`` is resolved relative to the config directory (``~/.config/qbar``), or given as
-an absolute / ``file://`` path. The bundled ``config/widgets/Bitcoin.qml`` and
-``Weather.qml`` are complete examples.
+an absolute / ``file://`` path. The bundled ``config/widgets/Bitcoin.qml``,
+``Weather.qml``, ``SpeedTest.qml`` and ``AiUsage.qml`` (Claude Code / Codex subscription
+quotas, read from the CLIs' own OAuth tokens via ``Proc`` + ``Fetch``, with a menu) are
+complete examples.
 
 The widget contract
 -------------------
