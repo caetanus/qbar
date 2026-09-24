@@ -181,9 +181,17 @@ qbar reads `$XDG_CONFIG_HOME/qbar/config.json` (default `~/.config/qbar/config.j
 Built-in modules include: `Workspaces`, `Title`, `Taskbar`, `Scratchpad`, `I3Mode`, `CPU`,
 `Memory`, `Load`, `Temperature`, `Network`, `NetworkManager`, `Disk`, `Sound`, `Media` (MPRIS),
 `Mpd`, `Battery`, `UPower` (peripheral batteries), `Brightness`, `Bluetooth`, `PowerProfiles`,
-`Caffeine`, `Privacy` (mic/camera in use), `XInput` (keyboard layout), `KeyboardState`
-(caps/num/scroll lock), `FailedUnits` (systemd), `User`, `Clock`, `Tray`, `Dock`, and
-`CustomTool:<id>`.
+`Caffeine`, `Redshift` (night colour temperature), `Privacy` (mic/camera in use), `XInput`
+(keyboard layout), `KeyboardState` (caps/num/scroll lock), `FailedUnits` (systemd), `User`,
+`Clock`, `Tray`, `Dock`, and `CustomTool:<id>`.
+
+`Redshift` warms the screen at night (wlr-gamma-control on sway/Hyprland, XRandR on X11) —
+no redshift/wlsunset daemon needed. Sunrise/sunset are computed locally from a location:
+set `"redshift": { "latitude": …, "longitude": … }` or a `"city"` (geocoded once, cached);
+with neither it borrows the Weather widget's city, and failing that uses fixed
+`"sunrise"`/`"sunset"` clock times. `day`/`night` (K, default 6500/4000) and `transition`
+(minutes, default 60) tune the ramp. Click the button to toggle, right-click for a menu of
+temperature presets, wheel to nudge the temperature by hand, middle-click to return to automatic.
 
 On multi-monitor setups each bar lists only the workspaces of the monitor it
 sits on (waybar's default); set `"workspaces": { "all-outputs": true }` to show

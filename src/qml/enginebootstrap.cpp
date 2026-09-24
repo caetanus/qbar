@@ -5,6 +5,7 @@
 #include "qml/jstimers.h"
 #include "qml/localstorage.h"
 #include "qml/modelcapsules.h"
+#include "redshift/redshiftmodel.h"
 #include "qml/netfetch.h"
 
 #include <QColor>
@@ -263,4 +264,13 @@ void exposeConfiguredModels(QQmlContext *context, const BarConfig &config, QWind
     expose("FailedUnits", "failedUnitsModel", "failedUnits");
     expose("Mpd", "mpdModel", "mpd");
     expose("Clock", "calendarModel", "calendar"); // the calendar popup Clock opens
+    expose("Redshift", "redshiftModel", "redshift");
+    if (usedApplets.contains(QLatin1String("Redshift"))) {
+        // The model is process-wide; whichever bar carries the applet configures it
+        // (setConfig is a no-op for an unchanged block, so reloads keep the user's toggle).
+        if (auto *redshift = qobject_cast<RedshiftModel *>(
+                ModelCapsules::instance()->acquire(QStringLiteral("redshift"), window))) {
+            redshift->setConfig(config.redshift);
+        }
+    }
 }

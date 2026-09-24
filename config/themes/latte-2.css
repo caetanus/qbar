@@ -32,6 +32,13 @@ window#waybar  { background-color: transparent; border-radius: 8px; border-left:
 #title         { color: #4c4f69; background-color: transparent; }
 #caffeine      { color: #acb0be; background-color: transparent; }
 #caffeine.active { color: #df8e1d; background-color: rgba(223, 142, 29, 0.18); }
+#redshift        { color: #acb0be; background-color: transparent; }
+#redshift.active { color: #4c4f69; }
+#redshift.night  { background-color: rgba(254, 100, 11, 0.14); }
+#custom-ai-usage          { color: #4c4f69; background-color: transparent; }
+#custom-ai-usage.warn     { color: #df8e1d; }
+#custom-ai-usage.critical { color: #d20f39; }
+#custom-ai-usage.error    { color: #acb0be; }
 #custom-dollar { color: #40a02b; background-color: transparent; }
 #custom-btc    { color: #fe640b; background-color: transparent; }
 

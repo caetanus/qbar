@@ -58,6 +58,8 @@ existing waybar themes mostly work as-is:
      -
    * - Caffeine
      - ``#caffeine``
+   * - Redshift
+     - ``#redshift`` (states ``.active``, ``.manual``, ``.day``/``.night``/``.sunrise``/``.sunset``)
      - State ``.active``.
    * - Title
      - ``#title``

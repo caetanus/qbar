@@ -126,6 +126,21 @@ TestCase {
     }
 
     QtObject {
+        id: redshiftModel
+        property bool available: true
+        property bool enabled: true
+        property bool manual: false
+        property int temperature: 4000
+        property double warmth: 1.0
+        property string phase: "night"
+        property string tooltipText: "4000 K · auto"
+        function toggle() { redshiftModel.enabled = !redshiftModel.enabled }
+        function nudge(delta) { redshiftModel.temperature += delta; redshiftModel.manual = true }
+        function setTemperature(k) { redshiftModel.temperature = k; redshiftModel.manual = true }
+        function resetAuto() { redshiftModel.manual = false }
+    }
+
+    QtObject {
         id: temperatureModel
         property string displayText: "42°C"
         property string tooltipText: "CPU 42°C"
@@ -199,6 +214,7 @@ TestCase {
         Applets.Network { id: network; y: 128 }
         Applets.Title { id: title; y: 160; barWidth: 420 }
         Applets.Caffeine { id: caffeine; y: 192 }
+        Applets.Redshift { id: redshift; y: 576 }
         Applets.Brightness { id: brightness; y: 224 }
         Applets.XInput { id: xinput; y: 256 }
         Applets.NetworkManager { id: networkManager; y: 288 }
@@ -225,6 +241,7 @@ TestCase {
         assertApplet(network, "Network")
         assertApplet(title, "Title")
         assertApplet(caffeine, "Caffeine")
+        assertApplet(redshift, "Redshift")
         assertApplet(brightness, "Brightness")
         assertApplet(xinput, "XInput")
         assertApplet(networkManager, "NetworkManager")
@@ -243,6 +260,12 @@ TestCase {
         caffeineModel.active = false
         caffeineModel.toggle()
         verify(caffeineModel.active)
+        redshiftModel.toggle()
+        verify(!redshiftModel.enabled)
+        redshiftModel.nudge(250)
+        compare(redshiftModel.temperature, 4250)
+        var menu = redshift.buildMenu()
+        verify(menu.length > 5, "redshift menu should list presets")
         compare(network.formatRate(900 * 1024), "0.9 M/s")
         compare(network.formatRate(800), "0.8 K/s")
         clock.setFormatIndex(clock.formatIndex + 1)

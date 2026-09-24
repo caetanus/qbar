@@ -222,6 +222,13 @@ void BarWindow::applyReloadedConfig(const BarConfig &fresh)
         }
     }
 
+    // Redshift options (temperatures/location/schedule): re-run the exposure, which pushes
+    // the block into the model (a no-op when this bar doesn't carry the applet).
+    if (fresh.redshift != m_config.redshift) {
+        m_config.redshift = fresh.redshift;
+        exposeModels();
+    }
+
     // Module/group changes: update the applet lists the Bar.qml Repeaters bind to (and expose
     // any newly-configured applet's backend), so adding/removing an applet takes effect live.
     if (fresh.appletsLeft != m_config.appletsLeft || fresh.appletsCenter != m_config.appletsCenter

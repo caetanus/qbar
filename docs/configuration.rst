@@ -101,8 +101,25 @@ names. Built-in modules:
 ``Workspaces``, ``Title``, ``Taskbar``, ``CPU``, ``Memory``, ``Network``,
 ``NetworkManager``, ``Disk``, ``Temperature``, ``Sound``, ``Battery``, ``Brightness``,
 ``Bluetooth``, ``PowerProfiles``, ``UPower`` (peripheral batteries), ``User`` (avatar +
-name + uptime), ``Privacy`` (mic/camera in-use), ``Caffeine``, ``XInput``, ``Media`` (MPRIS),
-``Clock``, ``Tray``.
+name + uptime), ``Privacy`` (mic/camera in-use), ``Caffeine``, ``Redshift`` (night colour
+temperature), ``XInput``, ``Media`` (MPRIS), ``Clock``, ``Tray``.
+
+``Redshift`` warms the screen at night through the compositor's gamma tables
+(wlr-gamma-control on sway/Hyprland, XRandR on X11), replacing a redshift/wlsunset
+daemon. Sunrise and sunset are computed locally from a location — nothing is polled::
+
+   "redshift": {
+     "day": 6500, "night": 4000,   // Kelvin
+     "transition": 60,             // minutes of ramp around sunrise/sunset
+     "latitude": -23.2, "longitude": -47.3
+     // or "city": "Salto" (geocoded once via open-meteo, cached),
+     // or nothing: the Weather widget's city is borrowed; failing that the fixed
+     // "sunrise": "06:30", "sunset": "18:30" clock times apply.
+   }
+
+Click the button to toggle, right-click for a menu (automatic schedule, temperature
+presets, on/off), wheel to nudge the temperature by 250 K (manual hold), middle-click to
+return to automatic.
 
 A custom tool is referenced as ``"CustomTool:custom/<name>"`` and defined under
 ``customTools`` — see :doc:`custom-tools`.

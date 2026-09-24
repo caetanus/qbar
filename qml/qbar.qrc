@@ -4,6 +4,7 @@
     <file>applets/Battery.qml</file>
     <file>applets/Bluetooth.qml</file>
     <file>applets/Caffeine.qml</file>
+    <file>applets/Redshift.qml</file>
     <file>applets/Disk.qml</file>
         <file>applets/Load.qml</file>
         <file>applets/KeyboardState.qml</file>

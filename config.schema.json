@@ -102,6 +102,23 @@
         "inlineReply": { "type": "boolean", "description": "Inline reply field (KDE extension, Telegram-style); false drops the 'inline-reply' capability (default true)." }
       }
     },
+    "redshift": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Redshift applet: screen colour temperature by time of day (warm at night). Sun times are computed locally from the location; with no location it borrows the Weather widget's, else the fixed sunrise/sunset clock times.",
+      "properties": {
+        "enabled": { "type": "boolean", "description": "Initial state (default true); the button toggles it at runtime." },
+        "day": { "type": "integer", "minimum": 1000, "maximum": 25000, "description": "Daytime temperature in Kelvin (default 6500 = neutral)." },
+        "night": { "type": "integer", "minimum": 1000, "maximum": 25000, "description": "Night temperature in Kelvin (default 4000)." },
+        "transition": { "type": "integer", "minimum": 1, "description": "Length of the ramp around sunrise/sunset, minutes (default 60)." },
+        "latitude": { "type": "number", "description": "Fixed location (with longitude); skips geocoding." },
+        "longitude": { "type": "number" },
+        "city": { "type": "string", "description": "Geocoded via open-meteo once and cached; used when latitude/longitude are absent." },
+        "label": { "type": "string", "description": "Location name shown in the tooltip." },
+        "sunrise": { "type": "string", "description": "Fallback clock time \"HH:mm\" when no location is known (default 06:30)." },
+        "sunset": { "type": "string", "description": "Fallback clock time \"HH:mm\" (default 18:30)." }
+      }
+    },
     "cpu": { "$ref": "#/$defs/display" },
     "memory": { "$ref": "#/$defs/display" },
     "network": { "$ref": "#/$defs/display" }

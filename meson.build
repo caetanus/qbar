@@ -132,6 +132,17 @@ if x11_dep.found() and xcb_ewmh_dep.found() and xcb_xkb_dep.found() and xcb_scre
   platform_moc_headers += files('src/platform/x11keyboardlayout.h')
   platform_includes += qtgui_private_include
   platform_args += ['-DQBAR_HAVE_X11=1']
+
+  # Redshift applet on X11: XRandR CRTC gamma ramps. Optional — without it the applet
+  # reports "no gamma control" on Xorg.
+  xcb_randr_dep = dependency('xcb-randr', required: false)
+  if xcb_randr_dep.found()
+    platform_deps += [xcb_randr_dep]
+    platform_sources += files('src/redshift/x11gamma.cpp')
+    platform_args += ['-DQBAR_HAVE_XCB_RANDR=1']
+  else
+    warning('xcb-randr not found: the Redshift applet will be inert on X11')
+  endif
 endif
 
 wayland_dep = dependency('wayland-client', required: get_option('wayland'))
@@ -185,6 +196,21 @@ if wayland_dep.found() and wayland_scanner.found() and wayland_protocols_dep.fou
     command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
   )
 
+  # wlr-gamma-control (Redshift applet): per-output gamma ramps on wlroots/Hyprland.
+  gamma_control_protocol = files('protocols/wlr-gamma-control-unstable-v1.xml')
+  gamma_control_header = custom_target(
+    'wlr-gamma-control-client-header',
+    input: gamma_control_protocol,
+    output: 'wlr-gamma-control-unstable-v1-client-protocol.h',
+    command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
+  )
+  gamma_control_code = custom_target(
+    'wlr-gamma-control-client-code',
+    input: gamma_control_protocol,
+    output: 'wlr-gamma-control-unstable-v1-protocol.c',
+    command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
+  )
+
   session_lock_protocol = files(wl_protocols_dir / 'staging/ext-session-lock/ext-session-lock-v1.xml')
   session_lock_header = custom_target(
     'ext-session-lock-client-header',
@@ -200,8 +226,8 @@ if wayland_dep.found() and wayland_scanner.found() and wayland_protocols_dep.fou
   )
 
   platform_deps += [wayland_dep]
-  platform_sources += files('src/platform/waylandlayershellintegration.cpp')
-  platform_generated += [layer_shell_header, layer_shell_code, xdg_shell_header, xdg_shell_code, idle_inhibit_header, idle_inhibit_code]
+  platform_sources += files('src/platform/waylandlayershellintegration.cpp', 'src/redshift/waylandgamma.cpp')
+  platform_generated += [layer_shell_header, layer_shell_code, xdg_shell_header, xdg_shell_code, idle_inhibit_header, idle_inhibit_code, gamma_control_header, gamma_control_code]
   platform_includes += qtgui_private_include
   platform_args += ['-DQBAR_HAVE_WAYLAND=1']
 
@@ -292,6 +318,10 @@ sources = files(
   'src/config.cpp',
   'src/brightness/brightnessmodel.cpp',
   'src/caffeine/caffeinemodel.cpp',
+  'src/redshift/redshiftmodel.cpp',
+  'src/redshift/solar.cpp',
+  'src/redshift/colortemp.cpp',
+  'src/redshift/gammabackendfactory.cpp',
   'src/customtool/customtoolmodel.cpp',
   'src/ipc/i3ipcclient.cpp',
   'src/platform/keyboardlayoutcode.cpp',
@@ -368,6 +398,8 @@ headers = files(
   'src/qml/modelcapsules.h',
   'src/brightness/brightnessmodel.h',
   'src/caffeine/caffeinemodel.h',
+  'src/redshift/redshiftmodel.h',
+  'src/redshift/gammabackend.h',
   'src/customtool/customtoolmodel.h',
   'src/tray/statusnotifiermodel.h',
   'src/cpu/cpumodel.h',

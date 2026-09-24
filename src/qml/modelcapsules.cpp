@@ -64,6 +64,8 @@ QObject *ModelCapsules::acquire(const QString &key, QWindow *window)
         model = m_failedUnits.get();
     } else if (key == QLatin1String("mpd")) {
         model = m_mpd.get();
+    } else if (key == QLatin1String("redshift")) {
+        model = m_redshift.get();
     } else {
         qWarning("ModelCapsules: unknown model '%s'", qPrintable(key));
         return nullptr;

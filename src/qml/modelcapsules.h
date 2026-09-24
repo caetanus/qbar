@@ -20,6 +20,7 @@
 #include "../networkmanager/networkmanagermodel.h"
 #include "../powerprofiles/powerprofilesmodel.h"
 #include "../privacy/privacymodel.h"
+#include "../redshift/redshiftmodel.h"
 #include "../sound/audiobackend.h"
 #include "../sound/audiobackendfactory.h"
 #include "../temperature/temperaturemodel.h"
@@ -52,7 +53,7 @@ public:
     // Return the model for `key`, constructing it on first request via its Capsule. Unknown
     // key → nullptr (logged). Keys: cpu, temperature, network, networkProcess, networkManager,
     // brightness, mpris, calendar, battery, tray, sound, caffeine, disk, bluetooth,
-    // powerProfiles, upower, user, privacy, load, keyboardState, failedUnits, mpd.
+    // powerProfiles, upower, user, privacy, load, keyboardState, failedUnits, mpd, redshift.
     QObject *acquire(const QString &key, QWindow *window = nullptr);
 
 private:
@@ -84,5 +85,6 @@ private:
     Capsule<KeyboardStateModel> m_keyboardState{"KeyboardStateModel", [this] { return new KeyboardStateModel(this); }};
     Capsule<FailedUnitsModel> m_failedUnits{"FailedUnitsModel", [this] { return new FailedUnitsModel(this); }};
     Capsule<MpdModel> m_mpd{"MpdModel", [this] { return new MpdModel(this); }};
+    Capsule<RedshiftModel> m_redshift{"RedshiftModel", [this] { return new RedshiftModel(this); }};
     QWindow *m_caffeineWindow = nullptr;
 };

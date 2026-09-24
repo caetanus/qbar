@@ -63,3 +63,9 @@ window#waybar    { background-color: rgba(0, 0, 0, 0.3);     }
 
 #caffeine        { color: @subtext0; background-color: transparent; }
 #caffeine.active { color: @base;     background-color: #ffffff; }
+#redshift        { color: @subtext0; background-color: transparent; }
+#redshift.active { color: @text; }
+#custom-ai-usage          { color: @text; background-color: transparent; }
+#custom-ai-usage.warn     { color: @yellow; }
+#custom-ai-usage.critical { color: @red; }
+#custom-ai-usage.error    { color: @subtext0; }

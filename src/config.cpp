@@ -432,6 +432,64 @@ QVariantMap parseDock(const QJsonObject &root)
     return dock;
 }
 
+QVariantMap parseRedshift(const QJsonObject &root, const QVariantMap &customTools)
+{
+    QVariantMap redshift{
+        {QStringLiteral("enabled"), true},
+        {QStringLiteral("day"), 6500},
+        {QStringLiteral("night"), 4000},
+        {QStringLiteral("transition"), 60},
+        {QStringLiteral("sunrise"), QStringLiteral("06:30")},
+        {QStringLiteral("sunset"), QStringLiteral("18:30")},
+    };
+    if (root.contains(QStringLiteral("redshift")) && root.value(QStringLiteral("redshift")).isObject()) {
+        const QVariantMap overrides = root.value(QStringLiteral("redshift")).toObject().toVariantMap();
+        for (auto it = overrides.cbegin(); it != overrides.cend(); ++it) {
+            redshift.insert(it.key(), it.value());
+        }
+    }
+    const bool hasCoords = redshift.contains(QStringLiteral("latitude")) && redshift.contains(QStringLiteral("longitude"));
+    if (hasCoords || !redshift.value(QStringLiteral("city")).toString().trimmed().isEmpty()) {
+        return redshift;
+    }
+    // No location of its own: reuse the Weather widget's (same coordinates → same sun),
+    // so a bar that already shows the weather gets sunrise/sunset for free.
+    for (auto it = customTools.cbegin(); it != customTools.cend(); ++it) {
+        const QVariantMap tool = it.value().toMap();
+        if (!tool.value(QStringLiteral("source")).toString().contains(QStringLiteral("Weather"), Qt::CaseInsensitive)) {
+            continue;
+        }
+        if (tool.contains(QStringLiteral("latitude")) && tool.contains(QStringLiteral("longitude"))) {
+            redshift.insert(QStringLiteral("latitude"), tool.value(QStringLiteral("latitude")));
+            redshift.insert(QStringLiteral("longitude"), tool.value(QStringLiteral("longitude")));
+            if (tool.contains(QStringLiteral("label"))) {
+                redshift.insert(QStringLiteral("label"), tool.value(QStringLiteral("label")));
+            }
+            if (tool.contains(QStringLiteral("city"))) {
+                redshift.insert(QStringLiteral("city"), tool.value(QStringLiteral("city")));
+            }
+            redshift.insert(QStringLiteral("locationSource"), it.key());
+            return redshift;
+        }
+        QString city = tool.value(QStringLiteral("city")).toString().trimmed();
+        if (city.isEmpty()) {
+            const QVariant cities = tool.value(QStringLiteral("cities"));
+            const QStringList list = cities.typeId() == QMetaType::QString
+                ? cities.toString().split(QLatin1Char(','), Qt::SkipEmptyParts)
+                : cities.toStringList();
+            if (!list.isEmpty()) {
+                city = list.first().trimmed();
+            }
+        }
+        if (!city.isEmpty()) {
+            redshift.insert(QStringLiteral("city"), city);
+            redshift.insert(QStringLiteral("locationSource"), it.key());
+            return redshift;
+        }
+    }
+    return redshift;
+}
+
 QVariantMap parseNotifications(const QJsonObject &root)
 {
     // Opt-in on purpose: owning org.freedesktop.Notifications displaces whatever
@@ -517,6 +575,7 @@ BarConfig parseBarObject(const QJsonObject &root)
     config.workspaces = parseWorkspaces(root);
     config.dock = parseDock(root);
     config.notifications = parseNotifications(root);
+    config.redshift = parseRedshift(root, config.customTools);
     // The graph is always rendered; these defaults list only the value part shown
     // beside it, reproducing the historical look.
     config.cpu = parseDisplay(root, QStringLiteral("cpu"), {QStringLiteral("cycle")}, QStringLiteral("cpu"));

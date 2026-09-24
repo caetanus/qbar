@@ -53,6 +53,10 @@ struct BarConfig {
     // width/margin (px fallbacks — the CSS `#notifications` block wins). Defaults in
     // config.cpp. Only the first bar creates the daemon (one bus name per process).
     QVariantMap notifications;
+    // Redshift applet: enabled, day/night (K), transition (min), latitude/longitude,
+    // city (geocoded), label, sunrise/sunset ("HH:mm" fallback). When no location is
+    // given, parseRedshift borrows the Weather widget's (locationSource = its key).
+    QVariantMap redshift;
     // CPU/Memory/Network display: { "format": [parts...], "text": "<label>" }.
     // Parts (composable, ordered): "text" (the literal label), "percentage",
     // "clock" (cpu), "absolute" (mem used/total, net rate), "graph", and "cycle"
