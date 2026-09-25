@@ -21,7 +21,8 @@ a JSON IPC for scripting, and a matching QML/PAM lock screen.
 - **Wayland-native** via `wlr-layer-shell` (a custom Qt platform-shell integration), with an X11 dock/strut fallback.
 - **Standard-CSS theming.** Themes are plain `.css` files — selectors like `#cpu`, `#workspaces button:active`, gradients, `box-shadow`, `border-radius`, transitions. 28 themes ship in [`config/themes/`](config/themes). Hot-reloads on save. The engine grew up here and now lives as its own project, [qml-css-engine](https://github.com/caetanus/qml-css-engine) (vendored as a submodule) — docs, tests and the full cascade/specificity/`@media`/`@keyframes` story live there.
 - **Rich popups**, not just tooltips: an interactive CPU/Memory dashboard (per-core graphs, top processes), a calendar with events, a Bitcoin candlestick chart, disk, battery, and media.
-- **Custom QML widgets** loaded from disk at runtime (no recompile) — hot-reload on save. Plus **waybar-format custom tools** (external scripts) for drop-in compatibility.
+- **Custom QML widgets** loaded from disk at runtime (no recompile) — hot-reload on save, with async HTTP/JSON, process and storage globals, popups and menus. Four ship in the box (crypto ticker, weather, speed test, AI-quota). Plus **waybar-format custom tools** (external scripts) for drop-in compatibility. See [Custom widgets](#custom-widgets).
+- **Redshift** — **new**: night colour temperature without a daemon — `wlr-gamma-control` on sway/Hyprland, XRandR on X11 — with sunrise/sunset computed locally from your location (or borrowed from the Weather widget), a preset menu and manual override.
 - **JSON IPC** over a `QLocalSocket` — open/toggle popups from keyboard shortcuts or scripts.
 - **Try a theme before you keep it.** `qbar-ipc set-css <path-or-URL>` hot-swaps the live bar to any stylesheet — even a remote one — so you can preview a community theme straight from a URL, or a file you just downloaded (a relative path resolves from your shell's cwd). `qbar-ipc reset-css` snaps back to your configured theme — no restart, no config edits.
 - **Async by design.** Network (`QNetworkAccessManager`) and JSON parsing run off the GUI thread, and the marquee scrolls on the render thread, so the bar stays smooth.
@@ -237,20 +238,95 @@ Edit the file and the bar restyles live — no restart. Browse [`config/themes/`
 - a clean **sans** for text — `ttf-roboto` or `noto-fonts` (Arch), `fonts-roboto` / `fonts-noto-core` (Debian). A theme whose `font-family` lists `FontAwesome` first relies on the *next* family for letters, so a real text font must be installed (otherwise the icon font, which lacks letters/digits, swallows the text).
 - `powerline-fonts` if a theme uses powerline separators.
 
-## Custom widgets & tools
+## Custom widgets
 
-Two ways to extend the bar:
+A custom widget is a plain `.qml` file that qbar loads **from disk at runtime** — nothing is
+compiled in, and saving the file hot-reloads it on the live bar. Point a `customTools`
+entry at it and reference that entry in a `modules-*` list:
 
-- **Custom QML widgets** — a `.qml` file loaded from disk at runtime (not compiled in), hot-reloaded on save. It can `import "qrc:/qbar"` (themed `CssRect`/`CssText`), read the `theme`/`cssTheme` and the data models, do async HTTP (`Fetch.js`) and async JSON (`Json.js`), and open its own popup. The bundled [`config/widgets/`](config/widgets) has live **Bitcoin**, **Weather**, **SpeedTest** and **AiUsage** widgets.
+```jsonc
+"modules-right": ["CustomTool:custom/weather", "CustomTool:custom/ai-usage", "Clock"],
+"customTools": {
+  "custom/weather":  { "source": "widgets/Weather.qml", "cities": ["Salto", "Lisboa"] },
+  "custom/ai-usage": { "source": "widgets/AiUsage.qml", "show": "claude:five_hour" }
+}
+```
 
-  `AiUsage` shows how much of your AI-assistant subscription quota is used — Claude Code's 5-hour/weekly windows and Codex CLI's ChatGPT rate-limit windows — read with the OAuth tokens those CLIs already keep in `~/.claude` and `~/.codex` (nothing is stored). Click for a menu listing every window with its reset time and pick the one to keep on the bar; wheel cycles, middle-click refreshes. `"custom/ai-usage": { "source": "widgets/AiUsage.qml", "interval": 300, "show": "claude:five_hour" }`.
+`source` is resolved relative to the config file's directory (so `widgets/…` means
+`~/.config/qbar/widgets/…`), or an absolute / `file://` path. Any other key in the entry is
+yours: the widget reads its own block through `customTools[toolId]`.
 
-  ```jsonc
-  "modules-right": ["CustomTool:custom/btc"],
-  "customTools": { "custom/btc": { "source": "widgets/Bitcoin.qml" } }
-  ```
+### Bundled widgets
 
-- **Custom tools** — waybar-format external scripts (`exec`, `interval`, `return-type: json`, `format`, `format-icons`, Pango markup), for drop-in compatibility with existing waybar modules.
+| Widget | What it does | Config keys |
+|---|---|---|
+| [`Crypto.qml`](config/widgets/Crypto.qml) (`Bitcoin.qml` alias) | Binance ticker with a live candlestick popup (REST history + WebSocket stream), drawings persisted in LocalStorage | `ticks: [{label, symbol, icon, color}]` |
+| [`Weather.qml`](config/widgets/Weather.qml) | Open-Meteo conditions for one or more cities (geocoded), animated backdrop, forecast popup | `cities` / `city` / `latitude`+`longitude`, `metrics`, `animatedBackground` |
+| [`SpeedTest.qml`](config/widgets/SpeedTest.qml) | Download/upload throughput test driven from the bar, with a results popup | — |
+| [`AiUsage.qml`](config/widgets/AiUsage.qml) | Claude Code (5-hour/weekly) and Codex CLI (ChatGPT rate-limit) subscription quota windows, read with the OAuth tokens those CLIs already keep in `~/.claude` and `~/.codex` — nothing is stored. Click for a menu of every window with its reset time and pick the one shown on the bar; wheel cycles, middle-click refreshes | `interval`, `show`, `claude`, `codex`, `claudeCredentials`, `codexAuth` |
+
+Widget popups registered with a `name` are reachable from the [IPC](#ipc) too
+(`qbar-ipc toggle weather`).
+
+### Writing one
+
+The contract is small — an `Item` (normally `QBar.CssRect`, so themes can style it) that:
+
+- sets `cssId: "custom-<name>"` so the theme's `#custom-<name>` rules apply;
+- declares `property string toolId` (qbar assigns it) and reads its config from `customTools[toolId]`;
+- exposes `property int preferredWidth` and emits `preferredWidthUpdated(width)` — the bar's
+  `Loader` resizes the item, which clears a plain `width:` binding.
+
+```qml
+import QtQuick
+import "qrc:/qbar" as QBar
+import "qrc:/qbar/Fetch.js" as Fetch
+
+QBar.CssRect {
+    id: root
+    property string toolId: ""
+    cssId: "custom-stars"
+    height: theme.height
+    property int preferredWidth: Math.max(1, label.implicitWidth + 14)
+    width: Math.max(1, preferredWidth)
+    signal preferredWidthUpdated(int width)
+    onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
+
+    property int stars: 0
+    function refresh() {
+        Fetch.fetch("https://api.github.com/repos/caetanus/qbar")
+            .then(function (r) { return r.json() })          // parsed off the GUI thread
+            .then(function (d) { root.stars = d.stargazers_count })
+    }
+    Component.onCompleted: { preferredWidthUpdated(preferredWidth); refresh() }
+    Timer { interval: 600000; running: true; repeat: true; onTriggered: root.refresh() }
+
+    QBar.CssText { id: label; cssId: "custom-stars"; anchors.centerIn: parent; text: "★ " + root.stars }
+}
+```
+
+What a widget can use:
+
+- **Themed primitives** from `qrc:/qbar`: `CssRect`, `CssText`, `CssFill`, `CssIcon`, `CssEnable`,
+  `MarqueeText`, `Tooltip`, `Popup` (anchored panel; a `name` registers it with the IPC) and
+  `MenuPopup` (native context menu with checkable items and separators).
+- **Context objects**: `theme` (colours, fonts, bar height), `cssTheme` (resolve/parse CSS),
+  `customTools`, the data models of the applets configured on that bar, `qbarPopups`, `qbarIpc`.
+- **JS globals**, all asynchronous so the bar never blocks:
+  `Http` / `Fetch.js` (WHATWG-style `fetch` with headers, timeout and progress — QML's own
+  `XMLHttpRequest` hangs on network drops), `Json.js` (`QJson.parse`/`stringify` on a worker
+  thread), `Proc` (run an external process: QML has no process API), `LocalStorage`
+  (SQLite-backed key/value store), and web-style `setTimeout`/`setInterval`. Qt modules such
+  as `QtWebSockets` import as usual.
+
+The full contract, the storage and popup APIs and a walkthrough are in
+[`docs/custom-tools.rst`](docs/custom-tools.rst).
+
+### Custom tools (waybar scripts)
+
+For drop-in compatibility with existing waybar modules, a `customTools` entry with `exec`
+instead of `source` runs an external script the waybar way — `interval`, `return-type: json`,
+`format`, `format-icons`, `exec-if`, Pango markup — and renders its output as a bar item.
 
 ## IPC
 
