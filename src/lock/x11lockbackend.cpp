@@ -1,7 +1,10 @@
 #include "x11lockbackend.h"
 
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QGuiApplication>
+
+#include <cstdlib>
 
 #ifdef QBAR_LOCK_HAVE_X11
 #include <qguiapplication_platform.h>
@@ -42,6 +45,7 @@ X11LockBackend::X11LockBackend(QObject *parent)
 
 X11LockBackend::~X11LockBackend()
 {
+    stopKeepAbove();
     ungrab();
 #ifdef QBAR_LOCK_HAVE_X11
     if (m_connection != nullptr) {
@@ -77,6 +81,111 @@ void X11LockBackend::setGrabWindow(quintptr windowId)
     m_grabWindow = windowId;
 }
 
+void X11LockBackend::setLockWindows(const QList<quintptr> &windowIds)
+{
+    m_lockWindows = windowIds;
+}
+
+#ifdef QBAR_LOCK_HAVE_X11
+namespace {
+xcb_window_t rootWindowOf(xcb_connection_t *connection)
+{
+    return xcb_setup_roots_iterator(xcb_get_setup(connection)).data->root;
+}
+} // namespace
+#endif
+
+void X11LockBackend::raiseLockWindows()
+{
+#ifdef QBAR_LOCK_HAVE_X11
+    auto *connection = static_cast<xcb_connection_t *>(m_connection);
+    const uint32_t values[] = {XCB_STACK_MODE_ABOVE};
+    for (quintptr id : m_lockWindows) {
+        xcb_configure_window(connection, static_cast<xcb_window_t>(id),
+                             XCB_CONFIG_WINDOW_STACK_MODE, values);
+    }
+    xcb_flush(connection);
+#endif
+}
+
+void X11LockBackend::startKeepAbove()
+{
+#ifdef QBAR_LOCK_HAVE_X11
+    if (m_keepingAbove || m_connection == nullptr || m_lockWindows.isEmpty()) {
+        return;
+    }
+    auto *connection = static_cast<xcb_connection_t *>(m_connection);
+    const xcb_window_t root = rootWindowOf(connection);
+
+    // The event mask is per-client and CW_EVENT_MASK replaces it wholesale —
+    // preserve Qt's own selection on the root window (we share its connection).
+    auto *attributes = xcb_get_window_attributes_reply(
+        connection, xcb_get_window_attributes(connection, root), nullptr);
+    m_rootPrevEventMask = attributes != nullptr ? attributes->your_event_mask : 0;
+    std::free(attributes);
+
+    const uint32_t mask = m_rootPrevEventMask | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY;
+    xcb_change_window_attributes(connection, root, XCB_CW_EVENT_MASK, &mask);
+    xcb_flush(connection);
+
+    QCoreApplication::instance()->installNativeEventFilter(this);
+    m_keepingAbove = true;
+    raiseLockWindows();
+#endif
+}
+
+void X11LockBackend::stopKeepAbove()
+{
+#ifdef QBAR_LOCK_HAVE_X11
+    if (!m_keepingAbove) {
+        return;
+    }
+    QCoreApplication::instance()->removeNativeEventFilter(this);
+    if (m_connection != nullptr) {
+        auto *connection = static_cast<xcb_connection_t *>(m_connection);
+        xcb_change_window_attributes(connection, rootWindowOf(connection),
+                                     XCB_CW_EVENT_MASK, &m_rootPrevEventMask);
+        xcb_flush(connection);
+    }
+    m_keepingAbove = false;
+#endif
+}
+
+bool X11LockBackend::nativeEventFilter(const QByteArray &eventType, void *message, qintptr *)
+{
+#ifdef QBAR_LOCK_HAVE_X11
+    if (!m_keepingAbove || eventType != QByteArrayLiteral("xcb_generic_event_t")) {
+        return false;
+    }
+    auto *event = static_cast<xcb_generic_event_t *>(message);
+    xcb_window_t restacked = XCB_WINDOW_NONE;
+    switch (event->response_type & 0x7f) {
+    case XCB_CONFIGURE_NOTIFY:
+        restacked = reinterpret_cast<xcb_configure_notify_event_t *>(event)->window;
+        break;
+    case XCB_MAP_NOTIFY:
+        restacked = reinterpret_cast<xcb_map_notify_event_t *>(event)->window;
+        break;
+    case XCB_CIRCULATE_NOTIFY:
+        restacked = reinterpret_cast<xcb_circulate_notify_event_t *>(event)->window;
+        break;
+    default:
+        return false;
+    }
+    // Our own raises are reported here too; re-raising on them would loop.
+    for (quintptr id : m_lockWindows) {
+        if (static_cast<xcb_window_t>(id) == restacked) {
+            return false;
+        }
+    }
+    raiseLockWindows();
+#else
+    Q_UNUSED(eventType)
+    Q_UNUSED(message)
+#endif
+    return false;
+}
+
 void X11LockBackend::lock()
 {
     if (!isAvailable()) {
@@ -87,11 +196,13 @@ void X11LockBackend::lock()
         emit lockFailed(tr("Failed to grab X11 keyboard and pointer"));
         return;
     }
+    startKeepAbove();
     emit locked();
 }
 
 void X11LockBackend::unlock()
 {
+    stopKeepAbove();
     ungrab();
     emit unlocked();
 }

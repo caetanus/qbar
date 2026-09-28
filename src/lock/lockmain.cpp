@@ -211,7 +211,17 @@ int main(int argc, char *argv[])
         view->setScreen(screen);
         view->setResizeMode(QQuickView::SizeRootObjectToView);
         view->setColor(Qt::transparent);
-        view->setFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+        // On X11 the lock must be override-redirect: managed stacking (and the
+        // StaysOnTop hint) never wins against override-redirect siblings such
+        // as qbar's dock, which otherwise stays visible over the lock. The X11
+        // backend then keeps the lock raised on every restack. Wayland is
+        // untouched — ext-session-lock already guarantees the lock on top.
+        Qt::WindowFlags lockFlags = Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint;
+        const bool onX11 = QGuiApplication::platformName() == QLatin1String("xcb");
+        if (onX11) {
+            lockFlags |= Qt::BypassWindowManagerHint;
+        }
+        view->setFlags(lockFlags);
         view->setCursor(Qt::ArrowCursor);
         view->rootContext()->setContextProperty(QStringLiteral("lockController"), &controller);
         view->rootContext()->setContextProperty(QStringLiteral("cssTheme"), &cssTheme);
@@ -221,7 +231,13 @@ int main(int argc, char *argv[])
         view->rootContext()->setContextProperty(QStringLiteral("keyLocks"), &keyLocks);
         view->setSource(lockSource);
         view->setGeometry(screen->geometry());
-        view->showFullScreen();
+        if (onX11) {
+            // Override-redirect: the geometry above already covers the screen;
+            // showFullScreen would ask the absent WM for fullscreen state.
+            view->show();
+        } else {
+            view->showFullScreen();
+        }
         view->raise();
         view->requestActivate();
         views.append(view);
@@ -230,6 +246,12 @@ int main(int argc, char *argv[])
     if (!views.isEmpty()) {
         if (auto *x11Backend = qobject_cast<X11LockBackend *>(backend.get())) {
             x11Backend->setGrabWindow(views.first()->winId());
+            QList<quintptr> lockWindowIds;
+            lockWindowIds.reserve(views.size());
+            for (const QQuickView *view : views) {
+                lockWindowIds.append(view->winId());
+            }
+            x11Backend->setLockWindows(lockWindowIds);
         }
     }
 
