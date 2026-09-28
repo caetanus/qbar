@@ -179,6 +179,12 @@ bool CaffeineModel::inhibit(bool enabled)
 bool CaffeineModel::inhibitWayland()
 {
 #ifdef QBAR_HAVE_WAYLAND
+    // Only on a Wayland platform: the "display" integration resource is the
+    // platform's own display handle, so on xcb it is an Xlib Display*, and
+    // marshalling Wayland requests on it segfaults inside libwayland-client.
+    if (!QGuiApplication::platformName().startsWith(QLatin1String("wayland"))) {
+        return false;
+    }
     if (m_window == nullptr) {
         return false;
     }
