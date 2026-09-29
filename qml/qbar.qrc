@@ -61,6 +61,7 @@
     <file>icons/caffeine-cup-full-black.svg</file>
     <file>popups/BatteryPopup.qml</file>
     <file>popups/UPowerPopup.qml</file>
+    <file>popups/PowerProfilesPopup.qml</file>
     <file>popups/UserPopup.qml</file>
     <file>popups/NetworkPopup.qml</file>
     <file>popups/CalendarPopup.qml</file>

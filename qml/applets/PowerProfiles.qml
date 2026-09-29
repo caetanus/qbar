@@ -28,9 +28,22 @@ QBar.CssRect {
     onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
     Component.onCompleted: preferredWidthUpdated(preferredWidth)
 
+    QBar.Popup {
+        id: popup
+        name: "power-profiles"
+        anchorItem: root
+        source: "qrc:/popups/PowerProfilesPopup.qml"
+        payload: ({ power: powerProfilesModel })
+        popupWidth: 240
+        popupHeight: 0   // 0 = size to the content's implicitHeight
+        gap: 2
+        placement: "below"
+        horizontalAlignment: "left"
+    }
+
     QBar.Tooltip {
         anchorItem: root
-        hovered: root.tooltipHovered
+        hovered: root.tooltipHovered && !popup.isOpen
         text: root.tooltipText
         side: "auto"
     }
@@ -108,6 +121,11 @@ QBar.CssRect {
         acceptedButtons: Qt.LeftButton
         cursorShape: Qt.PointingHandCursor
         onContainsMouseChanged: root.tooltipHovered = containsMouse
-        onClicked: if (powerProfilesModel) powerProfilesModel.cycle()
+        // Click opens the picker (profiles + CPU boost); scroll still cycles.
+        onClicked: popup.toggle()
+        onWheel: function (wheel) {
+            if (powerProfilesModel && wheel.angleDelta.y !== 0)
+                powerProfilesModel.cycle()
+        }
     }
 }

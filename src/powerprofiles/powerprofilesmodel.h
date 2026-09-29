@@ -18,6 +18,14 @@ class PowerProfilesModel final : public QObject {
     Q_PROPERTY(QStringList profiles READ profiles NOTIFY changed)
     Q_PROPERTY(QString displayText READ displayText NOTIFY changed)
     Q_PROPERTY(QString tooltipText READ tooltipText NOTIFY changed)
+    // CPU frequency boost (cpufreq/boost, or intel_pstate/no_turbo inverted).
+    // Read straight from sysfs; written through a pkexec'd helper, since the
+    // knob is root-only.
+    Q_PROPERTY(bool boostSupported READ boostSupported NOTIFY boostChanged)
+    Q_PROPERTY(bool boostWritable READ boostWritable NOTIFY boostChanged)
+    Q_PROPERTY(bool boost READ boost NOTIFY boostChanged)
+    Q_PROPERTY(bool boostPending READ boostPending NOTIFY boostChanged)
+    Q_PROPERTY(QString boostError READ boostError NOTIFY boostChanged)
 
 public:
     explicit PowerProfilesModel(QObject *parent = nullptr);
@@ -33,8 +41,17 @@ public:
     // Cycle through the daemon-reported profiles in order.
     Q_INVOKABLE void cycle();
 
+    bool boostSupported() const { return m_boostSupported; }
+    bool boostWritable() const;
+    bool boost() const { return m_boost; }
+    bool boostPending() const { return m_boostPending; }
+    QString boostError() const { return m_boostError; }
+    Q_INVOKABLE void setBoost(bool enabled);
+    Q_INVOKABLE void refreshBoost();
+
 signals:
     void changed();
+    void boostChanged();
 
 private slots:
     void handlePropertiesChanged(const QString &interface,
@@ -55,4 +72,9 @@ private:
     QString m_activeProfile;
     QStringList m_profiles;
     QDBusServiceWatcher *m_watcher = nullptr;
+
+    bool m_boostSupported = false;
+    bool m_boost = false;
+    bool m_boostPending = false;
+    QString m_boostError;
 };

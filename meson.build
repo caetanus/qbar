@@ -99,6 +99,9 @@ platform_sources = []
 platform_moc_headers = []
 platform_generated = []
 platform_args = []
+# CPU boost helper (run through pkexec; see data/cpu-boost/).
+cpu_boost_helper = get_option('prefix') / get_option('libexecdir') / 'qbar-cpu-boost'
+platform_args += ['-DQBAR_CPU_BOOST_HELPER="' + cpu_boost_helper + '"']
 platform_includes = []
 wayland_shell_plugin = []
 
@@ -572,6 +575,21 @@ endif
 install_data(
   'data/qbar.desktop',
   install_dir: get_option('datadir') / 'applications',
+)
+
+install_data(
+  'data/cpu-boost/qbar-cpu-boost',
+  install_dir: get_option('libexecdir'),
+  install_mode: 'rwxr-xr-x',
+)
+cpu_boost_conf = configuration_data()
+cpu_boost_conf.set('LIBEXECDIR', get_option('prefix') / get_option('libexecdir'))
+configure_file(
+  input: 'data/cpu-boost/org.qbar.cpu-boost.policy.in',
+  output: 'org.qbar.cpu-boost.policy',
+  configuration: cpu_boost_conf,
+  install: true,
+  install_dir: get_option('datadir') / 'polkit-1' / 'actions',
 )
 
 if get_option('tests')
