@@ -45,6 +45,10 @@ TestCase {
         property string currentWindowTitle: "Focused window"
         property string currentKeyboardLayout: "br"
         property string bindingMode: "default"
+        property var superWorkspace: ({})
+        property var superWorkspaces: []
+        property var commands: []
+        function runCommand(command) { commands = commands.concat([command]) }
     }
 
     QtObject {
@@ -209,6 +213,7 @@ TestCase {
 
         Applets.Workspaces { id: workspaces; y: 0 }
         Applets.I3Mode { id: i3Mode; y: 32 }
+        Applets.SuperWorkspace { id: superWorkspace; x: 200; y: 32 }
         Applets.CPU { id: cpu; y: 64 }
         Applets.Memory { id: memory; y: 96 }
         Applets.Network { id: network; y: 128 }
@@ -297,5 +302,39 @@ TestCase {
         compare(i3Mode.active, false, "I3Mode should become inactive again after leaving the binding mode")
         compare(i3Mode.preferredWidth, 0, "I3Mode preferredWidth should return to 0 after leaving the binding mode")
         compare(i3Mode.width, 0, "I3Mode should occupy no width again after leaving the binding mode")
+    }
+
+    function test_super_workspace_hidden_without_super_workspaces() {
+        i3Ipc.superWorkspace = ({})
+        i3Ipc.superWorkspaces = []
+        compare(superWorkspace.active, false, "SuperWorkspace should be inactive without super workspaces")
+        compare(superWorkspace.width, 0, "SuperWorkspace should occupy no width without super workspaces")
+
+        const only = { num: 0, name: "0:", focused: true, urgent: false }
+        i3Ipc.superWorkspace = only
+        i3Ipc.superWorkspaces = [only]
+        compare(superWorkspace.active, false, "SuperWorkspace should stay hidden with a single super workspace")
+    }
+
+    function test_super_workspace_shows_active_name() {
+        const personal = { num: 0, name: "0:", focused: false, urgent: false }
+        const acme = { num: 1, name: "1:acme", focused: true, urgent: false }
+        i3Ipc.superWorkspace = acme
+        i3Ipc.superWorkspaces = [personal, acme]
+        compare(superWorkspace.active, true, "SuperWorkspace should be active with several super workspaces")
+        compare(superWorkspace.label, "[1:acme]", "SuperWorkspace should show the active super workspace")
+        verify(superWorkspace.width >= 1, "SuperWorkspace should have a positive width")
+        compare(superWorkspace.othersUrgent, false, "No other super workspace is urgent")
+
+        i3Ipc.superWorkspaces = [{ num: 0, name: "0:", focused: false, urgent: true }, acme]
+        compare(superWorkspace.othersUrgent, true, "An urgent inactive super workspace should be reported")
+        compare(superWorkspace.cssClass, ["urgent"], "SuperWorkspace should get the urgent class")
+
+        i3Ipc.commands = []
+        superWorkspace.cycle(1)
+        compare(i3Ipc.commands, ["super_workspace number 0"], "The wheel should cycle to the next super workspace")
+
+        i3Ipc.superWorkspace = ({})
+        i3Ipc.superWorkspaces = []
     }
 }

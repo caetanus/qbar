@@ -19,6 +19,7 @@
     <file>applets/Brightness.qml</file>
     <file>applets/CustomTool.qml</file>
     <file>applets/I3Mode.qml</file>
+    <file>applets/SuperWorkspace.qml</file>
     <file>applets/Media.qml</file>
     <file>applets/Dock.qml</file>
     <file>applets/Memory.qml</file>

@@ -21,6 +21,7 @@ constexpr quint32 eventBit = 1u << 31u;
 constexpr quint32 workspaceEvent = eventBit | 0u;
 constexpr quint32 modeEvent = eventBit | 2u;
 constexpr quint32 windowEvent = eventBit | 3u;
+constexpr quint32 superWorkspaceEvent = eventBit | 8u;
 constexpr quint32 inputEvent = eventBit | 21u;
 
 void appendUint32(QByteArray *buffer, quint32 value)
@@ -468,6 +469,7 @@ void I3IpcClient::connectSockets()
         if (m_commandSocket.waitForConnected(100)) {
             requestWorkspaces();
             requestInputs();
+            requestSuperWorkspaces();
             requestTreeSnapshot();
             flushPendingCommands();
         }
@@ -490,11 +492,22 @@ void I3IpcClient::requestInputs()
     }
 }
 
+void I3IpcClient::requestSuperWorkspaces()
+{
+    // Only our i3 fork knows GET_SUPER_WORKSPACES; stock i3 ignores it and sway
+    // does not know it at all.
+    if (!supportsSwayInputs()) {
+        sendMessage(&m_commandSocket, GetSuperWorkspaces);
+    }
+}
+
 void I3IpcClient::subscribeWorkspaceEvents()
 {
+    // sway rejects the whole subscription on unknown event names, so only
+    // subscribe to super_workspace (our i3 fork) on i3; stock i3 accepts it.
     sendMessage(&m_eventSocket, Subscribe, supportsSwayInputs()
                     ? QByteArrayLiteral("[\"workspace\",\"window\",\"mode\",\"input\"]")
-                    : QByteArrayLiteral("[\"workspace\",\"window\",\"mode\"]"));
+                    : QByteArrayLiteral("[\"workspace\",\"window\",\"mode\",\"super_workspace\"]"));
 }
 
 void I3IpcClient::sendMessage(QLocalSocket *socket, MessageType type, const QByteArray &payload)
@@ -584,6 +597,23 @@ void I3IpcClient::handleMessage(quint32 type, const QByteArray &payload, bool ev
             requestTreeSnapshot();
         } else if (type == inputEvent) {
             requestInputs();
+        } else if (type == superWorkspaceEvent) {
+            // The event carries the full GET_SUPER_WORKSPACES state. Switching
+            // swaps the whole workspace set without an event per workspace.
+            setSuperWorkspaces(event);
+            if (change == QStringLiteral("focus")) {
+                emit workspaceFocusEvent();
+                requestWorkspaces();
+                requestTreeSnapshot();
+            }
+        }
+        return;
+    }
+
+    if (type == GetSuperWorkspaces) {
+        const auto document = QJsonDocument::fromJson(payload);
+        if (document.isObject()) {
+            setSuperWorkspaces(document.object());
         }
         return;
     }
@@ -688,6 +718,37 @@ void I3IpcClient::setScratchpadCount(int count)
 
     m_scratchpadCount = count;
     emit scratchpadCountChanged();
+}
+
+QVariantMap I3IpcClient::superWorkspace() const
+{
+    return m_superWorkspace;
+}
+
+QVariantList I3IpcClient::superWorkspaces() const
+{
+    return m_superWorkspaces;
+}
+
+bool I3IpcClient::superWorkspaceNotificationsAll() const
+{
+    return m_superWorkspaceNotificationsAll;
+}
+
+void I3IpcClient::setSuperWorkspaces(const QJsonObject &state)
+{
+    const QVariantMap current = state.value(QStringLiteral("current")).toObject().toVariantMap();
+    const QVariantList all = state.value(QStringLiteral("super_workspaces")).toArray().toVariantList();
+    const bool notificationsAll = state.value(QStringLiteral("notifications")).toString() == QStringLiteral("all");
+    if (current == m_superWorkspace && all == m_superWorkspaces
+        && notificationsAll == m_superWorkspaceNotificationsAll) {
+        return;
+    }
+
+    m_superWorkspace = current;
+    m_superWorkspaces = all;
+    m_superWorkspaceNotificationsAll = notificationsAll;
+    emit superWorkspacesChanged();
 }
 
 bool I3IpcClient::supportsSwayInputs() const
