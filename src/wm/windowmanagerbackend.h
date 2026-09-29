@@ -2,6 +2,8 @@
 
 #include <QObject>
 #include <QString>
+#include <QVariantList>
+#include <QVariantMap>
 
 #include "windowmodel.h"
 
@@ -15,6 +17,9 @@ class WindowManagerBackend : public QObject {
     Q_PROPERTY(qint64 focusedContainerId READ focusedContainerId NOTIFY focusedContainerChanged)
     Q_PROPERTY(QString bindingMode READ bindingMode NOTIFY bindingModeChanged)
     Q_PROPERTY(int scratchpadCount READ scratchpadCount NOTIFY scratchpadCountChanged)
+    Q_PROPERTY(QVariantMap superWorkspace READ superWorkspace NOTIFY superWorkspacesChanged)
+    Q_PROPERTY(QVariantList superWorkspaces READ superWorkspaces NOTIFY superWorkspacesChanged)
+    Q_PROPERTY(bool superWorkspaceNotificationsAll READ superWorkspaceNotificationsAll NOTIFY superWorkspacesChanged)
 
 public:
     explicit WindowManagerBackend(QObject *parent = nullptr);
@@ -33,6 +38,15 @@ public:
     // Number of windows stashed in the i3/sway scratchpad; other backends report 0
     // and the Scratchpad applet hides itself.
     virtual int scratchpadCount() const { return 0; }
+    // Super workspaces of our i3 fork (independent sets of workspaces, one
+    // active at a time): the active one and all known ones, as maps with
+    // num/name/user/focused/urgent/workspaces. Other backends report none and
+    // the SuperWorkspace applet hides itself.
+    virtual QVariantMap superWorkspace() const { return {}; }
+    virtual QVariantList superWorkspaces() const { return {}; }
+    // Whether notifications of all super workspaces should be shown, or only
+    // the ones of the active super workspace.
+    virtual bool superWorkspaceNotificationsAll() const { return false; }
 
 public slots:
     virtual void start() = 0;
@@ -58,6 +72,7 @@ signals:
     void workspaceFocusEvent();
     void bindingModeChanged();
     void scratchpadCountChanged();
+    void superWorkspacesChanged();
 
 protected:
     WindowModel m_windows;

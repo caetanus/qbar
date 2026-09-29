@@ -179,7 +179,8 @@ qbar reads `$XDG_CONFIG_HOME/qbar/config.json` (default `~/.config/qbar/config.j
 }
 ```
 
-Built-in modules include: `Workspaces`, `Title`, `Taskbar`, `Scratchpad`, `I3Mode`, `CPU`,
+Built-in modules include: `Workspaces`, `Title`, `Taskbar`, `Scratchpad`, `I3Mode`,
+`SuperWorkspace` (super workspaces of the caetanus/i3 fork), `CPU`,
 `Memory`, `Load`, `Temperature`, `Network`, `NetworkManager`, `Disk`, `Sound`, `Media` (MPRIS),
 `Mpd`, `Battery`, `UPower` (peripheral batteries), `Brightness`, `Bluetooth`, `PowerProfiles`,
 `Caffeine`, `Redshift` (night colour temperature), `Privacy` (mic/camera in use), `XInput`

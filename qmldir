@@ -22,6 +22,7 @@ NetworkManager 1.0 qml/applets/NetworkManager.qml
 PowerProfiles 1.0 qml/applets/PowerProfiles.qml
 Redshift 1.0 qml/applets/Redshift.qml
 Sound 1.0 qml/applets/Sound.qml
+SuperWorkspace 1.0 qml/applets/SuperWorkspace.qml
 Taskbar 1.0 qml/applets/Taskbar.qml
 Temperature 1.0 qml/applets/Temperature.qml
 Title 1.0 qml/applets/Title.qml

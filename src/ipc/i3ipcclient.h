@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QJsonObject>
 #include <QLocalSocket>
 #include <QStringList>
 #include <QTimer>
@@ -25,6 +26,9 @@ public:
     qint64 focusedContainerId() const override;
     QString bindingMode() const override;
     int scratchpadCount() const override;
+    QVariantMap superWorkspace() const override;
+    QVariantList superWorkspaces() const override;
+    bool superWorkspaceNotificationsAll() const override;
 
 public slots:
     void start() override;
@@ -52,6 +56,7 @@ private slots:
     void handleEventDisconnected();
     void requestWorkspaces();
     void requestInputs();
+    void requestSuperWorkspaces();
     void subscribeWorkspaceEvents();
     void flushPendingCommands();
 
@@ -61,6 +66,7 @@ private:
         GetWorkspaces = 1,
         Subscribe = 2,
         GetTree = 4,
+        GetSuperWorkspaces = 13,
         GetInputs = 100,
     };
 
@@ -73,6 +79,7 @@ private:
     void setFocusedContainerId(qint64 containerId);
     void setBindingMode(const QString &mode);
     void setScratchpadCount(int count);
+    void setSuperWorkspaces(const QJsonObject &state);
     bool supportsSwayInputs() const;
     QString socketPath() const;
 
@@ -82,6 +89,9 @@ private:
     qint64 m_focusedContainerId = -1;
     QString m_bindingMode = QStringLiteral("default");
     int m_scratchpadCount = 0;
+    QVariantMap m_superWorkspace;
+    QVariantList m_superWorkspaces;
+    bool m_superWorkspaceNotificationsAll = false;
     QLocalSocket m_commandSocket;
     QLocalSocket m_eventSocket;
     QByteArray m_commandBuffer;
