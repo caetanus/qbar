@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QAbstractNativeEventFilter>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -21,7 +22,7 @@ class QQuickView;
 //
 // The controller is cheap to construct and creates no window until the proxy first
 // reports a non-empty slot, so bars without a Dock applet pay nothing.
-class DockWindow final : public QObject {
+class DockWindow final : public QObject, public QAbstractNativeEventFilter {
     Q_OBJECT
 
 public:
@@ -54,8 +55,18 @@ private slots:
     // expands with the fisheye and shrinks back at rest).
     void applyGeometry();
 
+public:
+    // X11: the dock is override-redirect, so the WM never restacks it — and i3
+    // raising the bar's frame (reload, remap) buries the dock under the bar,
+    // where it stays visible through the bar's transparent centre but every
+    // click and hover lands on the bar. Keep the dock stacked directly above
+    // the bar's frame (not above everything, so fullscreen windows still win).
+    bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
+
 private:
     void ensureView();
+    void stackAboveBar();
+    void watchRootRestacks();
 
     QQmlEngine *m_engine = nullptr;
     QVariantMap m_theme;
@@ -66,4 +77,6 @@ private:
     QPointer<QWindow> m_barWindow;
     QPointer<QQuickView> m_view;
     QRect m_slot;   // proxy rectangle in global coordinates
+    quint32 m_barFrame = 0;  // X11: the bar's top-level (WM frame) window
+    bool m_watchingRoot = false;
 };

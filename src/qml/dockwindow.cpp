@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -12,12 +13,50 @@
 #include <QScreen>
 #include <QWindow>
 
+#include <cstdlib>
+
+#ifdef QBAR_HAVE_X11
+#include <qguiapplication_platform.h>
+#include <xcb/xcb.h>
+#endif
+
 namespace {
 
 bool onX11()
 {
     return QGuiApplication::platformName().startsWith(QLatin1String("xcb"));
 }
+
+#ifdef QBAR_HAVE_X11
+xcb_connection_t *x11Connection()
+{
+    auto *native = qGuiApp != nullptr
+        ? qGuiApp->nativeInterface<QNativeInterface::QX11Application>()
+        : nullptr;
+    return native != nullptr ? native->connection() : nullptr;
+}
+
+// The window's top-level ancestor (a direct child of the root): for a managed
+// client that is its WM frame, the thing the WM actually restacks.
+xcb_window_t topLevelOf(xcb_connection_t *conn, xcb_window_t window)
+{
+    xcb_window_t current = window;
+    for (int depth = 0; depth < 16; ++depth) {
+        auto *tree = xcb_query_tree_reply(conn, xcb_query_tree(conn, current), nullptr);
+        if (tree == nullptr) {
+            return XCB_WINDOW_NONE;
+        }
+        const xcb_window_t parent = tree->parent;
+        const xcb_window_t root = tree->root;
+        std::free(tree);
+        if (parent == root || parent == XCB_WINDOW_NONE) {
+            return current;
+        }
+        current = parent;
+    }
+    return XCB_WINDOW_NONE;
+}
+#endif
 
 int barHeightOf(QWindow *bar)
 {
@@ -61,6 +100,9 @@ DockWindow::DockWindow(QQmlEngine *engine,
 
 DockWindow::~DockWindow()
 {
+    if (m_watchingRoot) {
+        QCoreApplication::instance()->removeNativeEventFilter(this);
+    }
     if (m_view != nullptr) {
         m_view->close();
         m_view->deleteLater();
@@ -79,6 +121,87 @@ void DockWindow::setSlotGeometry(int gx, int gy, int gw, int gh)
     if (m_view != nullptr && !m_view->isVisible()) {
         m_view->show();
     }
+    if (onX11()) {
+        watchRootRestacks();
+        stackAboveBar();
+    }
+}
+
+void DockWindow::stackAboveBar()
+{
+#ifdef QBAR_HAVE_X11
+    if (m_view == nullptr || !m_view->isVisible() || m_barWindow == nullptr) {
+        return;
+    }
+    xcb_connection_t *conn = x11Connection();
+    if (conn == nullptr) {
+        return;
+    }
+    // Re-resolve every time: the WM may re-frame the bar (i3 reload/remap).
+    m_barFrame = topLevelOf(conn, static_cast<xcb_window_t>(m_barWindow->winId()));
+    const auto dock = static_cast<xcb_window_t>(m_view->winId());
+    if (m_barFrame == XCB_WINDOW_NONE || m_barFrame == dock) {
+        return;
+    }
+    const uint32_t values[] = {m_barFrame, XCB_STACK_MODE_ABOVE};
+    xcb_configure_window(conn, dock, XCB_CONFIG_WINDOW_SIBLING | XCB_CONFIG_WINDOW_STACK_MODE, values);
+    xcb_flush(conn);
+#endif
+}
+
+void DockWindow::watchRootRestacks()
+{
+#ifdef QBAR_HAVE_X11
+    if (m_watchingRoot) {
+        return;
+    }
+    xcb_connection_t *conn = x11Connection();
+    if (conn == nullptr) {
+        return;
+    }
+    const xcb_window_t root = xcb_setup_roots_iterator(xcb_get_setup(conn)).data->root;
+    // CW_EVENT_MASK replaces this client's whole selection on the root, and we
+    // share Qt's connection — OR in SubstructureNotify, keep everything else.
+    auto *attributes = xcb_get_window_attributes_reply(
+        conn, xcb_get_window_attributes(conn, root), nullptr);
+    const uint32_t mask = (attributes != nullptr ? attributes->your_event_mask : 0)
+        | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY;
+    std::free(attributes);
+    xcb_change_window_attributes(conn, root, XCB_CW_EVENT_MASK, &mask);
+    xcb_flush(conn);
+    QCoreApplication::instance()->installNativeEventFilter(this);
+    m_watchingRoot = true;
+#endif
+}
+
+bool DockWindow::nativeEventFilter(const QByteArray &eventType, void *message, qintptr *)
+{
+#ifdef QBAR_HAVE_X11
+    if (m_barFrame == 0 || eventType != QByteArrayLiteral("xcb_generic_event_t")) {
+        return false;
+    }
+    auto *event = static_cast<xcb_generic_event_t *>(message);
+    switch (event->response_type & 0x7f) {
+    case XCB_CONFIGURE_NOTIFY:
+        if (reinterpret_cast<xcb_configure_notify_event_t *>(event)->window == m_barFrame) {
+            stackAboveBar();
+        }
+        break;
+    case XCB_MAP_NOTIFY:
+        // A (re)mapped frame may be the bar's new one after an i3 reload.
+        if (reinterpret_cast<xcb_map_notify_event_t *>(event)->window
+            != static_cast<xcb_window_t>(m_view != nullptr ? m_view->winId() : 0)) {
+            stackAboveBar();
+        }
+        break;
+    default:
+        break;
+    }
+#else
+    Q_UNUSED(eventType)
+    Q_UNUSED(message)
+#endif
+    return false;
 }
 
 void DockWindow::hideDock()
