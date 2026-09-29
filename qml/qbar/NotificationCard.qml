@@ -294,6 +294,7 @@ Item {
             property real cornerRadius: bg.clampedRadius(0) / Math.max(1, Math.min(width, height))
             property real padding: 0
             property real intensity: Math.max(0, Math.min(1, parseFloat(bg.style["emboss"])))
+            property size itemSize: Qt.size(width, height)
             fragmentShader: "qrc:/qbar/shaders/PopupEmboss.frag.qsb"
         }
     }

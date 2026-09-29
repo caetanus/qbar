@@ -3,7 +3,13 @@
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
 
+// ShaderEffect shares one uniform buffer with its (default) vertex shader:
+// qt_Matrix must sit at offset 0 and qt_Opacity at 64, even when unused here.
+// Without them, baseColor aliased the matrix and the card body came out
+// fully transparent.
 layout(std140, binding = 0) uniform buf {
+    mat4 qt_Matrix;
+    float qt_Opacity;
     vec4 baseColor;
     vec4 highlightColor;
     vec4 shadowColor;
@@ -11,14 +17,21 @@ layout(std140, binding = 0) uniform buf {
     float cornerRadius;
     float padding;
     float intensity;
+    vec2 itemSize;   // px; the mask is computed in pixels, not UV
 };
 
+// Rounded-rectangle coverage in pixels (1px antialiased edge). `radius` is
+// normalised to the item's shorter side, as the QML side passes it. In UV
+// space a non-square card would get elliptical corners, and dropping the
+// SDF's `- r` term shrinks the whole box by r on every side.
 float roundedMask(vec2 p, float radius)
 {
-    vec2 q = abs(p - vec2(0.5)) - vec2(0.5 - radius);
-    float outside = length(max(q, vec2(0.0)));
-    float inside = min(max(q.x, q.y), 0.0);
-    return 1.0 - smoothstep(0.0, 0.004, outside + inside);
+    vec2 size = max(itemSize, vec2(1.0));
+    float r = radius * min(size.x, size.y);
+    vec2 halfSize = size * 0.5;
+    vec2 q = abs(p * size - halfSize) - (halfSize - vec2(r));
+    float d = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - r;
+    return 1.0 - smoothstep(-0.75, 0.75, d);
 }
 
 void main()
@@ -46,5 +59,8 @@ void main()
     color = mix(color, shadowColor.rgb, dark * intensity);
     color = mix(color, baseColor.rgb * 1.10, clamp(1.0 - abs(p.y - 0.25) * 3.0, 0.0, 1.0) * 0.08);
 
-    fragColor = vec4(color, baseColor.a * alpha);
+    // Qt Quick blends premultiplied: scale rgb by the final alpha, and honour
+    // the item opacity (the card's fade in/out).
+    float a = baseColor.a * alpha * qt_Opacity;
+    fragColor = vec4(color * a, a);
 }
