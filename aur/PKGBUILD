@@ -37,7 +37,6 @@ optdepends=(
   'wireplumber: native WirePlumber audio backend (else libpulse)'
   'libpipewire: privacy mic/camera in-use indicator'
   'pam: qbar-lock lock screen'
-  'polkit: CPU boost toggle in the power-profiles popup (pkexec)'
   'ttf-jetbrains-mono-nerd: full JetBrains Mono Nerd Font for ricing (AUR)'
 )
 makedepends=(

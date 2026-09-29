@@ -11,8 +11,7 @@
 #include <QDBusServiceWatcher>
 #include <QDBusVariant>
 #include <QFile>
-#include <QFileInfo>
-#include <QProcess>
+#include <QTimer>
 
 namespace {
 constexpr auto kLegacyService = "net.hadess.PowerProfiles";
@@ -25,9 +24,6 @@ constexpr auto kUPowerPath = "/org/freedesktop/UPower/PowerProfiles";
 constexpr auto kUPowerInterface = "org.freedesktop.UPower.PowerProfiles";
 constexpr auto kPropsInterface = "org.freedesktop.DBus.Properties";
 
-#ifndef QBAR_CPU_BOOST_HELPER
-#define QBAR_CPU_BOOST_HELPER "/usr/lib/qbar-cpu-boost"
-#endif
 constexpr auto kIntelNoTurbo = "/sys/devices/system/cpu/intel_pstate/no_turbo";
 constexpr auto kCpufreqBoost = "/sys/devices/system/cpu/cpufreq/boost";
 constexpr auto kPolicy0Boost = "/sys/devices/system/cpu/cpufreq/policy0/boost";
@@ -75,21 +71,18 @@ PowerProfilesModel::PowerProfilesModel(QObject *parent)
     refreshBoost();
 }
 
-bool PowerProfilesModel::boostWritable() const
-{
-    return m_boostSupported && QFileInfo(QStringLiteral(QBAR_CPU_BOOST_HELPER)).isExecutable();
-}
-
 void PowerProfilesModel::refreshBoost()
 {
-    // Same precedence as the helper: intel_pstate's inverted knob first.
+    // The daemon writes the per-policy knob (amd_pstate leaves the global
+    // cpufreq/boost at 1 even in power-saver), so policy0 is the effective
+    // value; intel_pstate has its own inverted switch.
     int value = readSysfsFlag(kIntelNoTurbo);
     if (value >= 0) {
         value = 1 - value;
     } else {
-        value = readSysfsFlag(kCpufreqBoost);
+        value = readSysfsFlag(kPolicy0Boost);
         if (value < 0) {
-            value = readSysfsFlag(kPolicy0Boost);
+            value = readSysfsFlag(kCpufreqBoost);
         }
     }
     const bool supported = value >= 0;
@@ -99,43 +92,6 @@ void PowerProfilesModel::refreshBoost()
         m_boost = boost;
         emit boostChanged();
     }
-}
-
-void PowerProfilesModel::setBoost(bool enabled)
-{
-    if (!boostWritable() || m_boostPending || enabled == m_boost) {
-        return;
-    }
-    m_boostPending = true;
-    m_boostError.clear();
-    emit boostChanged();
-
-    auto *process = new QProcess(this);
-    connect(process, &QProcess::finished, this, [this, process](int exitCode, QProcess::ExitStatus status) {
-        m_boostPending = false;
-        if (status != QProcess::NormalExit || exitCode != 0) {
-            // pkexec: 126 = dismissed / not authorized, 127 = auth failed.
-            const QString stderrText = QString::fromUtf8(process->readAllStandardError()).trimmed();
-            m_boostError = (exitCode == 126 || exitCode == 127)
-                ? tr("Not authorized to change CPU boost")
-                : (stderrText.isEmpty() ? tr("Could not change CPU boost") : stderrText);
-        }
-        process->deleteLater();
-        emit boostChanged();
-        refreshBoost();
-    });
-    connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
-        if (error != QProcess::FailedToStart) {
-            return;
-        }
-        m_boostPending = false;
-        m_boostError = tr("pkexec is not available");
-        process->deleteLater();
-        emit boostChanged();
-    });
-    process->start(QStringLiteral("pkexec"),
-                   {QStringLiteral(QBAR_CPU_BOOST_HELPER),
-                    enabled ? QStringLiteral("1") : QStringLiteral("0")});
 }
 
 void PowerProfilesModel::connectToService()
@@ -238,6 +194,11 @@ void PowerProfilesModel::handlePropertiesChanged(const QString &interface,
 
 void PowerProfilesModel::applyActiveProfile(const QString &profile)
 {
+    if (profile != m_activeProfile) {
+        // The daemon rewrites the per-policy boost as part of the switch;
+        // re-read it once that has landed.
+        QTimer::singleShot(250, this, &PowerProfilesModel::refreshBoost);
+    }
     m_activeProfile = profile;
 }
 

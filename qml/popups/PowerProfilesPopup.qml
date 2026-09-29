@@ -1,7 +1,9 @@
 import QtQuick
 import "qrc:/qbar" as QBar
 
-// Power profile picker (power-profiles-daemon) + CPU frequency boost switch.
+// Power profile picker (power-profiles-daemon) + the CPU boost state the
+// daemon set (read-only: ppd has no boost API; it ties boost to the profile
+// and, on laptops, to battery/AC).
 // Fed the live PowerProfilesModel via payload, so it updates while open.
 Item {
     id: root
@@ -14,7 +16,6 @@ Item {
     readonly property color fg: popupStyle["color"] ? cssTheme.parseColor(popupStyle["color"]) : theme.foreground
     readonly property color fgSoft: Qt.rgba(fg.r, fg.g, fg.b, 0.6)
     readonly property color accent: theme.accent !== undefined ? cssTheme.parseColor(theme.accent) : "#1e66f5"
-    readonly property color errorColor: "#e64553"
 
     function profileLabel(p) {
         if (p === "performance") return qsTr("Performance")
@@ -41,13 +42,21 @@ Item {
         var items = 1
         h += profiles.length * rowHeight; items += profiles.length
         if (showBoost) { h += 1 + boostHeight; items += 2 }
-        if (power && power.boostError.length > 0) { h += errorText.implicitHeight; items += 1 }
         return 24 + h + (items - 1) * col.spacing
     }
     height: implicitHeight
 
-    // sysfs has no change notification: re-read the boost state on open.
-    Component.onCompleted: if (power) power.refreshBoost()
+    // sysfs has no change notification, and the daemon can flip boost without a
+    // profile change (battery-aware on laptops: AC plug/unplug). Re-read while
+    // the popup is showing; the shell is reused across opens, so key off
+    // visibility rather than creation.
+    Timer {
+        interval: 2000
+        repeat: true
+        triggeredOnStart: true
+        running: root.visible && root.power !== null
+        onTriggered: root.power.refreshBoost()
+    }
 
     Column {
         id: col
@@ -124,7 +133,7 @@ Item {
             visible: root.showBoost
         }
 
-        // CPU boost switch.
+        // CPU boost, as the daemon set it.
         Item {
             width: col.width
             height: root.boostHeight
@@ -140,58 +149,33 @@ Item {
                     font.family: theme.fontFamily
                     font.pointSize: theme.fontSize
                 }
-                // Always laid out (empty = blank line) so the popup's height
-                // doesn't change after it has been placed.
                 Text {
-                    text: !root.power ? ""
-                        : (!root.power.boostWritable ? qsTr("helper not installed")
-                        : (root.power.boostPending ? qsTr("applying…") : ""))
+                    text: qsTr("set by power-profiles-daemon")
                     color: root.fgSoft
                     font.family: theme.fontFamily
                     font.pointSize: theme.fontSize - 2
                 }
             }
 
-            // Toggle switch.
-            Rectangle {
-                id: track
+            Row {
                 readonly property bool on: root.power ? root.power.boost : false
-                readonly property bool enabled: root.power && root.power.boostWritable && !root.power.boostPending
                 anchors.right: parent.right
                 anchors.rightMargin: 8
                 anchors.verticalCenter: parent.verticalCenter
-                width: 34; height: 18; radius: 9
-                opacity: enabled ? 1.0 : 0.45
-                color: on ? root.accent : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.25)
-                Behavior on color { ColorAnimation { duration: 120 } }
-
+                spacing: 6
                 Rectangle {
-                    width: 14; height: 14; radius: 7
                     anchors.verticalCenter: parent.verticalCenter
-                    x: track.on ? track.width - width - 2 : 2
-                    color: "#ffffff"
-                    Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                    width: 8; height: 8; radius: 4
+                    color: parent.on ? root.accent : root.fgSoft
                 }
-
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: track.enabled
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.power.setBoost(!track.on)
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: parent.on ? qsTr("On") : qsTr("Off")
+                    color: parent.on ? root.fg : root.fgSoft
+                    font.family: theme.fontFamily
+                    font.pointSize: theme.fontSize
                 }
             }
-        }
-
-        Text {
-            id: errorText
-            width: col.width
-            visible: root.power && root.power.boostError.length > 0
-            text: root.power ? root.power.boostError : ""
-            color: root.errorColor
-            wrapMode: Text.Wrap
-            leftPadding: 8
-            font.family: theme.fontFamily
-            font.pointSize: theme.fontSize - 2
         }
     }
 }
