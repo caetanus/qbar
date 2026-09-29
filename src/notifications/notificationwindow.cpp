@@ -250,7 +250,26 @@ void NotificationWindow::applyGeometry()
     if (screen == nullptr) {
         screen = QGuiApplication::primaryScreen();
     }
-    const QRect area = screen != nullptr ? screen->availableGeometry() : QRect(0, 0, width, 600);
+    QRect area = screen != nullptr ? screen->availableGeometry() : QRect(0, 0, width, 600);
+    if (onX11() && screen != nullptr) {
+        // i3 publishes no _NET_WORKAREA, so availableGeometry() is the whole
+        // screen there — the toasts would slide under/over our own bars. Carve
+        // out the space every exclusive qbar bar on this monitor reserves.
+        // (Wayland needs none of this: the layer-shell exclusive zones do it.)
+        for (QWindow *window : QGuiApplication::topLevelWindows()) {
+            const QVariant position = window->property("qbarBarPosition");
+            if (!position.isValid() || !window->isVisible() || window->screen() != screen
+                || !window->property("qbarBarExclusive").toBool()) {
+                continue;
+            }
+            const QRect bar = window->geometry();
+            if (position.toString() == QLatin1String("bottom")) {
+                area.setBottom(qMin(area.bottom(), bar.top() - 1));
+            } else {
+                area.setTop(qMax(area.top(), bar.bottom() + 1));
+            }
+        }
+    }
     const int surfaceHeight = qMax(1, area.height() - marginTop - marginBottom);
 
     if (onX11()) {
