@@ -92,6 +92,10 @@ private:
     QVariantMap m_superWorkspace;
     QVariantList m_superWorkspaces;
     bool m_superWorkspaceNotificationsAll = false;
+    // sway: whether it knows super workspaces (caetanus/sway), found out by a
+    // separate SUBSCRIBE to super_workspace after the regular one
+    bool m_swaySuperWorkspaces = false;
+    int m_subscribeReplies = 0;
     QLocalSocket m_commandSocket;
     QLocalSocket m_eventSocket;
     QByteArray m_commandBuffer;

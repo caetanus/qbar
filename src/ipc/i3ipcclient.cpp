@@ -494,20 +494,30 @@ void I3IpcClient::requestInputs()
 
 void I3IpcClient::requestSuperWorkspaces()
 {
-    // Only our i3 fork knows GET_SUPER_WORKSPACES; stock i3 ignores it and sway
-    // does not know it at all.
-    if (!supportsSwayInputs()) {
+    // Only our i3 and sway forks know GET_SUPER_WORKSPACES; stock i3 ignores it
+    // and stock sway does not know it at all, so on sway wait for the
+    // super_workspace subscription to succeed.
+    if (!supportsSwayInputs() || m_swaySuperWorkspaces) {
         sendMessage(&m_commandSocket, GetSuperWorkspaces);
     }
 }
 
 void I3IpcClient::subscribeWorkspaceEvents()
 {
-    // sway rejects the whole subscription on unknown event names, so only
-    // subscribe to super_workspace (our i3 fork) on i3; stock i3 accepts it.
-    sendMessage(&m_eventSocket, Subscribe, supportsSwayInputs()
-                    ? QByteArrayLiteral("[\"workspace\",\"window\",\"mode\",\"input\"]")
-                    : QByteArrayLiteral("[\"workspace\",\"window\",\"mode\",\"super_workspace\"]"));
+    // sway rejects the whole subscription on unknown event names, so on sway
+    // super_workspace (our sway fork) gets a SUBSCRIBE of its own: stock sway
+    // answers it with success false and keeps the regular subscription. Stock
+    // i3 accepts unknown names.
+    m_swaySuperWorkspaces = false;
+    m_subscribeReplies = 0;
+    if (supportsSwayInputs()) {
+        sendMessage(&m_eventSocket, Subscribe,
+                    QByteArrayLiteral("[\"workspace\",\"window\",\"mode\",\"input\"]"));
+        sendMessage(&m_eventSocket, Subscribe, QByteArrayLiteral("[\"super_workspace\"]"));
+    } else {
+        sendMessage(&m_eventSocket, Subscribe,
+                    QByteArrayLiteral("[\"workspace\",\"window\",\"mode\",\"super_workspace\"]"));
+    }
 }
 
 void I3IpcClient::sendMessage(QLocalSocket *socket, MessageType type, const QByteArray &payload)
@@ -568,6 +578,16 @@ void I3IpcClient::handleMessage(quint32 type, const QByteArray &payload, bool ev
         const auto document = QJsonDocument::fromJson(payload);
         const QJsonObject event = document.object();
         const QString change = event.value(QStringLiteral("change")).toString();
+
+        if (type == Subscribe) {
+            // On sway, the second reply answers the super_workspace subscription
+            if (supportsSwayInputs() && ++m_subscribeReplies == 2
+                && event.value(QStringLiteral("success")).toBool()) {
+                m_swaySuperWorkspaces = true;
+                requestSuperWorkspaces();
+            }
+            return;
+        }
 
         if (type == workspaceEvent) {
             if (change == QStringLiteral("focus")) {
