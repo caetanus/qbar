@@ -96,6 +96,10 @@ QBar.CssRect {
             return
         root._inFlight = true
         var symbol = root.tick.symbol
+        // The tick can change while this request is out — the per-bar config (toolId) lands
+        // after creation, or the user scrolls the carousel. Never paint one symbol's price
+        // under another's label: drop the answer and ask again for the current symbol.
+        var superseded = false
         Fetch.fetch("https://api.binance.com/api/v3/ticker/24hr?symbol=" + encodeURIComponent(symbol), { timeout: 10000 })
             .then((r) => {
                 if (!r.ok)
@@ -103,6 +107,10 @@ QBar.CssRect {
                 return r.json()
             })
             .then((d) => {
+                if (symbol !== root.tick.symbol) {
+                    superseded = true
+                    return
+                }
                 root.price = parseFloat(d.lastPrice)
                 root.changePct = parseFloat(d.priceChangePercent)
                 root.loaded = true
@@ -110,6 +118,10 @@ QBar.CssRect {
                 root._failed = false
             })
             .catch((e) => {
+                if (symbol !== root.tick.symbol) {
+                    superseded = true
+                    return
+                }
                 console.warn("crypto widget: ticker fetch failed for", symbol, e)
                 root._failed = true
                 if (root.loaded)
@@ -117,6 +129,10 @@ QBar.CssRect {
             })
             .then(() => {
                 root._inFlight = false
+                if (superseded) {
+                    root.refresh()
+                    return
+                }
                 pollTimer.interval = root._failed ? root._retryMs : root._pollMs
                 pollTimer.restart()
             })
@@ -131,6 +147,11 @@ QBar.CssRect {
             return value.toFixed(value >= 100 ? 0 : 2)
         return value.toPrecision(3)
     }
+
+    // A new symbol for the shown slot (config arriving, ticks edited) starts over from
+    // "loading" instead of keeping the previous symbol's price on screen.
+    readonly property string tickSymbol: tick.symbol
+    onTickSymbolChanged: setActiveIndex(activeIndex)
 
     Component.onCompleted: {
         preferredWidthUpdated(preferredWidth)
