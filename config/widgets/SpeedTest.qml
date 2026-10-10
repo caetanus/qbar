@@ -6,12 +6,14 @@ import "qrc:/qbar/Fetch.js" as Fetch
 // Speed-test widget — an EXTERNAL runtime widget (lives in ~/.config/qbar/widgets, NOT
 // compiled into qbar). Click to open the popup and run an on-demand test.
 //
-// How it measures (like a normal speed test): it opens several parallel streams from
-// Cloudflare's keyless endpoint (speed.cloudflare.com/__down) and TALLIES THE BYTES as they
-// arrive — via NetReply's downloadProgress events (`Http.request(...).downloadProgress`) —
-// then divides bytes by elapsed time. A short warm-up is discarded so TCP slow-start doesn't
-// drag the figure down; the measurement window that follows is the reported throughput.
-// Ping is the min round-trip of a few tiny requests. Upload isn't measured in this version.
+// How it measures (like a normal speed test): it opens several parallel streams against
+// Cloudflare's keyless endpoint (speed.cloudflare.com/__down and __up) and tallies the bytes
+// that move. Download bytes are credited as they arrive (NetReply.downloadProgress); upload
+// bytes only when the server has acknowledged a whole chunk, since socket-level upload
+// progress is not throughput. The live number is the rate over a sliding window; the
+// headline is the pruned mean of the window samples taken after a warm-up (fastest 10% and
+// slowest 30% discarded), and a phase ends as soon as that rate settles. Ping is the min
+// round-trip of a few tiny requests.
 //
 // Enable in ~/.config/qbar/config.json:
 //   "modules-right": [ "CustomTool:custom/speedtest" ],
@@ -31,11 +33,12 @@ QBar.CssRect {
     onPreferredWidthChanged: preferredWidthUpdated(preferredWidth)
 
     // ── test parameters ──
-    readonly property int concurrency: 4          // parallel streams (saturate the link)
-    readonly property int chunkBytes: 10000000    // 10 MB download chunk; relaunched as they finish
-    readonly property int uploadChunkBytes: 8000000 // 8 MB upload chunk
-    readonly property int warmupMs: 1500          // discard TCP slow-start
-    readonly property int durationMs: 8000        // each phase's length (warmup + window)
+    readonly property int concurrency: 6           // parallel streams (saturate the link)
+    readonly property int chunkBytes: 50000000     // 50 MB download chunk; a replacement starts at 70%
+    readonly property int warmupMs: 2000           // discard TCP slow-start
+    readonly property int minMeasureMs: 4000       // measurement window: at least this long…
+    readonly property int maxPhaseMs: 14000         // …and the whole phase never longer than this
+    readonly property int tickMs: 100
     readonly property int pingSamples: 5
     readonly property string downUrl: "https://speed.cloudflare.com/__down?bytes="
     readonly property string upUrl: "https://speed.cloudflare.com/__up"
@@ -43,24 +46,30 @@ QBar.CssRect {
     // ── public state (also read by the popup) ──
     property string phase: "idle"      // "idle" | "ping" | "download" | "upload" | "done" | "error"
     property real downloadMbps: 0      // final measured download throughput
-    property real liveDownloadMbps: 0  // sampled instantaneous download rate
+    property real liveDownloadMbps: 0  // sliding-window download rate while measuring
     property real uploadMbps: 0        // final measured upload throughput
-    property real liveUploadMbps: 0    // sampled instantaneous upload rate
+    property real liveUploadMbps: 0    // sliding-window upload rate while measuring
     property real pingMs: 0
     readonly property bool running: phase === "ping" || phase === "download" || phase === "upload"
 
     // ── internals (one tally engine, reused for the download then the upload phase) ──
-    property real _bytes: 0            // cumulative bytes across all streams this phase
+    //
+    // Why a sliding window: the old "bytes since the last 200 ms tick" readout went to ZERO
+    // whenever no progress event happened to land inside a tick (QNAM reports per readyRead,
+    // the GUI thread batches events) and every time the synchronized chunks all ended at once.
+    // The rate is now bytes moved over the last `windowMs`, read off a timeline of samples.
+    property real _bytes: 0            // cumulative CREDITED bytes across all streams this phase
     property real _t0: 0
     property bool _active: false
     property var _replies: []
+    property var _timeline: []         // [{t, b}] cumulative tally per tick (kept ~3 s deep)
     property bool _measuring: false    // past warm-up → inside the measurement window
-    property real _baseBytes: 0
     property real _baseT: 0
-    property real _lastBytes: 0
-    property real _lastT: 0
-    property real _peak: 0             // max sampled rate this phase — the reported headline
-    property string _uploadBody: ""    // generated once per upload phase, shared by chunks
+    property var _samples: []          // window rates collected while measuring → the headline
+    property int _windowMs: 1000
+    property int _upChunk: 1000000     // adaptive upload chunk (bytes)
+    property var _bodies: ({})         // upload bodies by size, generated once and reused
+    property int _gen: 0               // phase generation: late callbacks of an aborted phase must not relaunch
 
     // Last results persisted so the bar shows something before the first run.
     Settings {
@@ -82,7 +91,8 @@ QBar.CssRect {
         measurePing(root.pingSamples, [])
     }
 
-    // Latency: min round-trip of a few zero-byte requests.
+    // Latency: min round-trip of a few zero-byte requests (the first one also pays the TLS
+    // handshake — taking the minimum discards it).
     function measurePing(remaining, samples) {
         if (remaining <= 0) {
             var best = Infinity
@@ -99,110 +109,212 @@ QBar.CssRect {
     }
 
     // Reset the tally engine for a fresh phase.
-    function resetTally() {
+    function resetTally(windowMs) {
         var now = Date.now()
         root._bytes = 0
         root._active = true
         root._measuring = false
         root._t0 = now
-        root._baseBytes = 0
         root._baseT = now
-        root._lastBytes = 0
-        root._lastT = now
-        root._peak = 0
+        root._timeline = [{ t: now, b: 0 }]
+        root._samples = []
+        root._windowMs = windowMs
         root._replies = []
+        root._gen += 1
     }
 
     function beginDownload() {
         root.phase = "download"
-        resetTally()
+        resetTally(1000)
         sampleTimer.start()
         for (var i = 0; i < root.concurrency; ++i)
-            launchChunk("down")
+            launchDown()
     }
 
     function beginUpload() {
-        // One shared body buffer for all the POSTs this phase (immutable string, reused).
-        root._uploadBody = makeBody(root.uploadChunkBytes)
         root.phase = "upload"
-        resetTally()
+        root._upChunk = 1000000
+        // Upload bytes are credited per COMPLETED chunk (see launchUp), so the window is a
+        // little wider to average over several completions.
+        resetTally(2000)
         sampleTimer.start()
         for (var i = 0; i < root.concurrency; ++i)
-            launchChunk("up")
+            launchUp()
     }
 
-    function makeBody(n) {
-        return new Array(n + 1).join("x")  // n 'x' chars (V4 has String.repeat, but this is safe)
+    function body(n) {
+        if (!root._bodies[n])
+            root._bodies[n] = "x".repeat(n)
+        return root._bodies[n]
     }
 
-    // Open a stream and tally its bytes as they move (download/uploadProgress report the
-    // CUMULATIVE per-reply total, so we add the per-reply delta). When it finishes, relaunch
-    // to keep the link busy until the window ends. We never read the body — only the tally.
-    function launchChunk(kind) {
+    function dropReply(reply) {
+        var idx = root._replies.indexOf(reply)
+        if (idx >= 0)
+            root._replies.splice(idx, 1)
+    }
+
+    // Download stream: tally bytes as they arrive (downloadProgress is cumulative per reply,
+    // so credit the delta). At 70% of the chunk a REPLACEMENT stream is opened, so the link
+    // never idles between chunks — the old scheme launched the next chunk only when the
+    // previous one had fully ended, and with all streams in lockstep that left a gap of
+    // nothing at every rotation. We never read the body (discardBody), only the tally.
+    function launchDown() {
         if (!root._active)
             return
-        var isUp = kind === "up"
-        var url = isUp ? root.upUrl : (root.downUrl + root.chunkBytes)
-        // discardBody: we measure via the progress signals and never read the payload, so the
-        // transport throws the bytes away — otherwise the multi-MB bodies pile up (the JS
-        // engine doesn't GC those large external buffers → qbar's RAM balloons across runs).
-        var opts = isUp ? { method: "POST", body: root._uploadBody, timeout: 30000, discardBody: true,
-                            headers: { "Content-Type": "application/octet-stream" } }
-                        : { timeout: 30000, discardBody: true }
-        var reply = Http.request(url, opts)
+        var gen = root._gen
+        var reply = Http.request(root.downUrl + root.chunkBytes, { timeout: 60000, discardBody: true })
         root._replies.push(reply)
         var last = 0
-        var onProgress = function (moved, total) {
+        var replaced = false
+        reply.downloadProgress.connect(function (moved, total) {
             root._bytes += (moved - last)
             last = moved
-        }
-        if (isUp)
-            reply.uploadProgress.connect(onProgress)
-        else
-            reply.downloadProgress.connect(onProgress)
+            if (gen === root._gen && !replaced && total > 0 && moved >= total * 0.7 && root._replies.length < root.concurrency + 2) {
+                replaced = true
+                root.launchDown()
+            }
+        })
         var done = function () {
-            var idx = root._replies.indexOf(reply)
-            if (idx >= 0)
-                root._replies.splice(idx, 1)
-            if (root._active && (Date.now() - root._t0) < root.durationMs)
-                root.launchChunk(kind)
+            if (gen !== root._gen)
+                return  // the phase that owned this stream is over (abort tail)
+            root.dropReply(reply)
+            if (root._active && !replaced)
+                root.launchDown()
         }
         reply.finished.connect(done)
         reply.failed.connect(done)
     }
 
+    // Upload stream: bytes are credited only when the server has ACKED the whole chunk
+    // (`finished`). QNAM's uploadProgress counts bytes handed to the socket, and the kernel's
+    // send buffer swallows megabytes instantly — that is what made the old live upload shoot
+    // up and then sit at 0 while the buffer drained. Smallish chunks keep completions frequent;
+    // the size adapts so each one lasts ~0.5 s per stream at the current rate.
+    function launchUp() {
+        if (!root._active)
+            return
+        var size = root._upChunk
+        var gen = root._gen
+        var reply = Http.request(root.upUrl, { method: "POST", body: body(size), timeout: 60000, discardBody: true,
+                                              headers: { "Content-Type": "application/octet-stream" } })
+        root._replies.push(reply)
+        reply.finished.connect(function (status) {
+            if (gen !== root._gen)
+                return
+            root.dropReply(reply)
+            if (status >= 200 && status < 400)
+                root._bytes += size
+            root.adaptUploadChunk()
+            if (root._active)
+                root.launchUp()
+        })
+        reply.failed.connect(function (err) {
+            if (gen !== root._gen)
+                return
+            root.dropReply(reply)
+            if (!root._active)
+                return  // our own abort() at the end of the phase
+            console.warn("speedtest: upload chunk failed:", err)
+            root.launchUp()
+        })
+    }
+
+    function adaptUploadChunk() {
+        var mbps = root.liveUploadMbps
+        if (mbps <= 0)
+            return
+        var perStreamBytesPerSec = mbps * 1e6 / 8 / root.concurrency
+        var target = perStreamBytesPerSec * 0.5
+        var size = 262144
+        while (size * 2 <= target && size < 8388608)
+            size *= 2
+        root._upChunk = size
+    }
+
+    // Rate over the trailing window, read off the timeline. 0 until the window has depth.
+    function windowRate(now) {
+        var tl = root._timeline
+        var oldest = null
+        for (var i = tl.length - 1; i >= 0; --i) {
+            if (now - tl[i].t >= root._windowMs) { oldest = tl[i]; break }
+        }
+        if (!oldest)
+            oldest = tl[0]
+        var span = (now - oldest.t) / 1000
+        if (span < root._windowMs / 1000 * 0.5)
+            return -1
+        return (root._bytes - oldest.b) * 8 / span / 1e6
+    }
+
+    // Ookla-style pruning: drop the fastest 10% and the slowest 30% of the window samples,
+    // average the rest. A spike or a stall inside a 100 ms tick no longer moves the headline.
+    function prunedMean(samples) {
+        if (samples.length === 0)
+            return 0
+        var sorted = samples.slice().sort(function (a, b) { return a - b })
+        var lo = Math.floor(sorted.length * 0.3)
+        var hi = Math.ceil(sorted.length * 0.9)
+        if (hi - lo < 1) { lo = 0; hi = sorted.length }
+        var sum = 0
+        for (var i = lo; i < hi; ++i)
+            sum += sorted[i]
+        return sum / (hi - lo)
+    }
+
+    // Stop early once the last 3 s of samples sit within ±8% of their mean.
+    function stable() {
+        var n = Math.round(3000 / root.tickMs)
+        var s = root._samples
+        if (s.length < n)
+            return false
+        var min = Infinity, max = -Infinity, sum = 0
+        for (var i = s.length - n; i < s.length; ++i) {
+            min = Math.min(min, s[i]); max = Math.max(max, s[i]); sum += s[i]
+        }
+        var mean = sum / n
+        return mean > 0 && (max - min) / mean < 0.16
+    }
+
     function finishPhase(now) {
         root._active = false
         sampleTimer.stop()
-        // Stop the in-flight tails so QNAM isn't left buffering chunks we won't use.
+        // Stop the in-flight tails so QNAM isn't left moving bytes we won't use.
         for (var i = 0; i < root._replies.length; ++i) {
             if (root._replies[i])
                 root._replies[i].abort()
         }
         root._replies = []
-        var span = (now - (root._measuring ? root._baseT : root._t0)) / 1000
-        var bytes = root._bytes - (root._measuring ? root._baseBytes : 0)
-        var avg = span > 0 ? bytes * 8 / span / 1e6 : 0
-        // Report the PEAK sustained rate (max sample within the measurement window), not the
-        // last live reading nor the slow-start-dragged average — that's the headline figure.
-        var result = Math.max(root._peak, avg)
+        var result = root.prunedMean(root._samples)
+        if (result <= 0) {
+            // Window never stabilised (phase cut short): fall back to the plain average.
+            var span = (now - root._t0) / 1000
+            result = span > 0 ? root._bytes * 8 / span / 1e6 : 0
+        }
+        console.info("speedtest:", root.phase, result.toFixed(1), "Mbps from", root._samples.length,
+                     "samples over", ((now - root._t0) / 1000).toFixed(1), "s")
         if (root.phase === "download") {
             root.downloadMbps = result
             root.liveDownloadMbps = 0
-            beginUpload()  // chain into the upload phase
+            // Chain into the upload phase after a short gap so the aborted download
+            // streams finish tearing down before the POSTs claim the connections.
+            phaseGap.start()
         } else {
             root.uploadMbps = result
             root.liveUploadMbps = 0
-            root._uploadBody = ""  // free the buffer
+            root._bodies = ({})  // free the buffers
             root.phase = "done"
         }
     }
 
-    // Samples the running tally: computes the instantaneous rate for the live readout, opens
-    // the measurement window after warm-up, and ends the phase at durationMs.
+    Timer { id: phaseGap; interval: 500; repeat: false; onTriggered: root.beginUpload() }
+
+    // Every tick: extend the timeline, refresh the live readout from the sliding window,
+    // open the measurement window after warm-up, collect samples, and end the phase when
+    // the rate has settled (or at maxPhaseMs).
     Timer {
         id: sampleTimer
-        interval: 200
+        interval: root.tickMs
         repeat: true
         running: false
         onTriggered: {
@@ -210,28 +322,27 @@ QBar.CssRect {
             var now = Date.now()
             var elapsed = now - root._t0
 
+            root._timeline.push({ t: now, b: root._bytes })
+            while (root._timeline.length > 1 && now - root._timeline[0].t > root._windowMs + 1000)
+                root._timeline.shift()
+
             if (!root._measuring && elapsed >= root.warmupMs) {
                 root._measuring = true
-                root._baseBytes = root._bytes
                 root._baseT = now
             }
 
-            var dt = (now - root._lastT) / 1000
-            if (dt > 0) {
-                var rate = (root._bytes - root._lastBytes) * 8 / dt / 1e6
-                // Track the peak only within the measurement window (skip slow-start ramp).
-                if (root._measuring && rate > root._peak)
-                    root._peak = rate
-                // Light smoothing so the live number doesn't jitter.
+            var rate = root.windowRate(now)
+            if (rate >= 0) {
                 if (root.phase === "upload")
-                    root.liveUploadMbps = root.liveUploadMbps > 0 ? root.liveUploadMbps * 0.6 + rate * 0.4 : rate
+                    root.liveUploadMbps = rate
                 else
-                    root.liveDownloadMbps = root.liveDownloadMbps > 0 ? root.liveDownloadMbps * 0.6 + rate * 0.4 : rate
+                    root.liveDownloadMbps = rate
+                if (root._measuring)
+                    root._samples.push(rate)
             }
-            root._lastBytes = root._bytes
-            root._lastT = now
 
-            if (elapsed >= root.durationMs)
+            var measured = now - root._baseT
+            if (elapsed >= root.maxPhaseMs || (root._measuring && measured >= root.minMeasureMs && root.stable()))
                 root.finishPhase(now)
         }
     }

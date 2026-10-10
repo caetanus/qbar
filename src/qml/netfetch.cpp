@@ -97,10 +97,30 @@ NetReply *NetFetch::request(const QString &url, const QVariantMap &options)
     // Recover from QNAM's dead-connection trap: when the network drops, a pooled
     // keep-alive socket goes stale, and QNAM keeps reusing it so every later
     // request times out against a dead connection *forever* — even after the
-    // network is back. On any transport error, flush the connection cache so the
+    // network is back. On a transport error, flush the connection cache so the
     // next request dials a fresh connection and polling widgets self-heal.
-    connect(reply, &QNetworkReply::errorOccurred, m_nam,
-            [this](QNetworkReply::NetworkError) { m_nam->clearConnectionCache(); });
+    //
+    // ONLY transport errors: clearConnectionCache() deletes the cached HTTP
+    // connections, which cancels every request still in flight on them. Flushing
+    // on OperationCanceledError (our own abort()) turned one abort into a cascade —
+    // the speed test aborting its download streams killed the upload POSTs that
+    // had just started, and each of those cancellations killed the next ones.
+    connect(reply, &QNetworkReply::errorOccurred, m_nam, [this](QNetworkReply::NetworkError error) {
+        switch (error) {
+        case QNetworkReply::ConnectionRefusedError:
+        case QNetworkReply::RemoteHostClosedError:
+        case QNetworkReply::HostNotFoundError:
+        case QNetworkReply::TimeoutError:
+        case QNetworkReply::SslHandshakeFailedError:
+        case QNetworkReply::TemporaryNetworkFailureError:
+        case QNetworkReply::NetworkSessionFailedError:
+        case QNetworkReply::UnknownNetworkError:
+            m_nam->clearConnectionCache();
+            break;
+        default:
+            break;
+        }
+    });
 
     const bool discardBody = options.value(QStringLiteral("discardBody")).toBool();
     auto *netReply = new NetReply(reply, discardBody, this);
