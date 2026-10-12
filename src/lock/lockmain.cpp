@@ -15,6 +15,7 @@ using QmlCss::CssTheme;
 #include <QLocale>
 #include <QQmlContext>
 #include <QQuickView>
+#include <QHash>
 #include <QScreen>
 #include <QStandardPaths>
 #include <QSurfaceFormat>
@@ -203,9 +204,37 @@ int main(int argc, char *argv[])
     QSurfaceFormat lockFormat = QSurfaceFormat::defaultFormat();
     lockFormat.setAlphaBufferSize(8);
 
-    QList<QQuickView *> views;
-    const QList<QScreen *> screens = QGuiApplication::screens();
-    for (QScreen *screen : screens) {
+    const bool onX11 = QGuiApplication::platformName() == QLatin1String("xcb");
+    auto *x11Backend = qobject_cast<X11LockBackend *>(backend.get());
+
+    // Outputs come and go while locked (dock/undock, a monitor powering off, all of
+    // them vanishing at once). A lock face is kept per screen, created and destroyed
+    // with it; the lock itself never depends on any window existing. Qt must not take
+    // "no windows left" as "quit": a locker that exits on output loss leaves the
+    // session locked with nothing able to unlock it.
+    app.setQuitOnLastWindowClosed(false);
+
+    QHash<QScreen *, QQuickView *> views;
+
+    const auto syncX11Windows = [&]() {
+        if (x11Backend == nullptr) {
+            return;
+        }
+        QList<quintptr> lockWindowIds;
+        lockWindowIds.reserve(views.size());
+        for (const QQuickView *view : std::as_const(views)) {
+            lockWindowIds.append(view->winId());
+        }
+        x11Backend->setLockWindows(lockWindowIds);
+        // The grab must always sit on a live window (or the root): an X grab dies with
+        // its window, so this runs BEFORE a lock window is destroyed.
+        x11Backend->moveGrab(lockWindowIds.isEmpty() ? 0 : lockWindowIds.first());
+    };
+
+    const auto addView = [&](QScreen *screen) {
+        if (screen == nullptr || views.contains(screen)) {
+            return;
+        }
         auto *view = new QQuickView;
         view->setFormat(lockFormat);
         view->setScreen(screen);
@@ -217,7 +246,6 @@ int main(int argc, char *argv[])
         // backend then keeps the lock raised on every restack. Wayland is
         // untouched — ext-session-lock already guarantees the lock on top.
         Qt::WindowFlags lockFlags = Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint;
-        const bool onX11 = QGuiApplication::platformName() == QLatin1String("xcb");
         if (onX11) {
             lockFlags |= Qt::BypassWindowManagerHint;
         }
@@ -240,20 +268,34 @@ int main(int argc, char *argv[])
         }
         view->raise();
         view->requestActivate();
-        views.append(view);
+        views.insert(screen, view);
+    };
+
+    const auto removeView = [&](QScreen *screen) {
+        QQuickView *view = views.take(screen);
+        if (view == nullptr) {
+            return;
+        }
+        syncX11Windows();
+        view->deleteLater();
+    };
+
+    for (QScreen *screen : QGuiApplication::screens()) {
+        addView(screen);
+    }
+    if (x11Backend != nullptr && !views.isEmpty()) {
+        // Before lock(): the grab is taken on whichever window is set when it runs.
+        x11Backend->setGrabWindow(views.begin().value()->winId());
+        syncX11Windows();
     }
 
-    if (!views.isEmpty()) {
-        if (auto *x11Backend = qobject_cast<X11LockBackend *>(backend.get())) {
-            x11Backend->setGrabWindow(views.first()->winId());
-            QList<quintptr> lockWindowIds;
-            lockWindowIds.reserve(views.size());
-            for (const QQuickView *view : views) {
-                lockWindowIds.append(view->winId());
-            }
-            x11Backend->setLockWindows(lockWindowIds);
-        }
-    }
+    const QMetaObject::Connection screenAddedConnection =
+        QObject::connect(&app, &QGuiApplication::screenAdded, &app, [&](QScreen *screen) {
+            addView(screen);
+            syncX11Windows();
+        });
+    const QMetaObject::Connection screenRemovedConnection =
+        QObject::connect(&app, &QGuiApplication::screenRemoved, &app, removeView);
 
     QObject::connect(&controller, &LockController::unlocked, &app, &QCoreApplication::quit);
     QTimer::singleShot(0, &controller, &LockController::start);
@@ -263,5 +305,16 @@ int main(int argc, char *argv[])
         });
     }
 
-    return app.exec();
+    const int result = app.exec();
+
+    // Tear down in dependency order. The views reference controller/keyLocks/userModel
+    // (main's locals, destroyed in reverse on return) through their QML contexts: delete
+    // the views first, or their bindings evaluate against dead objects (the burst of
+    // "Cannot read property ... of null"). The screen hooks capture these locals and
+    // QGuiApplication's own teardown can still emit screenRemoved — cut them first.
+    QObject::disconnect(screenAddedConnection);
+    QObject::disconnect(screenRemovedConnection);
+    qDeleteAll(views);
+    views.clear();
+    return result;
 }

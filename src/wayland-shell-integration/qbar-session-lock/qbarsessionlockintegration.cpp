@@ -126,6 +126,13 @@ QBarSessionLockSurface::QBarSessionLockSurface(QBarSessionLockIntegration *integ
         }
     }
 
+    if (output == nullptr) {
+        // A window on Qt's placeholder screen (every output gone): get_lock_surface with no
+        // output is a protocol error that would disconnect us. The lock itself stands without
+        // any surface; qbar-lock gives each output that comes back a window of its own.
+        qWarning() << "QBar session-lock: window has no wl_output — no lock surface for it";
+        return;
+    }
     m_lockSurface = ext_session_lock_v1_get_lock_surface(
         integration->sessionLock(), wlSurface(), output);
     ext_session_lock_surface_v1_add_listener(m_lockSurface, &lockSurfaceListener, this);

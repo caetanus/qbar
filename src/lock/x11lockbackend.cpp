@@ -86,6 +86,19 @@ void X11LockBackend::setLockWindows(const QList<quintptr> &windowIds)
     m_lockWindows = windowIds;
 }
 
+void X11LockBackend::moveGrab(quintptr windowId)
+{
+    m_grabWindow = windowId;
+    if (!m_grabbed) {
+        return; // not locked yet: lock() grabs whatever window is current then
+    }
+    if (!grab()) {
+        // Never end up ungrabbed while locked: fall back to the root window.
+        m_grabWindow = 0;
+        grab();
+    }
+}
+
 #ifdef QBAR_LOCK_HAVE_X11
 namespace {
 xcb_window_t rootWindowOf(xcb_connection_t *connection)

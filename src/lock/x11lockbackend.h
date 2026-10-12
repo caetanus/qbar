@@ -17,6 +17,10 @@ public:
     QString unavailableReason() const override;
     void setGrabWindow(quintptr windowId);
     void setLockWindows(const QList<quintptr> &windowIds);
+    // Move the keyboard/pointer grab to another window (0 = the root window) — e.g.
+    // before the current grab window is destroyed with its screen: an X grab dies with
+    // its window. While locked, the re-grab replaces the held grab with no release gap.
+    void moveGrab(quintptr windowId);
 
     // Re-raises the lock whenever any other window restacks: on X11 the lock
     // windows are override-redirect (the WM's stacking, and StaysOnTop, never
