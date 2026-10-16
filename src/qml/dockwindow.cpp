@@ -18,6 +18,9 @@
 #ifdef QBAR_HAVE_X11
 #include <qguiapplication_platform.h>
 #include <xcb/xcb.h>
+#ifdef QBAR_HAVE_XCB_SHAPE
+#include <xcb/shape.h>
+#endif
 #endif
 
 namespace {
@@ -320,7 +323,7 @@ void DockWindow::applyGeometry()
     // fisheye margins pass clicks through to the windows beneath; while hovered it
     // expands to cover the magnified peak + edge padding so the cursor stays "in"
     // as the icons grow. Wayland enforces this via the layer-shell input region;
-    // X11 via the window's input mask (QWindow::setMask).
+    // X11 via the window's XShape input shape (see below).
     const bool hovered = m_view->rootObject() != nullptr
         && m_view->rootObject()->property("hovered").toBool();
     const int edgePadding = std::max(barH * 2, headroom);
@@ -352,6 +355,18 @@ void DockWindow::applyGeometry()
         }
         // Restrict mouse input to the band; the empty headroom passes clicks/hover
         // through to the windows beneath (matches the Wayland input region).
+#ifdef QBAR_HAVE_XCB_SHAPE
+        // Only the input shape: QWindow::setMask sets the bounding shape on X11,
+        // which also clips drawing, so a launch bounce leaving the band was cut off.
+        if (xcb_connection_t *conn = x11Connection()) {
+            const xcb_rectangle_t band = {static_cast<int16_t>(inputX), static_cast<int16_t>(inputY),
+                                          static_cast<uint16_t>(inputW), static_cast<uint16_t>(inputH)};
+            xcb_shape_rectangles(conn, XCB_SHAPE_SO_SET, XCB_SHAPE_SK_INPUT, XCB_CLIP_ORDERING_UNSORTED,
+                                 static_cast<xcb_window_t>(m_view->winId()), 0, 0, 1, &band);
+            xcb_flush(conn);
+            return;
+        }
+#endif
         m_view->setMask(QRegion(inputX, inputY, inputW, inputH));
         return;
     }

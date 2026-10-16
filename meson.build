@@ -143,6 +143,17 @@ if x11_dep.found() and xcb_ewmh_dep.found() and xcb_xkb_dep.found() and xcb_scre
   else
     warning('xcb-randr not found: the Redshift applet will be inert on X11')
   endif
+
+  # Dock on X11: restrict only the INPUT shape to the hover band (QWindow::setMask
+  # sets the bounding shape, which also clips drawing). Optional — without it the
+  # dock falls back to setMask.
+  xcb_shape_dep = dependency('xcb-shape', required: false)
+  if xcb_shape_dep.found()
+    platform_deps += [xcb_shape_dep]
+    platform_args += ['-DQBAR_HAVE_XCB_SHAPE=1']
+  else
+    warning('xcb-shape not found: on X11 the dock clips what leaves its hover band')
+  endif
 endif
 
 wayland_dep = dependency('wayland-client', required: get_option('wayland'))
