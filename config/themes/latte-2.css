@@ -39,6 +39,10 @@ window#waybar  { background-color: transparent; border-radius: 8px; border-left:
 #custom-ai-usage.warn     { color: #df8e1d; }
 #custom-ai-usage.critical { color: #d20f39; }
 #custom-ai-usage.error    { color: #acb0be; }
+#custom-updates            { color: #acb0be; background-color: transparent; }
+#custom-updates.pending    { color: #4c4f69; }
+#custom-updates.many       { color: #df8e1d; }
+#custom-updates.error      { color: #d20f39; }
 #custom-dollar { color: #40a02b; background-color: transparent; }
 #custom-btc    { color: #fe640b; background-color: transparent; }
 

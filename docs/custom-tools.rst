@@ -18,8 +18,9 @@ into qbar, and it **hot-reloads** when you save it (the widget and its sibling `
 ``source`` is resolved relative to the config directory (``~/.config/qbar``), or given as
 an absolute / ``file://`` path. The bundled ``config/widgets/Bitcoin.qml``,
 ``Weather.qml``, ``SpeedTest.qml`` and ``AiUsage.qml`` (Claude Code / Codex subscription
-quotas, read from the CLIs' own OAuth tokens via ``Proc`` + ``Fetch``, with a menu) are
-complete examples.
+quotas, read from the CLIs' own OAuth tokens via ``Proc`` + ``Fetch``, with a menu) and
+``Updates.qml`` (pending package updates for the arch / debian / redhat / gentoo families,
+with a ``notify-send`` alert past a threshold) are complete examples.
 
 The widget contract
 -------------------

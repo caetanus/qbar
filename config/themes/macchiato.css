@@ -69,3 +69,7 @@ window#waybar    { background-color: rgba(0, 0, 0, 0.3);     }
 #custom-ai-usage.warn     { color: @yellow; }
 #custom-ai-usage.critical { color: @red; }
 #custom-ai-usage.error    { color: @subtext0; }
+#custom-updates            { color: @subtext0; background-color: transparent; }
+#custom-updates.pending    { color: @text; }
+#custom-updates.many       { color: @yellow; }
+#custom-updates.error      { color: @red; }
