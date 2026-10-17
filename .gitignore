@@ -1,6 +1,7 @@
 build/
 build-*/
 builddir/
+dist/
 *.autosave
 *.moc
 *.qmlc

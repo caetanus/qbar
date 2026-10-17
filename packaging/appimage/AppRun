@@ -1,0 +1,31 @@
+#!/bin/sh
+# qbar AppImage entry point. One image, three programs:
+#   qbar-x86_64.AppImage [args]            → qbar
+#   qbar-x86_64.AppImage qbar-ipc [args]   → qbar-ipc   (also qbar-lock)
+# or symlink the AppImage as qbar-ipc / qbar-lock and it dispatches on the name.
+HERE="$(dirname "$(readlink -f "$0")")"
+export APPDIR="${APPDIR:-$HERE}"
+
+for hook in "$APPDIR"/apprun-hooks/*.sh; do
+    [ -f "$hook" ] && . "$hook"
+done
+# Our wlr-layer-shell / session-lock shell integrations live next to Qt's own plugins.
+export QT_PLUGIN_PATH="$APPDIR/usr/plugins${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+
+# Bundled EDS schemas; GSETTINGS_SCHEMA_DIR adds to (does not replace) the system dirs.
+export GSETTINGS_SCHEMA_DIR="$APPDIR/usr/share/glib-2.0/schemas${GSETTINGS_SCHEMA_DIR:+:$GSETTINGS_SCHEMA_DIR}"
+
+# The bundled EDS client would load the host's camel providers (an EDS of another
+# version: class-size mismatches). Point it at an empty dir — qbar only reads calendars.
+export EDS_CAMEL_PROVIDER_DIR="$APPDIR/usr/lib/camel-providers"
+
+prog=qbar
+case "$(basename "${ARGV0:-$0}")" in
+    qbar-ipc*) prog=qbar-ipc ;;
+    qbar-lock*) prog=qbar-lock ;;
+esac
+case "$1" in
+    qbar|qbar-ipc|qbar-lock) prog="$1"; shift ;;
+esac
+
+exec "$APPDIR/usr/bin/$prog" "$@"
