@@ -260,7 +260,24 @@ bool QBarLayerShellSurface::eventFilter(QObject *watched, QEvent *event)
             || name == "qbarDockInputX" || name == "qbarDockInputY"
             || name == "qbarDockInputWidth" || name == "qbarDockInputHeight"
             || name.startsWith("qbarNotif")) {
-            applyLayerState();
+            scheduleApplyLayerState();
+        }
+    }
+    return QtWaylandClient::QWaylandShellSurface::eventFilter(watched, event);
+}
+
+void QBarLayerShellSurface::scheduleApplyLayerState()
+{
+    if (m_applyPending) {
+        return;
+    }
+    m_applyPending = true;
+    QMetaObject::invokeMethod(this, [this]() {
+        m_applyPending = false;
+        if (m_layerSurface == nullptr) {
+            return;
+        }
+        applyLayerState();
             // Do NOT wl_surface_commit here: this runs on the GUI thread, and the render
             // thread owns the surface's attach/damage/commit cycle — an interleaved commit
             // can publish a half-built frame (a visible flicker on every toast entry/exit,
@@ -284,20 +301,11 @@ bool QBarLayerShellSurface::eventFilter(QObject *watched, QEvent *event)
                 wl_surface_commit(wlSurface());
             }
             if (m_filteredWindow != nullptr) {
-                QMetaObject::invokeMethod(
-                    m_filteredWindow,
-                    [w = QPointer<QWindow>(m_filteredWindow)]() {
-                        if (w) {
-                            QWindowSystemInterface::handleExposeEvent(
-                                w, QRect(QPoint(), w->geometry().size()));
-                            w->requestUpdate();
-                        }
-                    },
-                    Qt::QueuedConnection);
+                QWindowSystemInterface::handleExposeEvent(
+                    m_filteredWindow, QRect(QPoint(), m_filteredWindow->geometry().size()));
+                m_filteredWindow->requestUpdate();
             }
-        }
-    }
-    return QtWaylandClient::QWaylandShellSurface::eventFilter(watched, event);
+    }, Qt::QueuedConnection);
 }
 
 bool QBarLayerShellSurface::isExposed() const
@@ -424,20 +432,16 @@ void QBarLayerShellSurface::applyLayerState()
             // to both sides; only the bar-facing vertical edge is freed.)
             const uint32_t vAnchor = bottom ? ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP
                                             : ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM;
-            zwlr_layer_surface_v1_set_anchor(
-                m_layerSurface,
-                vAnchor | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
-            zwlr_layer_surface_v1_set_size(m_layerSurface, 0, static_cast<uint32_t>(outputHeight - barInset));
+            sendAnchor(vAnchor | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+            sendSize(0, static_cast<uint32_t>(outputHeight - barInset));
         } else {
             // Non-exclusive bar (or unknown output size): cover the whole output.
-            zwlr_layer_surface_v1_set_anchor(
-                m_layerSurface,
-                ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
+            sendAnchor(ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
                     | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
-            zwlr_layer_surface_v1_set_size(m_layerSurface, 0, 0);
+            sendSize(0, 0);
         }
-        zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, -1);
-        zwlr_layer_surface_v1_set_margin(m_layerSurface, 0, 0, 0, 0);
+        sendExclusiveZone(-1);
+        sendMargin(0, 0, 0, 0);
         // Take the keyboard (for Escape-to-close / typing in popups) only when the user
         // opted in via BarConfig::popupKeyboardFocus; otherwise stay focusless.
         //
@@ -455,20 +459,10 @@ void QBarLayerShellSurface::applyLayerState()
         // Hyprland). The service flips qbarOverlayInputPassthrough on park
         // and off on the next open.
         const bool passthrough = overlayWin->property("qbarOverlayInputPassthrough").toBool();
-        if (window()->display() != nullptr && window()->display()->compositor() != nullptr) {
-            if (passthrough) {
-                wl_region *region = window()->display()->compositor()->create_region();
-                wl_surface_set_input_region(wlSurface(), region); // empty region
-                wl_region_destroy(region);
-            } else {
-                wl_surface_set_input_region(wlSurface(), nullptr); // whole surface
-            }
-        }
+        sendInputRegion(!passthrough, QRect()); // passthrough = empty region
         const bool grabKeyboard = !passthrough
             && window()->window()->property("qbarOverlayKeyboard").toBool();
-        zwlr_layer_surface_v1_set_keyboard_interactivity(
-            m_layerSurface,
-            grabKeyboard
+        sendKeyboard(grabKeyboard
                 ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND
                 : ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
         return;
@@ -492,30 +486,21 @@ void QBarLayerShellSurface::applyLayerState()
             const uint32_t vAnchor = bottom
                 ? ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
                 : ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP;
-            zwlr_layer_surface_v1_set_anchor(m_layerSurface, vAnchor | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT);
-            zwlr_layer_surface_v1_set_size(
-                m_layerSurface, static_cast<uint32_t>(std::max(1, dockW)), static_cast<uint32_t>(std::max(1, dockH)));
+            sendAnchor(vAnchor | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT);
+            sendSize(static_cast<uint32_t>(std::max(1, dockW)), static_cast<uint32_t>(std::max(1, dockH)));
             // -1 (not 0): ignore other surfaces' exclusive zones so the dock anchors
             // DIRECTLY to the bar edge and OVERLAPS the bar, instead of being pushed
             // off the top of the bar's reserved strip. The dock sits exactly where the
             // proxy applet would inside the bar; the in-bar proxy already holds the slot.
-            zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, -1);
+            sendExclusiveZone(-1);
             // (top, right, bottom, left) — left positions the surface at the slot's x;
             // the bar-edge margin keeps it flush with a floating bar.
-            zwlr_layer_surface_v1_set_margin(
-                m_layerSurface, bottom ? 0 : edgeMargin, 0, bottom ? edgeMargin : 0, dockX);
-            zwlr_layer_surface_v1_set_keyboard_interactivity(
-                m_layerSurface, ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
-            if (window() != nullptr && window()->display() != nullptr && window()->display()->compositor() != nullptr) {
-                wl_region *region = window()->display()->compositor()->create_region();
-                wl_region_add(region,
-                              dockWin->property("qbarDockInputX").toInt(),
-                              dockWin->property("qbarDockInputY").toInt(),
-                              std::max(1, dockWin->property("qbarDockInputWidth").toInt()),
-                              std::max(1, dockWin->property("qbarDockInputHeight").toInt()));
-                wl_surface_set_input_region(wlSurface(), region);
-                wl_region_destroy(region);
-            }
+            sendMargin(bottom ? 0 : edgeMargin, 0, bottom ? edgeMargin : 0, dockX);
+            sendKeyboard(ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+            sendInputRegion(false, QRect(dockWin->property("qbarDockInputX").toInt(),
+                                         dockWin->property("qbarDockInputY").toInt(),
+                                         std::max(1, dockWin->property("qbarDockInputWidth").toInt()),
+                                         std::max(1, dockWin->property("qbarDockInputHeight").toInt())));
             return;
         }
     }
@@ -536,11 +521,10 @@ void QBarLayerShellSurface::applyLayerState()
             if (!center) {
                 anchor |= left ? ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT : ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
             }
-            zwlr_layer_surface_v1_set_anchor(m_layerSurface, anchor);
-            zwlr_layer_surface_v1_set_size(m_layerSurface, static_cast<uint32_t>(notifWidth), 0);
-            zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, 0);
-            zwlr_layer_surface_v1_set_margin(m_layerSurface,
-                                             notifWin->property("qbarNotifMarginTop").toInt(),
+            sendAnchor(anchor);
+            sendSize(static_cast<uint32_t>(notifWidth), 0);
+            sendExclusiveZone(0);
+            sendMargin(notifWin->property("qbarNotifMarginTop").toInt(),
                                              notifWin->property("qbarNotifMarginRight").toInt(),
                                              notifWin->property("qbarNotifMarginBottom").toInt(),
                                              notifWin->property("qbarNotifMarginLeft").toInt());
@@ -550,25 +534,16 @@ void QBarLayerShellSurface::applyLayerState()
             // typing, and Hyprland's on-demand focus proved unreliable (granted
             // seconds late, revoked instantly). 0/absent = focusless.
             const int notifKb = notifWin->property("qbarNotifKeyboard").toInt();
-            zwlr_layer_surface_v1_set_keyboard_interactivity(
-                m_layerSurface,
-                notifKb == 2 ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
+            sendKeyboard(notifKb == 2 ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
                 : notifKb == 1 ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND
                                : ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
-            if (window() != nullptr && window()->display() != nullptr
-                && window()->display()->compositor() != nullptr) {
-                wl_region *region = window()->display()->compositor()->create_region();
-                const int inputHeight = notifWin->property("qbarNotifInputHeight").toInt();
-                if (inputHeight > 0) {
-                    wl_region_add(region,
-                                  notifWin->property("qbarNotifInputX").toInt(),
-                                  notifWin->property("qbarNotifInputY").toInt(),
-                                  std::max(1, notifWin->property("qbarNotifInputWidth").toInt()),
-                                  inputHeight);
-                }
-                wl_surface_set_input_region(wlSurface(), region);
-                wl_region_destroy(region);
-            }
+            const int inputHeight = notifWin->property("qbarNotifInputHeight").toInt();
+            sendInputRegion(false, inputHeight > 0
+                ? QRect(notifWin->property("qbarNotifInputX").toInt(),
+                        notifWin->property("qbarNotifInputY").toInt(),
+                        std::max(1, notifWin->property("qbarNotifInputWidth").toInt()),
+                        inputHeight)
+                : QRect());
             return;
         }
     }
@@ -588,9 +563,7 @@ void QBarLayerShellSurface::applyLayerState()
         ? ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
         : ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP;
 
-    zwlr_layer_surface_v1_set_anchor(
-        m_layerSurface,
-        verticalAnchor
+    sendAnchor(verticalAnchor
             | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
             | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
     // Bar CSS margins → a floating bar (barwindow derives the px values). The compositor reserves
@@ -604,12 +577,83 @@ void QBarLayerShellSurface::applyLayerState()
     const int marginTop = win != nullptr ? win->property("qbarBarMarginTop").toInt() : 0;
     const int marginBottom = win != nullptr ? win->property("qbarBarMarginBottom").toInt() : 0;
     const int innerGap = bottom ? marginTop : marginBottom;
-    zwlr_layer_surface_v1_set_size(m_layerSurface, 0, static_cast<uint32_t>(height));
-    zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, exclusive ? height + innerGap : 0);
-    zwlr_layer_surface_v1_set_margin(m_layerSurface, marginTop, 0, marginBottom, 0);
-    zwlr_layer_surface_v1_set_keyboard_interactivity(
-        m_layerSurface,
-        ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+    sendSize(0, static_cast<uint32_t>(height));
+    sendExclusiveZone(exclusive ? height + innerGap : 0);
+    sendMargin(marginTop, 0, marginBottom, 0);
+    sendKeyboard(ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+}
+
+void QBarLayerShellSurface::sendAnchor(uint32_t anchor)
+{
+    if (m_sent.anchor == anchor) {
+        return;
+    }
+    m_sent.anchor = anchor;
+    zwlr_layer_surface_v1_set_anchor(m_layerSurface, anchor);
+}
+
+void QBarLayerShellSurface::sendSize(uint32_t width, uint32_t height)
+{
+    if (m_sent.width == width && m_sent.height == height) {
+        return;
+    }
+    m_sent.width = width;
+    m_sent.height = height;
+    zwlr_layer_surface_v1_set_size(m_layerSurface, width, height);
+}
+
+void QBarLayerShellSurface::sendExclusiveZone(int32_t zone)
+{
+    if (m_sent.zone == zone) {
+        return;
+    }
+    m_sent.zone = zone;
+    zwlr_layer_surface_v1_set_exclusive_zone(m_layerSurface, zone);
+}
+
+void QBarLayerShellSurface::sendMargin(int32_t top, int32_t right, int32_t bottom, int32_t left)
+{
+    if (m_sent.marginTop == top && m_sent.marginRight == right && m_sent.marginBottom == bottom
+        && m_sent.marginLeft == left) {
+        return;
+    }
+    m_sent.marginTop = top;
+    m_sent.marginRight = right;
+    m_sent.marginBottom = bottom;
+    m_sent.marginLeft = left;
+    zwlr_layer_surface_v1_set_margin(m_layerSurface, top, right, bottom, left);
+}
+
+void QBarLayerShellSurface::sendKeyboard(uint32_t mode)
+{
+    if (m_sent.keyboard == mode) {
+        return;
+    }
+    m_sent.keyboard = mode;
+    zwlr_layer_surface_v1_set_keyboard_interactivity(m_layerSurface, mode);
+}
+
+void QBarLayerShellSurface::sendInputRegion(bool whole, const QRect &rect)
+{
+    const int mode = whole ? 0 : 1;
+    if (m_sent.inputMode == mode && (whole || m_sent.inputRect == rect)) {
+        return;
+    }
+    if (window() == nullptr || window()->display() == nullptr || window()->display()->compositor() == nullptr) {
+        return;
+    }
+    m_sent.inputMode = mode;
+    m_sent.inputRect = rect;
+    if (whole) {
+        wl_surface_set_input_region(wlSurface(), nullptr);
+        return;
+    }
+    wl_region *region = window()->display()->compositor()->create_region();
+    if (rect.isValid()) {
+        wl_region_add(region, rect.x(), rect.y(), rect.width(), rect.height());
+    }
+    wl_surface_set_input_region(wlSurface(), region);
+    wl_region_destroy(region);
 }
 
 void QBarLayerShellSurface::handleConfigure(void *data,

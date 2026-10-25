@@ -9,6 +9,8 @@
 #include <QRect>
 #include <QSize>
 
+#include <cstdint>
+
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 class QWindow;
@@ -63,6 +65,38 @@ private:
     void configure(uint32_t serial, uint32_t width, uint32_t height);
     void closeFromCompositor();
     void applyLayerState();
+    // Coalesce a burst of property changes (the toast strip sets four input-region
+    // properties per animation frame) into ONE applyLayerState + frame per event-loop turn.
+    void scheduleApplyLayerState();
+
+    // Change-tracked layer-state setters. wlroots flags EVERY set_* request as a pending
+    // state change, and on commit the compositor then re-arranges ALL layer surfaces of
+    // the output (sway: arrange_layers → a configure to every bar/dock/strip). Re-sending
+    // an unchanged state on each toast frame produced exactly that storm, and the bar's
+    // relayouts behind it froze the GUI thread for hundreds of ms per notification.
+    void sendAnchor(uint32_t anchor);
+    void sendSize(uint32_t width, uint32_t height);
+    void sendExclusiveZone(int32_t zone);
+    void sendMargin(int32_t top, int32_t right, int32_t bottom, int32_t left);
+    void sendKeyboard(uint32_t mode);
+    // whole=true: the entire surface (nullptr region); else exactly `rect` (an invalid
+    // rect = empty region, input passes through).
+    void sendInputRegion(bool whole, const QRect &rect);
+
+    struct SentState {
+        uint32_t anchor = ~0u;
+        uint32_t width = ~0u;
+        uint32_t height = ~0u;
+        int32_t zone = INT32_MIN;
+        int32_t marginTop = INT32_MIN;
+        int32_t marginRight = INT32_MIN;
+        int32_t marginBottom = INT32_MIN;
+        int32_t marginLeft = INT32_MIN;
+        uint32_t keyboard = ~0u;
+        int inputMode = -1; // -1 unsent, 0 whole surface, 1 rect
+        QRect inputRect;
+    } m_sent;
+    bool m_applyPending = false;
 
     zwlr_layer_surface_v1 *m_layerSurface = nullptr;
     QSize m_configuredSize;
