@@ -89,7 +89,7 @@ Item {
         }
     }
     Component.onDestruction: {
-        console.info("[notif] card destroyed id=" + nId + " exitProgress=" + exitProgress.toFixed(2))
+        console.debug("[notif] card destroyed id=" + nId + " exitProgress=" + exitProgress.toFixed(2))
         if (replyOpen)
             notificationServer.setReplying(card.nId, false)
     }
@@ -246,7 +246,7 @@ Item {
     }
 
     Component.onCompleted: {
-        console.info("[notif] card created id=" + nId + " summary=" + nSummary)
+        console.debug("[notif] card created id=" + nId + " summary=" + nSummary)
         entryProgress = 0.0
         applyPose(entryValuesAt(0))
         entryAnimation.start()

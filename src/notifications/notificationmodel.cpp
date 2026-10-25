@@ -66,13 +66,13 @@ void NotificationModel::upsert(const Notification &notification)
 {
     const int row = rowOf(notification.id);
     if (row >= 0) {
-        qInfo() << "[notif] model update id" << notification.id << "row" << row;
+        qDebug() << "[notif] model update id" << notification.id << "row" << row;
         m_items[row] = notification;
         const QModelIndex idx = index(row);
         emit dataChanged(idx, idx);
         return;
     }
-    qInfo() << "[notif] model insert id" << notification.id;
+    qDebug() << "[notif] model insert id" << notification.id;
     beginInsertRows(QModelIndex(), 0, 0);
     m_items.prepend(notification);
     endInsertRows();
@@ -85,7 +85,7 @@ bool NotificationModel::removeById(quint32 id)
     if (row < 0) {
         return false;
     }
-    qInfo() << "[notif] model remove id" << id << "row" << row;
+    qDebug() << "[notif] model remove id" << id << "row" << row;
     beginRemoveRows(QModelIndex(), row, row);
     m_items.removeAt(row);
     endRemoveRows();
@@ -99,7 +99,7 @@ QList<quint32> NotificationModel::removeAll()
         return {};
     }
     QList<quint32> removed = ids();
-    qInfo() << "[notif] model remove all (" << m_items.size() << "rows)";
+    qDebug() << "[notif] model remove all (" << m_items.size() << "rows)";
     beginRemoveRows(QModelIndex(), 0, static_cast<int>(m_items.size()) - 1);
     m_items.clear();
     endRemoveRows();
