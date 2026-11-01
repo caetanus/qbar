@@ -1,6 +1,7 @@
 #include "lockcontroller.h"
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QTimer>
 
 namespace {
@@ -32,7 +33,7 @@ LockController::LockController(PamAuthenticator *authenticator,
             setMessage(message);
         });
         connect(m_authenticator, &PamAuthenticator::authenticationSucceeded, this, [this]() {
-            succeed();
+            succeed(QStringLiteral("password"));
         });
         connect(m_authenticator, &PamAuthenticator::authenticationFailed, this, [this](const QString &reason) {
             setError(reason);
@@ -41,7 +42,7 @@ LockController::LockController(PamAuthenticator *authenticator,
 
     // Fingerprint (fprintd/D-Bus): wins immediately on match; cancelled on any other win.
     connect(&m_fingerprint, &FprintAuthenticator::authenticationSucceeded, this, [this]() {
-        succeed();
+        succeed(QStringLiteral("fingerprint"));
     });
     connect(&m_fingerprint, &FprintAuthenticator::activeChanged, this, [this](bool active) {
         setFingerprintActive(active);
@@ -75,11 +76,23 @@ LockController::LockController(PamAuthenticator *authenticator,
             setMessage(tr("Locked with %1").arg(m_backend->name()));
         });
         connect(m_backend, &LockBackend::lockFailed, this, [this](const QString &reason) {
+            qWarning() << "qbar-lock: lock failed:" << reason << "— exiting 2";
             setError(reason);
             emit fatalError(reason);
             if (!m_demoMode) {
                 QCoreApplication::exit(2);
             }
+        });
+        // The backend reports once the lock is actually released; only then is a clean
+        // (status 0) exit honest. A failed release exits 3 so the wrapper's fallback runs.
+        connect(m_backend, &LockBackend::unlocked, this, [this]() {
+            emit unlocked();
+            QCoreApplication::quit();
+        });
+        connect(m_backend, &LockBackend::unlockFailed, this, [this](const QString &reason) {
+            qWarning() << "qbar-lock: could not release the lock:" << reason << "— exiting 3";
+            emit fatalError(reason);
+            QCoreApplication::exit(3);
         });
     }
 }
@@ -93,7 +106,7 @@ void LockController::setFaceAuthenticator(PamAuthenticator *face)
     // Only the pass/fail outcome matters for face — its prompts/messages must not clobber
     // the primary (password) prompt line.
     connect(m_face, &PamAuthenticator::authenticationSucceeded, this, [this]() {
-        succeed();
+        succeed(QStringLiteral("face"));
     });
     connect(m_face, &PamAuthenticator::authenticationFailed, this, [this]() {
         if (!m_faceRunning || m_succeeded) {
@@ -131,11 +144,13 @@ void LockController::start()
         return;
     }
     if (m_backend == nullptr) {
+        qWarning() << "qbar-lock: no lock backend configured — exiting 2";
         emit fatalError(tr("No lock backend configured"));
         QCoreApplication::exit(2);
         return;
     }
     if (!m_backend->isAvailable()) {
+        qWarning() << "qbar-lock: backend unavailable:" << m_backend->unavailableReason() << "— exiting 2";
         emit fatalError(m_backend->unavailableReason());
         QCoreApplication::exit(2);
         return;
@@ -167,7 +182,7 @@ void LockController::stopMethods()
     setFingerprintActive(false);
 }
 
-void LockController::succeed()
+void LockController::succeed(const QString &method)
 {
     if (m_succeeded) {
         return; // first method already won
@@ -175,23 +190,21 @@ void LockController::succeed()
     m_succeeded = true;
     stopMethods();
     setMessage(tr("Unlocked"));
-    if (m_demoMode) {
+    qWarning() << "qbar-lock: authenticated via" << method << "— releasing the lock";
+    if (m_demoMode || m_backend == nullptr) {
         emit unlocked();
         QCoreApplication::quit();
         return;
     }
-    if (m_backend != nullptr) {
-        m_backend->unlock();
-    }
-    emit unlocked();
-    QCoreApplication::quit();
+    // The backend's `unlocked`/`unlockFailed` (wired in the constructor) ends the process.
+    m_backend->unlock();
 }
 
 void LockController::submitPassword(const QString &password)
 {
     setError({});
     if (m_demoMode) {
-        succeed();
+        succeed(QStringLiteral("demo"));
         return;
     }
     if (m_authenticator != nullptr) {

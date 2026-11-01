@@ -15,4 +15,7 @@ public:
 public slots:
     void lock() override;
     void unlock() override;
+
+private:
+    int m_unlockWaitMs = 0;
 };

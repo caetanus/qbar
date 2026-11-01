@@ -71,7 +71,7 @@ private:
     void setFaceActive(bool active);
     void startMethods();
     void stopMethods();
-    void succeed();
+    void succeed(const QString &method);
 
     PamAuthenticator *m_authenticator = nullptr;
     PamAuthenticator *m_face = nullptr;

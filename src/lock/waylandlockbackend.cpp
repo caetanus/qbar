@@ -3,7 +3,9 @@
 #ifdef QBAR_LOCK_HAVE_WAYLAND
 
 #include <QCoreApplication>
+#include <QDebug>
 #include <QGuiApplication>
+#include <QTimer>
 #include <QVariant>
 #include <qpa/qplatformnativeinterface.h>
 
@@ -108,15 +110,35 @@ void WaylandLockBackend::unlock()
     // Deactivate the session lock cleanly BEFORE the process exits, so the compositor
     // reveals the session instead of holding a blank/solid-color lock. The lock handle
     // is published on the QGuiApplication by the plugin when the `locked` event arrives.
-    if (ext_session_lock_v1 *lock = publishedLock()) {
-        ext_session_lock_v1_unlock_and_destroy(lock);
-        if (QCoreApplication::instance() != nullptr) {
-            QCoreApplication::instance()->setProperty("qbarSessionLock", QVariant());
+    //
+    // Never report success without having released the lock: an exit status of 0 tells
+    // the wrapper script "unlocked", so a quit here with the lock still held would leave
+    // the session locked with no locker (sway's red screen) and no fallback.
+    ext_session_lock_v1 *lock = publishedLock();
+    if (lock == nullptr) {
+        // Authentication won before the compositor's `locked` event landed (or the lock
+        // was never granted). Wait for it a little; then fail closed.
+        if (m_unlockWaitMs < 5000) {
+            if (m_unlockWaitMs == 0) {
+                qWarning() << "qbar-lock: unlock requested before the session lock was granted — waiting";
+            }
+            m_unlockWaitMs += 100;
+            QTimer::singleShot(100, this, &WaylandLockBackend::unlock);
+            return;
         }
-        if (wl_display *display = waylandDisplay()) {
-            wl_display_flush(display);
-        }
+        emit unlockFailed(tr("the compositor never granted the session lock"));
+        return;
     }
+    ext_session_lock_v1_unlock_and_destroy(lock);
+    if (QCoreApplication::instance() != nullptr) {
+        QCoreApplication::instance()->setProperty("qbarSessionLock", QVariant());
+    }
+    if (wl_display *display = waylandDisplay()) {
+        // Round-trip, not just flush: make sure the compositor has processed the
+        // unlock before this process (and its connection) goes away.
+        wl_display_roundtrip(display);
+    }
+    qWarning() << "qbar-lock: session unlocked (ext-session-lock released)";
     emit unlocked();
 }
 

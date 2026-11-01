@@ -22,4 +22,7 @@ signals:
     void locked();
     void lockFailed(const QString &reason);
     void unlocked();
+    // The lock could not be released (e.g. the compositor never granted it); the
+    // process must exit NON-ZERO so the wrapper's fallback locker takes over.
+    void unlockFailed(const QString &reason);
 };

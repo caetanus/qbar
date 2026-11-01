@@ -22,10 +22,27 @@ using QmlCss::CssTheme;
 #include <QTimer>
 #include <QTranslator>
 
+#include <csignal>
 #include <cstdio>
 #include <memory>
+#include <unistd.h>
 
 namespace {
+
+// A signal (SIGTERM from a `pkill`, SIGHUP from a dying parent) must leave a trace in
+// the journal: a locker that vanishes silently is the hardest failure to diagnose. The
+// handler is async-signal-safe (write + _exit) and exits non-zero (128 + signal), so the
+// wrapper script's fallback locker takes over.
+void onFatalSignal(int signo)
+{
+    const char *name = signo == SIGTERM ? "SIGTERM" : signo == SIGHUP ? "SIGHUP" : signo == SIGINT ? "SIGINT" : "signal";
+    char buffer[96];
+    const int len = snprintf(buffer, sizeof(buffer), "qbar-lock: killed by %s — exiting %d\n", name, 128 + signo);
+    if (len > 0) {
+        (void)write(STDERR_FILENO, buffer, static_cast<size_t>(len));
+    }
+    _exit(128 + signo);
+}
 
 QString defaultThemePath()
 {
@@ -151,6 +168,11 @@ int main(int argc, char *argv[])
 
     QGuiApplication app(argc, argv);
     QGuiApplication::setDesktopFileName(QStringLiteral("qbar-lock"));
+    std::signal(SIGTERM, onFatalSignal);
+    std::signal(SIGHUP, onFatalSignal);
+    std::signal(SIGINT, onFatalSignal);
+    qWarning() << "qbar-lock: starting — platform" << QGuiApplication::platformName() << "backend" << backendName
+               << "screens" << QGuiApplication::screens().size() << (demoMode ? "(demo)" : "");
 
     // LANG/LC_MESSAGES support: Qt's own catalogs (built-in component strings)
     // first, then ours (":/i18n", embedded via meson compile_translations).
@@ -306,6 +328,8 @@ int main(int argc, char *argv[])
     }
 
     const int result = app.exec();
+    qWarning() << "qbar-lock: exiting with status" << result
+               << (result == 0 ? "(unlocked)" : "(NOT unlocked — the wrapper's fallback locker must take over)");
 
     // Tear down in dependency order. The views reference controller/keyLocks/userModel
     // (main's locals, destroyed in reverse on return) through their QML contexts: delete
