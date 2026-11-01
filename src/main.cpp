@@ -19,7 +19,16 @@
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QProcess>
+#include "qml/modelcapsules.h"
 #include <QScreen>
+#include <QSocketNotifier>
+#include <QThreadPool>
+#include <qpa/qplatformscreen.h>
+
+#include <csignal>
+#include <cstdlib>
+#include <sys/socket.h>
+#include <unistd.h>
 #include <QSet>
 #include <QQuickWindow>
 #include <QSettings>
@@ -109,6 +118,40 @@ void qbarMessageHandler(QtMsgType type, const QMessageLogContext &context, const
     }
     if (type == QtFatalMsg) {
         abort();
+    }
+}
+
+// SIGTERM/SIGINT/SIGHUP end the event loop instead of killing the process: the restart
+// path (`kill <pid>`, the respawn wrapper) then runs the same orderly teardown as a
+// normal exit. The handler only writes a byte to a socketpair (async-signal-safe); the
+// notifier on the other end calls quit() on the GUI thread.
+int g_signalSockets[2] = {-1, -1};
+
+void onTerminationSignal(int signo)
+{
+    const char byte = static_cast<char>(signo);
+    (void)!write(g_signalSockets[0], &byte, 1);
+}
+
+void installTerminationSignals(QCoreApplication &app)
+{
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, g_signalSockets) != 0) {
+        return;
+    }
+    auto *notifier = new QSocketNotifier(g_signalSockets[1], QSocketNotifier::Read, &app);
+    QObject::connect(notifier, &QSocketNotifier::activated, &app, [notifier](QSocketDescriptor) {
+        char byte = 0;
+        (void)!read(g_signalSockets[1], &byte, 1);
+        notifier->setEnabled(false);
+        qWarning("qbar: signal %d — shutting down", static_cast<int>(byte));
+        QCoreApplication::quit();
+    });
+    for (int signo : {SIGTERM, SIGINT, SIGHUP}) {
+        struct sigaction action {};
+        action.sa_handler = onTerminationSignal;
+        sigemptyset(&action.sa_mask);
+        action.sa_flags = SA_RESTART;
+        sigaction(signo, &action, nullptr);
     }
 }
 
@@ -325,12 +368,42 @@ public:
         reconcile();
     }
 
+    // Bars die with the manager, synchronously — main() deletes it right after exec()
+    // returns, while the platform integration and the render threads are still whole.
+    // Leaving them to QGuiApplication's destructor tore the QQuickViews down in the
+    // middle of its own teardown (SIGABRT in QQuickWindowPrivate::cleanup, 2026-11-01).
+    ~BarManager() override
+    {
+        const auto bars = m_bars;
+        m_bars.clear();
+        qDeleteAll(bars);
+    }
+
 private:
+    // Qt fabricates a placeholder QScreen while the compositor has no outputs (a VT
+    // switch, every monitor unplugged). It has no wl_output, so a layer surface on it
+    // is immediately closed by the compositor; the bars return with the real screens.
+    static bool isPlaceholder(const QScreen *screen)
+    {
+        return screen == nullptr || screen->handle() == nullptr || screen->handle()->isPlaceholder();
+    }
+
     void reconcile()
     {
+        if (m_reconciling) {
+            m_reconcileAgain = true; // a screen changed while a bar was being built
+            return;
+        }
+        m_reconciling = true;
         const auto screens = QGuiApplication::screens();
         QSet<QString> liveScreens;
         for (QScreen *screen : screens) {
+            // Building a bar runs a lot of code (models, QML, platform probes); if any of
+            // it dispatched Wayland events, the screen list may have changed under us and
+            // `screen` may already be deleted. Re-validate against the live list each time.
+            if (!QGuiApplication::screens().contains(screen) || isPlaceholder(screen)) {
+                continue;
+            }
             liveScreens.insert(screen->name());
             for (int i = 0; i < m_configs.size(); ++i) {
                 if (!barConfigTargetsScreen(m_configs.at(i), screen->name())) {
@@ -341,6 +414,10 @@ private:
                     continue;
                 }
                 auto *bar = new BarWindow(m_configs.at(i));
+                if (!QGuiApplication::screens().contains(screen)) {
+                    delete bar;
+                    break;
+                }
                 bar->setScreen(screen);
                 bar->show();
                 m_bars.insert(key, bar);
@@ -356,6 +433,11 @@ private:
                 it = m_bars.erase(it);
             }
         }
+        m_reconciling = false;
+        if (m_reconcileAgain) {
+            m_reconcileAgain = false;
+            reconcile();
+        }
     }
 
     static QString barKey(int index, const QString &screenName)
@@ -370,6 +452,8 @@ private:
 
     QList<BarConfig> m_configs;
     QHash<QString, BarWindow *> m_bars;
+    bool m_reconciling = false;
+    bool m_reconcileAgain = false;
 };
 
 } // namespace
@@ -390,6 +474,12 @@ int main(int argc, char *argv[])
     // After QApplication so the Wayland platform plugin (and libQt6WaylandClient, where the
     // recoverable doHandleFrameCallback lives) is loaded and dlsym can find it.
     installCrashGuard();
+    // The bar outlives its windows: when every output goes away (VT switch, all monitors
+    // unplugged) the bars are torn down and come back with the screens. Quitting instead
+    // made the respawn wrapper relaunch qbar every second into a compositor without
+    // outputs, each instance dying at teardown (25 core dumps in two minutes).
+    app.setQuitOnLastWindowClosed(false);
+    installTerminationSignals(app);
     QCoreApplication::setApplicationName(QStringLiteral("qbar"));
     QCoreApplication::setOrganizationName(QStringLiteral("qbar"));
     QGuiApplication::setDesktopFileName(QStringLiteral("qbar"));
@@ -474,10 +564,29 @@ int main(int argc, char *argv[])
     // monitors are hotplugged. The layer-shell integration reads each bar's
     // geometry from per-window properties (see BarWindow), so bars can differ.
     auto *barManager = new BarManager(loadConfigs(), &app);
-    Q_UNUSED(barManager);
 
     // JSON IPC over a QLocalSocket (open/toggle popups, e.g. from keyboard shortcuts).
     QbarIpc::instance()->start();
 
-    return app.exec();
+    const int result = app.exec();
+
+    // Orderly teardown while the application is still whole: windows and their QML
+    // engines first (bindings die with them), then the shared models they bound to.
+    // QApplication's destructor would do both in creation order, interleaved with the
+    // platform teardown — see BarManager::~BarManager and ModelCapsules::shutdown.
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    delete barManager;
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    ModelCapsules::shutdown();
+    // Background workers (the calendar's EDS sync, JSON parsing) may still be running
+    // on the global pool. Let them finish before the C++ runtime unloads the libraries
+    // they are inside of: a worker in a synchronous EDS call outliving main() corrupted
+    // the heap during static teardown (SIGABRT in realloc under e_source_get_extension).
+    // A worker stuck in a long network call must not hold the restart hostage either —
+    // after a bounded wait, leave without running the destructors it would race.
+    if (!QThreadPool::globalInstance()->waitForDone(5000)) {
+        qWarning("qbar: background workers still busy at exit — leaving without teardown");
+        std::_Exit(result);
+    }
+    return result;
 }

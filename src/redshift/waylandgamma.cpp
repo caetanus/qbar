@@ -109,10 +109,29 @@ bool WaylandGammaBackend::init()
     if (m_registry == nullptr) {
         return false;
     }
+    // Collect the initial globals on a PRIVATE event queue. A roundtrip on Qt's default
+    // queue would dispatch every pending Qt event too — including a wl_output
+    // global_remove, which deletes a QScreen in the middle of whatever Qt code is
+    // creating this model (BarManager::reconcile iterating the screens: use-after-free,
+    // valgrind-confirmed 2026-11-01). Our queue only ever carries our registry events.
+    wl_event_queue *queue = wl_display_create_queue(m_display);
+    if (queue == nullptr) {
+        return false;
+    }
+    wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(m_registry), queue);
     wl_registry_add_listener(m_registry, &registryListener, this);
-    // One roundtrip collects the initial globals (outputs + the manager); hotplug
-    // events keep arriving later through Qt's dispatch of the default queue.
-    wl_display_roundtrip(m_display);
+    wl_display_roundtrip_queue(m_display, queue);
+    // From here on, hotplug and gamma events ride Qt's default queue like any other
+    // proxy of this display (the outputs/manager bound above inherit the registry's
+    // queue, so move them too).
+    wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(m_registry), nullptr);
+    if (m_manager != nullptr) {
+        wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(m_manager), nullptr);
+    }
+    for (auto &output : m_outputs) {
+        wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(output->output), nullptr);
+    }
+    wl_event_queue_destroy(queue);
     if (m_manager == nullptr) {
         qInfo() << "[redshift] compositor has no zwlr_gamma_control_manager_v1";
         return false;

@@ -18,6 +18,7 @@ class I3IpcClient final : public WindowManagerBackend {
 
 public:
     explicit I3IpcClient(QObject *parent = nullptr);
+    ~I3IpcClient() override;
 
     QString name() const override;
     WorkspaceModel *workspaceModel() override;

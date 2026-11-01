@@ -103,9 +103,11 @@ int BarWindow::widgetReloadGeneration() const
 
 void BarWindow::closeEvent(QCloseEvent *event)
 {
+    // A closed bar is just a closed window (compositor dropped the surface, output
+    // gone): the process keeps running — quitOnLastWindowClosed is off — and
+    // BarManager re-creates the bar with its screen.
     qWarning() << "QBar closeEvent";
     QQuickView::closeEvent(event);
-    QApplication::quit();
 }
 
 void BarWindow::hideEvent(QHideEvent *event)

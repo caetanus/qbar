@@ -103,10 +103,22 @@ bool applyWaylandLayerShellIntegration(QWindow *window, const BarConfig &config)
     state.display = display;
     state.window = window;
 
+    // Probe on a PRIVATE queue: a roundtrip on Qt's default queue would dispatch Qt's
+    // own pending events (screen removal, …) from inside the bar's construction.
     wl_registry *registry = wl_display_get_registry(state.display);
+    wl_event_queue *queue = wl_display_create_queue(state.display);
+    if (queue == nullptr) {
+        wl_registry_destroy(registry);
+        return false;
+    }
+    wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(registry), queue);
     wl_registry_add_listener(registry, &registryListener, &state);
-    wl_display_roundtrip(state.display);
+    wl_display_roundtrip_queue(state.display, queue);
+    if (state.layerShell != nullptr) {
+        wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(state.layerShell), nullptr);
+    }
     wl_registry_destroy(registry);
+    wl_event_queue_destroy(queue);
 
     if (state.layerShell == nullptr) {
         return false;

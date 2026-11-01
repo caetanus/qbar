@@ -3,15 +3,31 @@
 #include <QCoreApplication>
 #include <QQmlEngine>
 
+ModelCapsules *ModelCapsules::s_instance = nullptr;
+
 ModelCapsules *ModelCapsules::instance()
 {
-    static ModelCapsules *self = new ModelCapsules(qApp);
-    return self;
+    if (s_instance == nullptr) {
+        s_instance = new ModelCapsules(qApp);
+    }
+    return s_instance;
+}
+
+void ModelCapsules::shutdown()
+{
+    delete s_instance; // the destructor nulls s_instance
 }
 
 ModelCapsules::ModelCapsules(QObject *parent)
     : QObject(parent)
 {
+}
+
+ModelCapsules::~ModelCapsules()
+{
+    if (s_instance == this) {
+        s_instance = nullptr;
+    }
 }
 
 QObject *ModelCapsules::acquire(const QString &key, QWindow *window)
@@ -44,6 +60,9 @@ QObject *ModelCapsules::acquire(const QString &key, QWindow *window)
             m_caffeineWindow = window;
         }
         model = m_caffeine.get();
+        // Re-point on every acquire: the window captured at construction may be a bar
+        // that has since died with its output (dangling raw pointer → UAF).
+        m_caffeine->setWindow(window);
     } else if (key == QLatin1String("disk")) {
         model = m_disk.get();
     } else if (key == QLatin1String("bluetooth")) {

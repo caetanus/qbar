@@ -3,8 +3,9 @@
 #include <QObject>
 #include <QString>
 #include <QDBusUnixFileDescriptor>
+#include <QPointer>
 
-class QWindow;
+#include <QWindow>
 class QTimer;
 
 class CaffeineModel final : public QObject {
@@ -18,6 +19,9 @@ public:
     bool active() const;
 
     Q_INVOKABLE void toggle();
+    // The bar window whose wl_surface carries the idle inhibitor. Bars die and come
+    // back with their outputs, so the capsule re-points this on every acquire.
+    void setWindow(QWindow *window);
     Q_INVOKABLE void setActive(bool active);
 
 signals:
@@ -41,7 +45,7 @@ private:
     void syncState();
     bool backendActive() const;
 
-    QWindow *m_window = nullptr;
+    QPointer<QWindow> m_window;
     QTimer *m_syncTimer = nullptr;
     bool m_requestedActive = false;
     bool m_active = false;

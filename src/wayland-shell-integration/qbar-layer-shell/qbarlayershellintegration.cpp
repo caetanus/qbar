@@ -386,8 +386,19 @@ void QBarLayerShellSurface::configure(uint32_t serial, uint32_t width, uint32_t 
 
 void QBarLayerShellSurface::closeFromCompositor()
 {
-    if (QCoreApplication::instance() != nullptr) {
-        QCoreApplication::quit();
+    // The compositor dropped this layer surface — normally because its output went
+    // away (VT switch, monitor unplugged). Close THIS window only: the application
+    // stays up and BarManager brings the bar back with the screen. Quitting the whole
+    // process here (the old behaviour) sent the respawn wrapper into a crash loop on
+    // every output loss (2026-11-01: 25 core dumps in two minutes).
+    qWarning() << "QBar layer-shell: surface closed by the compositor — closing its window";
+    if (window() != nullptr && window()->window() != nullptr) {
+        QMetaObject::invokeMethod(
+            window()->window(), [w = QPointer<QWindow>(window()->window())]() {
+                if (w) {
+                    w->close();
+                }
+            }, Qt::QueuedConnection);
     }
 }
 

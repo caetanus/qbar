@@ -277,6 +277,20 @@ QString activeKeyboardLayout(const QJsonArray &inputs)
 
 } // namespace
 
+I3IpcClient::~I3IpcClient()
+{
+    // Members die in reverse declaration order: the reconnect timer and the buffers go
+    // BEFORE the sockets, and a QLocalSocket's destructor emits disconnected() — which
+    // ran handleEventDisconnected() on the half-destroyed object (use-after-free on the
+    // timer, valgrind-confirmed when a bar is torn down with its output). Cut the
+    // socket→slot wiring and close them while everything is still alive.
+    m_commandSocket.disconnect(this);
+    m_eventSocket.disconnect(this);
+    m_reconnectTimer.stop();
+    m_commandSocket.abort();
+    m_eventSocket.abort();
+}
+
 I3IpcClient::I3IpcClient(QObject *parent)
     : WindowManagerBackend(parent)
 {

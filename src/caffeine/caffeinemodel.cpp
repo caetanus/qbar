@@ -84,11 +84,24 @@ bool ensureIdleInhibitManager(zwp_idle_inhibit_manager_v1 **manager)
         return false;
     }
 
+    // Private queue for the probe: a roundtrip on Qt's default queue re-enters Qt's own
+    // Wayland handling (screen add/remove, …) from inside the caller — see
+    // WaylandGammaBackend::init for the use-after-free that produced.
+    wl_event_queue *queue = wl_display_create_queue(display);
+    if (queue == nullptr) {
+        wl_registry_destroy(registry);
+        return false;
+    }
+    wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(registry), queue);
     IdleInhibitRegistryState state;
     state.manager = manager;
     wl_registry_add_listener(registry, &registryListener, &state);
-    wl_display_roundtrip(display);
+    wl_display_roundtrip_queue(display, queue);
+    if (*manager != nullptr) {
+        wl_proxy_set_queue(reinterpret_cast<wl_proxy *>(*manager), nullptr);
+    }
     wl_registry_destroy(registry);
+    wl_event_queue_destroy(queue);
     return *manager != nullptr;
 }
 
@@ -117,6 +130,23 @@ CaffeineModel::CaffeineModel(QWindow *window, QObject *parent)
 CaffeineModel::~CaffeineModel()
 {
     release();
+}
+
+void CaffeineModel::setWindow(QWindow *window)
+{
+    if (window == nullptr || m_window == window) {
+        return;
+    }
+    // A Wayland inhibitor is bound to the old window's surface; drop it so syncState()
+    // re-creates it on the live one.
+    const bool wanted = m_requestedActive;
+    if (m_window != nullptr && wanted && m_backend == Backend::WaylandIdleInhibit) {
+        release();
+    }
+    m_window = window;
+    if (wanted) {
+        syncState();
+    }
 }
 
 bool CaffeineModel::active() const

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QPointer>
 
 #include "../battery/batterymodel.h"
 #include "../bluetooth/bluetoothmodel.h"
@@ -49,6 +50,13 @@ class ModelCapsules final : public QObject {
 
 public:
     static ModelCapsules *instance();
+    // Destroy every model NOW, while the QML engines that bound to them are already
+    // gone and the application is still fully alive. Left to QApplication's destructor,
+    // the models die between QGuiApplication's own teardown steps: a model's destroyed()
+    // re-evaluates bindings in any surviving engine (dock/notification windows) and
+    // QQuickText::setText then dereferences the already-destroyed QInputMethod — the
+    // SIGSEGV every qbar restart took on 2026-11-01. Safe to call without an instance.
+    static void shutdown();
 
     // Return the model for `key`, constructing it on first request via its Capsule. Unknown
     // key → nullptr (logged). Keys: cpu, temperature, network, networkProcess, networkManager,
@@ -58,6 +66,9 @@ public:
 
 private:
     explicit ModelCapsules(QObject *parent = nullptr);
+    ~ModelCapsules() override;
+
+    static ModelCapsules *s_instance;
 
     Capsule<CpuModel> m_cpu{"CpuModel", [this] { return new CpuModel(this); }};
     Capsule<TemperatureModel> m_temperature{"TemperatureModel", [this] { return new TemperatureModel(this); }};
@@ -86,5 +97,5 @@ private:
     Capsule<FailedUnitsModel> m_failedUnits{"FailedUnitsModel", [this] { return new FailedUnitsModel(this); }};
     Capsule<MpdModel> m_mpd{"MpdModel", [this] { return new MpdModel(this); }};
     Capsule<RedshiftModel> m_redshift{"RedshiftModel", [this] { return new RedshiftModel(this); }};
-    QWindow *m_caffeineWindow = nullptr;
+    QPointer<QWindow> m_caffeineWindow;
 };
