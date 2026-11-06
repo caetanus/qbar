@@ -126,9 +126,11 @@ bool NotificationModel::markExiting(quint32 id, int order)
 
 QList<quint32> NotificationModel::markAllExiting()
 {
+    // Cascade from the far end of the stack towards the pill/corner: the last row
+    // (the oldest card, farthest from the corner) leaves first, row 0 last.
     QList<quint32> ids;
     int order = 0;
-    for (int row = 0; row < m_items.size(); ++row) {
+    for (int row = static_cast<int>(m_items.size()) - 1; row >= 0; --row) {
         Notification &n = m_items[row];
         if (n.exiting) {
             continue;
