@@ -36,6 +36,8 @@ QVariant NotificationModel::data(const QModelIndex &index, int role) const
     case HasReplyRole: return n.hasReplyAction;
     case ReplyLabelRole: return n.replyLabel;
     case ReplyPlaceholderRole: return n.replyPlaceholder;
+    case ExitingRole: return n.exiting;
+    case ExitOrderRole: return n.exitOrder;
     }
     return {};
 }
@@ -59,6 +61,8 @@ QHash<int, QByteArray> NotificationModel::roleNames() const
         {HasReplyRole, "hasReply"},
         {ReplyLabelRole, "replyLabel"},
         {ReplyPlaceholderRole, "replyPlaceholder"},
+        {ExitingRole, "exiting"},
+        {ExitOrderRole, "exitOrder"},
     };
 }
 
@@ -67,7 +71,7 @@ void NotificationModel::upsert(const Notification &notification)
     const int row = rowOf(notification.id);
     if (row >= 0) {
         qDebug() << "[notif] model update id" << notification.id << "row" << row;
-        m_items[row] = notification;
+        m_items[row] = notification; // a replaces_id update revives a card mid-exit (exiting=false)
         const QModelIndex idx = index(row);
         emit dataChanged(idx, idx);
         return;
@@ -107,6 +111,45 @@ QList<quint32> NotificationModel::removeAll()
     return removed;
 }
 
+bool NotificationModel::markExiting(quint32 id, int order)
+{
+    const int row = rowOf(id);
+    if (row < 0 || m_items.at(row).exiting) {
+        return false;
+    }
+    m_items[row].exiting = true;
+    m_items[row].exitOrder = order;
+    const QModelIndex idx = index(row);
+    emit dataChanged(idx, idx, {ExitingRole, ExitOrderRole});
+    return true;
+}
+
+QList<quint32> NotificationModel::markAllExiting()
+{
+    QList<quint32> ids;
+    int order = 0;
+    for (int row = 0; row < m_items.size(); ++row) {
+        Notification &n = m_items[row];
+        if (n.exiting) {
+            continue;
+        }
+        n.exiting = true;
+        n.exitOrder = order++;
+        ids.append(n.id);
+    }
+    if (!ids.isEmpty()) {
+        qDebug() << "[notif] model exit all (" << ids.size() << "rows)";
+        emit dataChanged(index(0), index(static_cast<int>(m_items.size()) - 1), {ExitingRole, ExitOrderRole});
+    }
+    return ids;
+}
+
+bool NotificationModel::isExiting(quint32 id) const
+{
+    const int row = rowOf(id);
+    return row >= 0 && m_items.at(row).exiting;
+}
+
 const Notification *NotificationModel::byId(quint32 id) const
 {
     const int row = rowOf(id);
@@ -136,7 +179,7 @@ quint32 NotificationModel::idByStackTag(const QString &appName, const QString &t
 bool NotificationModel::hasReplyCards() const
 {
     for (const Notification &n : m_items) {
-        if (n.hasReplyAction) {
+        if (n.hasReplyAction && !n.exiting) {
             return true;
         }
     }

@@ -87,6 +87,9 @@ Selectors:
 
 * ``#notifications`` — the stack: ``width``, ``margin-*``, ``spacing``.
 * ``#notifications.clear-all`` — the "clear all" pill shown ahead of the stack
+  Clicking it (or ``qbar-ipc clear-notifications``) dismisses every toast in a
+  cascade: each card starts leaving ``clearAllStagger`` ms (config, default 70) after
+  the previous one and takes slightly longer — set 0 for all at once.
   whenever more than one card is up (dismisses everything with one click):
   ``background(-color)``, ``color``, ``border-*`` (+ ``:hover``). Without this
   rule the pill wears the card's chrome and ``.body`` text style, so it follows

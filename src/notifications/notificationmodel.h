@@ -38,6 +38,11 @@ struct Notification {
     bool resident = false;
     int expireMs = -1;   // resolved timeout (ms), 0 = never
     QDateTime timestamp;
+    // Exit in progress: the row stays until the card has finished its own exit
+    // animation (NotificationServer::exitFinished). exitOrder = position in a batch
+    // ("clear all"), so cards leave in a cascade, each at its own pace.
+    bool exiting = false;
+    int exitOrder = 0;
 };
 
 class NotificationModel final : public QAbstractListModel {
@@ -62,6 +67,8 @@ public:
         HasReplyRole,
         ReplyLabelRole,
         ReplyPlaceholderRole,
+        ExitingRole,
+        ExitOrderRole,
     };
 
     explicit NotificationModel(QObject *parent = nullptr);
@@ -80,6 +87,11 @@ public:
     // all exit transitions together — serial removeById calls cancel each other's
     // mid-flight remove animation and "clear all" becomes a jump-cut.
     QList<quint32> removeAll();
+    // Flag a row as leaving (data change, no removal). false if absent or already leaving.
+    bool markExiting(quint32 id, int order);
+    // Flag every live row as leaving, ordered from row 0 outwards; returns their ids.
+    QList<quint32> markAllExiting();
+    bool isExiting(quint32 id) const;
     const Notification *byId(quint32 id) const;
     QList<quint32> ids() const;
     // Id of the live notification carrying the same app + stack tag (0 when none) —

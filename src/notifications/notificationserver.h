@@ -88,6 +88,8 @@ public:
     Q_INVOKABLE void invokeAction(uint id, const QString &actionKey);
     Q_INVOKABLE void dismiss(uint id);
     Q_INVOKABLE void dismissAll();
+    // The card finished its exit animation: drop the row now.
+    Q_INVOKABLE void exitFinished(uint id);
     Q_INVOKABLE void setHovered(uint id, bool hovered);
     // Inline reply: emits NotificationReplied and dismisses the card.
     Q_INVOKABLE void reply(uint id, const QString &text);
@@ -124,6 +126,11 @@ private:
     NotificationImageProvider *m_imageProvider = nullptr; // owned by the QML engine
     QVariantMap m_config;
     QHash<quint32, QTimer *> m_expiry;
+    // Safety net per exiting card: if the window never renders the exit (frame-starved
+    // compositor), the row is dropped anyway after this timer.
+    QHash<quint32, QTimer *> m_exitForce;
+    void beginExit(quint32 id, int order, CloseReason reason);
+    void finishExit(quint32 id);
     QSet<quint32> m_replying;
     quint32 m_nextId = 1;
     quint32 m_imageSerial = 0;

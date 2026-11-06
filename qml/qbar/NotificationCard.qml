@@ -46,6 +46,15 @@ Item {
     readonly property string nReplyLabel: replyLabel !== undefined && replyLabel.length > 0
         ? replyLabel : qsTr("Reply")
     readonly property string nReplyPlaceholder: replyPlaceholder !== undefined ? replyPlaceholder : ""
+    // Exit, driven by the model: the server flags the row (`exiting`, with its position
+    // in a "clear all" batch) and the card runs its own exit — delayed by that position
+    // and a touch slower for each card further down, so the stack drains in a cascade —
+    // then reports exitFinished(), which drops the row. A replaces_id update mid-exit
+    // flips the flag back and the card snaps to its normal pose.
+    readonly property bool nExiting: exiting !== undefined ? exiting : false
+    readonly property int nExitOrder: exitOrder !== undefined ? exitOrder : 0
+    readonly property int clearAllStagger: (typeof notifConfig !== "undefined" && notifConfig
+        && notifConfig.clearAllStagger !== undefined) ? notifConfig.clearAllStagger : 70
 
     readonly property string urgencyClass: nUrgency === 2 ? "critical" : (nUrgency === 0 ? "low" : "normal")
     // Card-level hover MUST be a HoverHandler, not the MouseArea's containsMouse: the
@@ -105,7 +114,9 @@ Item {
     readonly property bool showProgress: nExpireMs > 0 && progressStyle["background-color"] !== undefined
 
     visible: visibleInStack
-    height: visibleInStack ? content.implicitHeight + 2 * pad + (showProgress ? progressBar.height : 0) : 0
+    readonly property real naturalHeight: content.implicitHeight + 2 * pad + (showProgress ? progressBar.height : 0)
+    // The slot collapses with the exit, so the cards behind slide up as this one goes.
+    height: !visibleInStack ? 0 : (nExiting ? naturalHeight * (1 - exitProgress) : naturalHeight)
     clip: false
 
     // Hovering a card with elided text grows it so the whole message is readable
@@ -113,6 +124,7 @@ Item {
     // CSS `transition` duration; the input region tracks it via stackHeight.
     readonly property bool expanded: card.hovered
     Behavior on height {
+        enabled: !card.nExiting // the exit drives the height itself, tick by tick
         NumberAnimation {
             duration: bg.transitionMs > 0 ? bg.transitionMs : 160
             easing.type: bg.transitionEasingType
@@ -142,6 +154,13 @@ Item {
     readonly property var exitSpec: exitAnimIsOwn
         ? cssTheme.parseAnimation(exitStyle["animation"]) : ({})
     readonly property var exitFrames: exitSpec.name ? cssTheme.keyframes(exitSpec.name) : []
+    // Exit timing: `:exit { animation }` wins; else `:exit { transition }`; else 220 ms.
+    readonly property var exitTransition: exitStyle["transition"]
+        ? cssTheme.parseTransition(exitStyle["transition"]) : ({})
+    readonly property int exitMs: exitSpec.duration !== undefined ? exitSpec.duration
+        : (exitTransition.duration !== undefined ? exitTransition.duration : 220)
+    readonly property int exitEasing: exitSpec.easing !== undefined ? exitSpec.easing
+        : (exitTransition.easing !== undefined ? exitTransition.easing : Easing.InQuad)
 
     property real entryProgress: 1.0
     property real exitProgress: 0.0
@@ -243,6 +262,33 @@ Item {
         to: 1.0
         duration: Math.max(1, card.entryMs)
         easing.type: card.entryEasing
+    }
+
+    SequentialAnimation {
+        id: exitAnimation
+        // Cascade: each card in a "clear all" batch starts `clearAllStagger` ms after
+        // the previous one and takes a little longer (+12% each, capped at 2×).
+        PauseAnimation { duration: card.nExitOrder * card.clearAllStagger }
+        NumberAnimation {
+            target: card
+            property: "exitProgress"
+            from: 0.0
+            to: 1.0
+            duration: Math.max(1, card.exitMs * Math.min(2.0, 1.0 + 0.12 * card.nExitOrder))
+            easing.type: card.exitEasing
+        }
+        onFinished: notificationServer.exitFinished(card.nId)
+    }
+
+    onNExitingChanged: {
+        if (nExiting) {
+            exitAnimation.restart()
+        } else {
+            // Revived (replaces_id / stack-tag update landed mid-exit): back to normal.
+            exitAnimation.stop()
+            exitProgress = 0.0
+            applyPose(entryValuesAt(1.0))
+        }
     }
 
     Component.onCompleted: {

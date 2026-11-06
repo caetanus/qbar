@@ -504,6 +504,8 @@ QVariantMap parseNotifications(const QJsonObject &root)
         {QStringLiteral("timeoutCritical"), 0},
         {QStringLiteral("width"), 380},
         {QStringLiteral("margin"), 12},
+        // "Clear all": per-card delay of the cascading exit, ms (0 = all at once).
+        {QStringLiteral("clearAllStagger"), 70},
         // Rich-card features; both false = plain text toasts. Off, the matching
         // capability is not advertised, so well-behaved apps don't even send them.
         {QStringLiteral("actionButtons"), true},

@@ -227,16 +227,48 @@ void NotificationServer::dismiss(uint id)
 
 void NotificationServer::dismissAll()
 {
-    // One batched model removal (not closeNotification per id): serial removals
-    // cancel each other's remove transition in the view, so the cards jump-cut
-    // out instead of animating. The batch starts every exit together.
-    const QList<quint32> ids = m_model.removeAll();
-    for (quint32 id : ids) {
-        disarmExpiry(id);
-        setReplying(id, false);
-        m_imageProvider->remove(id);
-        emit notificationClosed(id, Dismissed);
+    // Every card is flagged as leaving in one data change; each then runs its own exit
+    // (delayed by its position in the batch, at its own pace) and reports back through
+    // exitFinished(), which drops the row. Removing the rows up front never animated:
+    // once the model is empty the ListView clears its items immediately, remove
+    // transitions included (QQuickItemViewPrivate::layout → clear()).
+    const QList<quint32> ids = m_model.markAllExiting();
+    for (int i = 0; i < ids.size(); ++i) {
+        beginExit(ids.at(i), i, Dismissed);
     }
+}
+
+void NotificationServer::exitFinished(uint id)
+{
+    finishExit(id);
+}
+
+void NotificationServer::beginExit(quint32 id, int order, CloseReason reason)
+{
+    disarmExpiry(id);
+    setReplying(id, false); // a dying card must not hold the keyboard
+    emit notificationClosed(id, reason);
+    // Generous: the exit itself is ~220 ms plus the batch cascade; the net only has
+    // to catch a window that isn't rendering at all.
+    auto *force = new QTimer(this);
+    force->setSingleShot(true);
+    connect(force, &QTimer::timeout, this, [this, id]() { finishExit(id); });
+    delete m_exitForce.take(id);
+    m_exitForce.insert(id, force);
+    force->start(2500 + 150 * order);
+}
+
+void NotificationServer::finishExit(quint32 id)
+{
+    if (QTimer *force = m_exitForce.take(id)) {
+        force->stop();
+        force->deleteLater();
+    }
+    if (!m_model.isExiting(id)) {
+        return; // revived by a replaces_id update, or already gone
+    }
+    m_model.removeById(id);
+    m_imageProvider->remove(id);
 }
 
 void NotificationServer::setHovered(uint id, bool hovered)
@@ -377,7 +409,11 @@ uint NotificationServer::notify(const QString &appName, uint replacesId, const Q
         return id;
     }
 
-    m_model.upsert(n);
+    m_model.upsert(n); // revives the card if it was mid-exit
+    if (QTimer *force = m_exitForce.take(id)) {
+        force->stop();
+        force->deleteLater();
+    }
     disarmExpiry(id);
     if (n.expireMs > 0) {
         armExpiry(id, n.expireMs);
@@ -389,12 +425,10 @@ uint NotificationServer::notify(const QString &appName, uint replacesId, const Q
 void NotificationServer::closeNotification(uint id, CloseReason reason)
 {
     disarmExpiry(id);
-    if (!m_model.removeById(id)) {
-        return;
+    if (!m_model.markExiting(id, 0)) {
+        return; // unknown id, or already on its way out
     }
-    setReplying(id, false); // a dying card must not hold the keyboard
-    m_imageProvider->remove(id);
-    emit notificationClosed(id, reason);
+    beginExit(id, 0, reason);
 }
 
 void NotificationServer::armExpiry(quint32 id, int ms)

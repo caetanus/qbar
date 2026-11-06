@@ -30,27 +30,13 @@ Item {
     readonly property int maxVisible: (notifConfig && notifConfig.maxVisible !== undefined)
         ? notifConfig.maxVisible : 5
 
-    // Exit timing: `#notification:exit { animation: <keyframes> <ms> <easing> }` wins;
-    // `transition: opacity <ms> <easing>` still sets the fallback fade/slide's params.
-    // (The keyframes themselves are interpolated per-card — see NotificationCard.)
+    // Exit timing lives in NotificationCard (each card runs its own exit); the view
+    // only animates the shift of the cards left behind.
     readonly property var exitStyle: cssTheme && cssTheme.loaded
         ? cssTheme.resolve("notification", ["exit"]) : ({})
-    // The resolver merges the BASE #notification rule into :exit (CSS semantics),
-    // so the base ENTRY `animation` leaks in here. Only take the exit timing from
-    // `animation` when an actual :exit rule set one — otherwise the remove
-    // transition would run with the entry's duration (and NotificationCard would
-    // replay the entry keyframes on dismiss — the historical dismiss flicker).
-    readonly property var exitBaseStyle: cssTheme && cssTheme.loaded
-        ? cssTheme.resolve("notification") : ({})
-    readonly property var exitAnim: (exitStyle["animation"] !== undefined
-            && exitStyle["animation"] !== exitBaseStyle["animation"])
-        ? cssTheme.parseAnimation(exitStyle["animation"]) : ({})
     readonly property var exitTransition: exitStyle["transition"]
         ? cssTheme.parseTransition(exitStyle["transition"]) : ({})
-    readonly property int exitMs: exitAnim.duration !== undefined ? exitAnim.duration
-        : (exitTransition.duration !== undefined ? exitTransition.duration : 220)
-    readonly property int exitEasing: exitAnim.easing !== undefined ? exitAnim.easing
-        : (exitTransition.easing !== undefined ? exitTransition.easing : Easing.InQuad)
+    readonly property int exitMs: exitTransition.duration !== undefined ? exitTransition.duration : 220
 
     ListView {
         id: list
@@ -128,25 +114,10 @@ Item {
             }
         }
 
-        // Cards animate their own ENTRY (CSS `#notification { animation: ... }`,
-        // see NotificationCard); the view animates removal and the resulting shifts.
-        displaced: Transition {
-            NumberAnimation {
-                properties: "y"
-                duration: root.exitMs
-                easing.type: Easing.OutQuad
-            }
-        }
-        remove: Transition {
-            // Drives the card's exitProgress; the card maps it through the exit
-            // @keyframes (or the fade + slide-off-edge fallback).
-            NumberAnimation {
-                property: "exitProgress"
-                from: 0.0
-                to: 1.0
-                duration: root.exitMs
-                easing.type: root.exitEasing
-            }
-        }
+        // Cards animate their own ENTRY and EXIT (CSS `#notification { animation }` /
+        // `#notification:exit`, see NotificationCard); a card's row leaves the model only
+        // after its exit finished, and its height collapses along the way, so the cards
+        // behind it slide up smoothly. No `remove` transition on purpose: the view clears
+        // everything at once when the model empties, transitions included.
     }
 }

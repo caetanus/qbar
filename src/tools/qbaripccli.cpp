@@ -7,7 +7,7 @@
 // Usage:
 //   qbar-ipc toggle|open|close <popup-or-drawer>
 //   qbar-ipc trigger <command>        (run a custom action a widget registered)
-//   qbar-ipc close-all | list | commands | ping
+//   qbar-ipc close-all | clear-notifications | list | commands | ping
 //   qbar-ipc --socket <name> ...      (default: qbar, or $QBAR_IPC_SOCKET)
 //
 // The name may be a popup OR a drawer group (a `group/<name>` with a `drawer`); opening a
@@ -40,6 +40,7 @@ void usage()
         "  set-css <path|url>   (preview a theme; relative paths resolve from the cwd)\n"
         "  reset-css   (revert set-css back to the configured theme)\n"
         "  close-all   list   commands   ping\n"
+        "  clear-notifications   (dismiss every toast, like the \"clear all\" pill)\n"
         "  --socket <path>  (default: $XDG_RUNTIME_DIR/qbar.sock, or $QBAR_IPC_SOCKET)\n",
         stderr);
 }

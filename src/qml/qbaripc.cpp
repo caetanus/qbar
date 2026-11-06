@@ -1,4 +1,5 @@
 #include "qbaripc.h"
+#include "notifications/notificationserver.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -149,6 +150,14 @@ QByteArray QbarIpc::handleLine(const QByteArray &line)
                 QMetaObject::invokeMethod(it.value(), "close", Qt::DirectConnection);
             }
         }
+        return reply(true);
+    }
+    if (cmd == QLatin1String("clear-notifications")) {
+        // Same as the "clear all" pill: every toast leaves (cascading exit).
+        if (NotificationServer::instance() == nullptr) {
+            return reply(false, QStringLiteral("the notification daemon is not enabled"));
+        }
+        NotificationServer::instance()->dismissAll();
         return reply(true);
     }
     if (cmd == QLatin1String("set-css")) {
