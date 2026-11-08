@@ -4,6 +4,7 @@
 #include "lockbackend.h"
 #include "pamauthenticator.h"
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 
@@ -34,6 +35,7 @@ public:
     // authenticator or fingerprintEnabled=false simply leaves that method off.
     void setFaceAuthenticator(PamAuthenticator *face);
     void setFingerprintEnabled(bool enabled) { m_fingerprintEnabled = enabled; }
+    void setWakeOutputs(bool enabled) { m_wakeOutputs = enabled; }
 
     QString user() const;
     QString backendName() const;
@@ -72,6 +74,7 @@ private:
     void startMethods();
     void stopMethods();
     void succeed(const QString &method);
+    void wakeOutputs();
 
     PamAuthenticator *m_authenticator = nullptr;
     PamAuthenticator *m_face = nullptr;
@@ -79,6 +82,8 @@ private:
     LockBackend *m_backend = nullptr;
     bool m_demoMode = false;
     bool m_fingerprintEnabled = true;
+    bool m_wakeOutputs = true;
+    QElapsedTimer m_fingerprintWakeTimer;
     bool m_faceRunning = false;
     bool m_fingerprintActive = false;
     bool m_faceActive = false;

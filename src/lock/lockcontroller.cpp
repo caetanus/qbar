@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDebug>
+#include <QProcess>
 #include <QTimer>
 
 namespace {
@@ -11,6 +12,7 @@ constexpr int kFaceRetryMs = 1500;
 // How long a rejected fingerprint scan stays in the (red, shaking) error state before
 // reverting to the neutral "touch the reader" hint — the reader has already re-armed.
 constexpr int kFingerprintErrorMs = 2500;
+constexpr int kFingerprintWakeIntervalMs = 2000;
 } // namespace
 
 LockController::LockController(PamAuthenticator *authenticator,
@@ -61,6 +63,11 @@ LockController::LockController(PamAuthenticator *authenticator,
     connect(&m_fingerprint, &FprintAuthenticator::scanFailed, this, [this](const QString &reason) {
         if (m_succeeded) {
             return;
+        }
+        if (!m_fingerprintWakeTimer.isValid()
+            || m_fingerprintWakeTimer.elapsed() >= kFingerprintWakeIntervalMs) {
+            m_fingerprintWakeTimer.start();
+            wakeOutputs();
         }
         setError({});
         setError(reason);
@@ -182,6 +189,23 @@ void LockController::stopMethods()
     setFingerprintActive(false);
 }
 
+void LockController::wakeOutputs()
+{
+    if (m_demoMode || !m_wakeOutputs) {
+        return;
+    }
+    if (qEnvironmentVariableIsSet("SWAYSOCK")) {
+        qWarning() << "qbar-lock: waking outputs (sway)";
+        QProcess::startDetached(QStringLiteral("swaymsg"),
+                                {QStringLiteral("output"), QStringLiteral("*"),
+                                 QStringLiteral("power"), QStringLiteral("on")});
+    } else if (qEnvironmentVariableIsSet("HYPRLAND_INSTANCE_SIGNATURE")) {
+        qWarning() << "qbar-lock: waking outputs (Hyprland)";
+        QProcess::startDetached(QStringLiteral("hyprctl"),
+                                {QStringLiteral("dispatch"), QStringLiteral("dpms"), QStringLiteral("on")});
+    }
+}
+
 void LockController::succeed(const QString &method)
 {
     if (m_succeeded) {
@@ -197,6 +221,7 @@ void LockController::succeed(const QString &method)
         return;
     }
     // The backend's `unlocked`/`unlockFailed` (wired in the constructor) ends the process.
+    wakeOutputs();
     m_backend->unlock();
 }
 

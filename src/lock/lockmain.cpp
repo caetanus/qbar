@@ -111,6 +111,8 @@ int main(int argc, char *argv[])
                                    QStringLiteral("panel"));
     QCommandLineOption noFingerprintOption(QStringLiteral("no-fingerprint"),
                                            QStringLiteral("Disable fingerprint (fprintd) unlock."));
+    QCommandLineOption noWakeOutputsOption(QStringLiteral("no-wake-outputs"),
+                                           QStringLiteral("Disable waking outputs on authentication or fingerprint scans."));
     QCommandLineOption noAvatarOption(QStringLiteral("no-avatar"),
                                       QStringLiteral("Hide the user's avatar photo (a monogram disc "
                                                      "is shown instead)."));
@@ -126,6 +128,7 @@ int main(int argc, char *argv[])
     parser.addOption(themeOption);
     parser.addOption(styleOption);
     parser.addOption(noFingerprintOption);
+    parser.addOption(noWakeOutputsOption);
     parser.addOption(noAvatarOption);
     parser.addOption(facePamServiceOption);
 
@@ -203,6 +206,7 @@ int main(int argc, char *argv[])
 
     LockController controller(&authenticator, backend.get(), demoMode, parser.value(passwordPamServiceOption));
     controller.setFingerprintEnabled(!parser.isSet(noFingerprintOption));
+    controller.setWakeOutputs(!parser.isSet(noWakeOutputsOption));
 
     // Face unlock (howdy): a separate PAM authenticator on its own service, driven as a
     // continuous re-arming loop by the controller. Only enabled when a service is given.
