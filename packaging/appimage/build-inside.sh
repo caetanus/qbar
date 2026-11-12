@@ -76,10 +76,16 @@ linuxdeploy --appdir "$APPDIR" \
     --exclude-library 'libglib-2.0.so*' --exclude-library 'libgobject-2.0.so*' \
     --exclude-library 'libgio-2.0.so*' --exclude-library 'libgmodule-2.0.so*' \
     --exclude-library 'libgthread-2.0.so*' \
+    --exclude-library 'libssl.so*' --exclude-library 'libcrypto.so*' \
     --plugin qt
 
 # linuxdeploy-plugin-qt re-deploys excluded libraries for the Qt plugins; drop them again.
-rm -f "$APPDIR"/usr/lib/lib{glib,gio,gobject,gmodule,gthread}-2.0.so* "$APPDIR"/usr/lib/libpam.so*
+# OpenSSL stays the host's: Qt's TLS backend dlopen()s libssl.so.3 + libcrypto.so.3 as a
+# PAIR, and bundling only EL9's libcrypto (3.0, pulled in by EDS/krb5) next to the host's
+# newer libssl made the pair fail to load — every HTTPS widget lost TLS. OpenSSL 3 keeps
+# its ABI across 3.x, every target distro ships it, and the host's gets security updates.
+rm -f "$APPDIR"/usr/lib/lib{glib,gio,gobject,gmodule,gthread}-2.0.so* "$APPDIR"/usr/lib/libpam.so* \
+      "$APPDIR"/usr/lib/libssl.so* "$APPDIR"/usr/lib/libcrypto.so*
 
 # Plugins we placed by hand: resolve their Qt deps from the bundle, like Qt's own plugins
 # (not via `linuxdeploy -l`, which would also copy them into usr/lib).
