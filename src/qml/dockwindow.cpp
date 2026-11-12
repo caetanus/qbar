@@ -1,4 +1,5 @@
 #include "dockwindow.h"
+#include "dock/windowthumbnailer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -265,6 +266,15 @@ void DockWindow::ensureView()
     ctx->setContextProperty(QStringLiteral("cssTheme"), m_cssTheme);
     ctx->setContextProperty(QStringLiteral("windowModel"), m_windowModel);
     ctx->setContextProperty(QStringLiteral("wm"), m_wm);
+    // Hover previews: live window thumbnails, when the compositor can capture toplevels.
+    if (m_dock.value(QStringLiteral("thumbnails"), true).toBool()) {
+        m_thumbnailer = new WindowThumbnailer(this);
+        if (m_engine->imageProvider(QStringLiteral("windowthumb")) == nullptr) {
+            m_engine->addImageProvider(QStringLiteral("windowthumb"),
+                                       new WindowThumbProvider(m_thumbnailer->cache()));
+        }
+    }
+    ctx->setContextProperty(QStringLiteral("windowThumbs"), m_thumbnailer);
 
     QScreen *screen = m_barWindow != nullptr ? m_barWindow->screen() : nullptr;
     if (screen == nullptr) {
@@ -300,7 +310,10 @@ void DockWindow::applyGeometry()
         : static_cast<int>(std::lround(std::max(hoverH, 48) * 1.5));
     // Extra room above the peak so the hover tooltip (a label floating above the icon,
     // Docky-style) isn't clipped by the surface/window edge.
-    const int headroom = headroomFor(m_barWindow, peakH) + 44;
+    // Plus the window-preview card above the tooltip when thumbnails are on.
+    const int previewRoom = (m_thumbnailer != nullptr && m_thumbnailer->available())
+        ? m_dock.value(QStringLiteral("thumbnailHeight"), 120).toInt() + 24 : 0;
+    const int headroom = headroomFor(m_barWindow, peakH) + 44 + previewRoom;
     const int surfaceH = barH + headroom;
     const bool bottom = barIsBottom(m_barWindow);
     QScreen *screen = m_view->screen();

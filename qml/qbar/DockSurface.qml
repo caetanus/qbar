@@ -61,6 +61,45 @@ Item {
     property string tooltipText: ""
     property real tooltipCenterX: 0
     property real tooltipSize: root.barHeight
+    // The hovered window, for the live preview above the tooltip.
+    property string hoveredAppId: ""
+    property string hoveredTitle: ""
+
+    // Live window preview (DockWindow's WindowThumbnailer, exposed as `windowThumbs`;
+    // null or unavailable → no preview, just the title tooltip).
+    readonly property bool thumbsOn: typeof windowThumbs !== "undefined" && windowThumbs !== null
+        && windowThumbs.available
+    readonly property real thumbHeight: (typeof dockConfig !== "undefined" && dockConfig
+            && dockConfig.thumbnailHeight > 0) ? dockConfig.thumbnailHeight : 120
+    property string previewKey: ""
+    property int previewSerial: 0
+
+    function setPreviewKey(key) {
+        if (key === root.previewKey)
+            return
+        if (root.previewKey.length > 0 && root.thumbsOn)
+            windowThumbs.release(root.previewKey)   // end the old window's capture session
+        root.previewKey = key
+        root.previewSerial = 0
+    }
+
+    // While a window is hovered, keep its capture live (each request may take a new frame,
+    // at most a few per second); stop as soon as the hover ends.
+    Timer {
+        interval: 300
+        repeat: true
+        triggeredOnStart: true
+        running: root.thumbsOn && root.hovered && root.hoveredTitle.length + root.hoveredAppId.length > 0
+        onTriggered: root.setPreviewKey(windowThumbs.request(root.hoveredAppId, root.hoveredTitle))
+        onRunningChanged: if (!running) root.setPreviewKey("")
+    }
+    Connections {
+        target: root.thumbsOn ? windowThumbs : null
+        function onThumbnailUpdated(key, serial) {
+            if (key === root.previewKey)
+                root.previewSerial = serial
+        }
+    }
 
     // Find the icon under `rowX` (row-content coords) and publish its title/centre/size.
     function updateTooltip(rowX) {
@@ -71,6 +110,8 @@ Item {
             if (c.windowId === undefined)
                 continue
             if (rowX >= c.x && rowX < c.x + c.width) {
+                root.hoveredAppId = c.appId || ""
+                root.hoveredTitle = c.title || ""
                 root.tooltipText = (c.title && c.title.length > 0) ? c.title : (c.appId || "")
                 root.tooltipCenterX = row.contentItem.mapToItem(root, c.x + c.width / 2, 0).x
                 root.tooltipSize = c.sz
@@ -78,6 +119,8 @@ Item {
             }
         }
         root.tooltipText = ""
+        root.hoveredAppId = ""
+        root.hoveredTitle = ""
     }
 
     // Uniform baseline: bar height at rest → hoverHeight on hover, animated.
@@ -237,14 +280,17 @@ Item {
         acceptedButtons: Qt.LeftButton
         onContainsMouseChanged: {
             root.hovered = containsMouse
-            if (!containsMouse)
+            if (!containsMouse) {
                 root.tooltipText = ""
+                root.hoveredAppId = ""
+                root.hoveredTitle = ""
+            }
         }
         onPositionChanged: function (m) {
             root.cursorX = hover.mapToItem(row.contentItem, m.x, m.y).x
             root.updateTooltip(root.cursorX)
         }
-        onExited: { root.cursorX = -1e6; root.tooltipText = "" }
+        onExited: { root.cursorX = -1e6; root.tooltipText = ""; root.hoveredAppId = ""; root.hoveredTitle = "" }
         onClicked: function (m) {
             if (!wm)
                 return
@@ -290,6 +336,40 @@ Item {
             elide: Text.ElideRight
             font.family: theme.fontFamily
             font.pointSize: (theme.fontSize && theme.fontSize > 0) ? theme.fontSize : 10
+        }
+    }
+
+    // Window preview: a live thumbnail of the hovered window, floating above its title.
+    // The surface reserves `thumbHeight` + margin of headroom for it (DockWindow).
+    Rectangle {
+        id: preview
+        z: 100
+        visible: root.hovered && root.previewSerial > 0 && root.tooltipText.length > 0
+        radius: 8
+        color: Qt.rgba(0, 0, 0, 0.85)
+        border.color: Qt.rgba(1, 1, 1, 0.14)
+        border.width: 1
+        width: Math.max(root.thumbHeight * 0.6, Math.min(root.width - 8, thumb.paintedWidth + 12))
+        height: root.thumbHeight + 12
+        x: Math.round(Math.max(4, Math.min(root.width - width - 4, root.tooltipCenterX - width / 2)))
+        y: Math.round(tooltip.y - height - 6)
+        opacity: visible ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: 110 } }
+        Behavior on x { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
+
+        Image {
+            id: thumb
+            anchors.centerIn: parent
+            width: root.width - 20
+            height: root.thumbHeight
+            fillMode: Image.PreserveAspectFit
+            // Synchronous: the provider only scales an image it already holds, and an async
+            // reload would blank the card between frames.
+            asynchronous: false
+            cache: false
+            smooth: true
+            source: root.previewSerial > 0
+                ? "image://windowthumb/" + root.previewKey + "/" + root.previewSerial : ""
         }
     }
 }

@@ -8,6 +8,7 @@
 #include <QWindow>
 
 class QQmlEngine;
+class WindowThumbnailer;
 class QQuickView;
 
 // Controller for the macOS-style Dock.
@@ -79,4 +80,5 @@ private:
     QRect m_slot;   // proxy rectangle in global coordinates
     quint32 m_barFrame = 0;  // X11: the bar's top-level (WM frame) window
     bool m_watchingRoot = false;
+    WindowThumbnailer *m_thumbnailer = nullptr; // hover previews (created with the view)
 };

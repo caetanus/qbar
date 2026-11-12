@@ -222,6 +222,22 @@ if wayland_dep.found() and wayland_scanner.found() and wayland_protocols_dep.fou
     command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
   )
 
+  # Dock window thumbnails: toplevel list + per-toplevel capture source + image copy.
+  thumb_protocols = []
+  foreach proto : [
+      ['ext-foreign-toplevel-list', 'ext-foreign-toplevel-list-v1'],
+      ['ext-image-capture-source', 'ext-image-capture-source-v1'],
+      ['ext-image-copy-capture', 'ext-image-copy-capture-v1'],
+    ]
+    xml = files(wl_protocols_dir / 'staging' / proto[0] / (proto[1] + '.xml'))
+    thumb_protocols += custom_target(proto[1] + '-client-header', input: xml,
+      output: proto[1] + '-client-protocol.h',
+      command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+    thumb_protocols += custom_target(proto[1] + '-client-code', input: xml,
+      output: proto[1] + '-protocol.c',
+      command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+  endforeach
+
   session_lock_protocol = files(wl_protocols_dir / 'staging/ext-session-lock/ext-session-lock-v1.xml')
   session_lock_header = custom_target(
     'ext-session-lock-client-header',
@@ -238,7 +254,7 @@ if wayland_dep.found() and wayland_scanner.found() and wayland_protocols_dep.fou
 
   platform_deps += [wayland_dep]
   platform_sources += files('src/platform/waylandlayershellintegration.cpp', 'src/redshift/waylandgamma.cpp')
-  platform_generated += [layer_shell_header, layer_shell_code, xdg_shell_header, xdg_shell_code, idle_inhibit_header, idle_inhibit_code, gamma_control_header, gamma_control_code]
+  platform_generated += [layer_shell_header, layer_shell_code, xdg_shell_header, xdg_shell_code, idle_inhibit_header, idle_inhibit_code, gamma_control_header, gamma_control_code] + thumb_protocols
   platform_includes += qtgui_private_include
   platform_args += ['-DQBAR_HAVE_WAYLAND=1']
 
@@ -344,6 +360,7 @@ sources = files(
   'src/notifications/notificationwindow.cpp',
   'src/qml/qbarpopupservice.cpp',
   'src/qml/dockwindow.cpp',
+  'src/dock/windowthumbnailer.cpp',
   'src/qml/qbaripc.cpp',
   'src/qml/jsonasync.cpp',
   'src/qml/jstimers.cpp',
@@ -400,6 +417,7 @@ headers = files(
   'src/notifications/notificationwindow.h',
   'src/qml/qbarpopupservice.h',
   'src/qml/dockwindow.h',
+  'src/dock/windowthumbnailer.h',
   'src/qml/qbaripc.h',
   'src/qml/jsonasync.h',
   'src/qml/jstimers.h',

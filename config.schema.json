@@ -81,7 +81,10 @@
         "magnify": { "type": "string", "enum": ["fisheye", "parabolic", "scale", "none"], "description": "Hover effect: cosine fisheye (default), sharper parabolic peak, uniform whole-dock scale, or no growth." },
         "indicator": { "type": "string", "enum": ["underline", "dot", "pill", "none"], "description": "Focused-window marker: accent underline (default), round dot, translucent tile behind the icon, or none." },
         "hoverHeight": { "type": "integer", "description": "Whole-dock baseline height on hover, px (default 48)." },
-        "peakHeight": { "type": "integer", "description": "Cursor-focused fisheye peak height, px (default round(hoverHeight * 1.5))." }
+        "peakHeight": { "type": "integer", "description": "Cursor-focused fisheye peak height, px (default round(hoverHeight * 1.5))." },
+        "thumbnails": { "type": "boolean", "description": "Show a live thumbnail of the hovered window above its icon (Wayland compositors with ext-image-copy-capture, e.g. sway ≥ 1.11; default true)." },
+        "thumbnailHeight": { "type": "integer", "minimum": 40, "description": "Height of the hover preview, px (default 120)." },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1, "description": "Resting opacity of non-focused icons (default 1)." }
       }
     },
     "notifications": {

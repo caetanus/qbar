@@ -422,6 +422,10 @@ QVariantMap parseDock(const QJsonObject &root)
     QVariantMap dock{
         {QStringLiteral("magnify"), QStringLiteral("fisheye")},
         {QStringLiteral("indicator"), QStringLiteral("underline")},
+        // Hover preview: a live thumbnail of the window above its icon (Wayland compositors
+        // with ext-image-copy-capture; elsewhere the dock shows just the icon).
+        {QStringLiteral("thumbnails"), true},
+        {QStringLiteral("thumbnailHeight"), 120},
     };
     if (root.contains(QStringLiteral("dock")) && root.value(QStringLiteral("dock")).isObject()) {
         const QVariantMap overrides = root.value(QStringLiteral("dock")).toObject().toVariantMap();
